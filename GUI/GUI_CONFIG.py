@@ -1,9 +1,10 @@
 from pprint import pprint
 import threading
+import time
 from tkinter import messagebox
 import ttkbootstrap as ttk
 from FUNC.windows_manager import VentanaManager 
-from DB.database_sybase import dsn_configurados
+from DB.database_sybase import ConexionSybase, dsn_configurados
 from ttkbootstrap.constants import *
 from ttkbootstrap.tooltip import ToolTip
 from ASSETS.path_img import *
@@ -338,21 +339,37 @@ class GUI_CONFIG:
     def creacion_frame_config_datos_INFORHARD(self):
         self.frame_config_datos_INFORHARD = ttk.Frame(self.frame_notebook_config_datos)
         
-        self.button_importar_datos_INFORHARD = ttk.Button(self.frame_config_datos_INFORHARD, text="Importar Datos", command=self.command_importar_datos_INFORHARD)
+        self.button_importar_datos_INFORHARD = ttk.Button(self.frame_config_datos_INFORHARD, text="Sincronizars Datos", command=self.command_importar_datos_INFORHARD)
         self.button_importar_datos_INFORHARD.pack()
         
     def creacion_toplevel_carga_datos(self):
+        # Crear ventana Toplevel
         self.top_level_carga = ttk.Toplevel()
         self.top_level_carga.title("Cargar Datos")
-        self.top_level_carga.protocol("WM_DELETE_WINDOW", self.bloquear_cierre)
+        
+        # Congelar la ventana principal al mostrar esta ventana
         self.top_level_carga.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
-        self.top_level_carga.geometry("350x150")
+        self.top_level_carga.grab_set()  # Esto congela la ventana principal
+        self.top_level_carga.protocol("WM_DELETE_WINDOW", self.bloquear_cierre)
+        
+        # Posicionar la ventana en el centro
+        self.top_level_carga.geometry("400x250")  # Tamaño ajustado
         self.top_level_carga.place_window_center()
+
+        # Agregar una barra de progreso
+        self.progressbar_carga = ttk.Floodgauge(self.top_level_carga, mode="determinate", bootstyle="primary")
+        self.DICT_WIDGETS.register("UI", "BARRA_PROGRESO", self.progressbar_carga)
+        self.progressbar_carga.pack(fill="x", expand=True, padx=20, pady=(20,10))
         
-        
-        self.progressbar_carga = ttk.Progressbar(self.top_level_carga, bootstyle="striped")
-        self.progressbar_carga.pack(fill="x", expand= True, padx=15)
-        self.progressbar_carga.start()
+        # Label de porcentaje con tamaño mayor
+        self.label_porcentaje = ttk.Label(self.top_level_carga, text="0%", anchor="center", font=("Arial", 14))
+        self.label_porcentaje.pack(pady=10)
+
+        # Entry para mostrar las acciones, con tamaño mayor y centrado
+        self.entry_acciones = ttk.Entry(self.top_level_carga, state="readonly", width=40, font=("Arial", 12))
+        self.entry_acciones.pack(pady=10)
+        self.mostrar_accion("Iniciando la carga de datos...")
+
             
 #//////////////////////////////////////////////// COMMAND DE BOTONES ///////////////////////////////////////////////
     def command_button_agregar(self):
@@ -444,6 +461,17 @@ class GUI_CONFIG:
                 VALUES ('{self.combobox_odbc.get()}', '{self.entry_user.get()}', '{self.entry_password.get()}', {self.checkbox_var.get()});
                 """
                 self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA").ejecutar_consulta(insercion_sql)
+                print(self.checkbox_var.get())
+                if self.checkbox_var.get():
+                    conexion = {
+                        "user": self.entry_user.get(),
+                        "password": self.entry_password.get(),
+                        "dsn": self.combobox_odbc.get()
+                    }
+                    self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
+                    self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
+                else:
+                    print("NO CONEXION INFORHARD")
                 messagebox.showinfo("Conexión Agregada", "¡Conexión agregada con exito!")
             self.cambiar_estados_widgets_frame_odbc("disabled")
             self.button_agregar_datos_de_conexion.config(text="Actualizar datos", state="normal", command=self.command_modificado_button_actualizar_datos_de_conexion)
@@ -478,6 +506,17 @@ class GUI_CONFIG:
 
             # Ejecuta la consulta de forma segura
             conexion.ejecutar_consulta(sentencia_actualizacion, valores)
+            print(self.checkbox_var.get())
+            if self.checkbox_var.get():
+                conexion = {
+                    "user": self.entry_user.get(),
+                    "password": self.entry_password.get(),
+                    "dsn": self.combobox_odbc.get()
+                }
+                self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
+                self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
+            else:
+                print("NO CONEXION INFORHARD")
             messagebox.showinfo("Estado Conexión", "Se ha actualizado el metodo de conexión")
             self.cambiar_estados_widgets_frame_odbc("disabled")
             self.button_agregar_datos_de_conexion.config(text="Actualizar datos", state="normal", command=self.command_modificado_button_actualizar_datos_de_conexion)
@@ -487,100 +526,228 @@ class GUI_CONFIG:
     def command_importar_datos_INFORHARD(self):
         try:
             self.creacion_toplevel_carga_datos()
+            threading.Thread(target=self.procesar_productos_completos).start()
         except Exception as e:
             print(e)
             
             
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-    def command_crear_datos(self):
-        try:
-            threading.Thread(target=self.DICT_WIDGETS.get_widget("CTK_Loader_Frame","start")).start()
-            if self.CONEXION_INFORHARD:
-                self.buscar_datos_en_tabla_ARTICULOS()
-                self.buscar_datos_tabla_CODBARP()
-                threading.Thread(target=self.insertar_datos_en_table_view).start()
-        except Exception as e:
-            print(f"Error: {e}")
+    def procesar_productos_completos(self):
+        """Llama a todas las funciones para procesar los productos en conjunto."""
+        
+        # Paso 1: Obtener los datos de los artículos
+        self.buscar_datos_en_tabla_ARTICULOS()
+
+        # Paso 2: Obtener los códigos de barra adicionales
+        self.buscar_datos_tabla_CODBARP()
+
+        # Paso 3: Obtener los tipos de IVA
+        self.buscar_datos_tabla_IVAS()
+
+        # Paso 4: Actualizar los precios de los productos con el IVA correspondiente
+        self.actualizar_precios_con_iva()
+
+        # Paso 5: Insertar o actualizar los productos en la base de datos
+        self.insertar_o_actualizar_productos()
+
+        self.mostrar_accion("Proceso completo.")
+        messagebox.showinfo("Proceso completo", "Se han insertado los nuevos productos y actualizados los pendientes.")
+        self.top_level_carga.destroy()
+
+
+
+    def mostrar_accion(self, texto):
+        print(texto)
+        """Actualiza el Entry con el texto de la acción que se está realizando."""
+        self.entry_acciones.config(state="normal")
+        self.entry_acciones.delete(0, "end")
+        self.entry_acciones.insert(0, texto)
+        self.entry_acciones.config(state="readonly")
+        
+    def actualizar_barra(self, progreso, total):            
+        """Actualiza la barra de progreso con el porcentaje calculado."""
+        porcentaje = (progreso / total) * 100
+        
+        barra_progreso = self.DICT_WIDGETS.get_widget("UI", "BARRA_PROGRESO")
+        if barra_progreso is not None:
+            barra_progreso['value'] = porcentaje  # Asegúrate de usar 'value' para actualizar la barra
+            self.label_porcentaje.configure(text=f"{int(porcentaje)}%")
+        else:
+            self.mostrar_accion("Error: No se encontró el widget BARRA_PROGRESO.")
+
+
+
 
     #/////////////////////////////////////////// DATABASE ///////////////////////////////////////////
     def buscar_datos_en_tabla_ARTICULOS(self):
-        """Obtiene los artículos con códigos de barras válidos"""
+        """Obtiene los artículos con códigos de barras válidos y muestra información de lo que está haciendo."""
         CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS = """
-            SELECT CREF, CDETALLE, CCODEBAR, NPVP1 
+            SELECT CREF, CDETALLE, CCODEBAR, CTIPOIVA, NPVP1 
             FROM ARTICULO 
             WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
-            ORDER BY CREF;
+            ORDER BY dFechaU ASC;
         """
-        self.datos_ARTICULOS = self.CONEXIONDBA_SYBASE.ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS)
+        self.datos_ARTICULOS = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS)
+
+        self.mostrar_accion("Iniciando la carga de artículos...")
+        time.sleep(0.75)
+
+        # Primera actualización al 50%
+        self.actualizar_barra(50, 100)
+
+        self.mostrar_accion(f"{len(self.datos_ARTICULOS)} artículos encontrados.")
+        time.sleep(0.75)
+
+        # Última actualización al 100%
+        self.actualizar_barra(100, 100)
+
+
+
+
 
     def buscar_datos_tabla_CODBARP(self):
-        """Obtiene los códigos de barra adicionales y los une con la lista de productos"""
-        
+        """Obtiene los códigos de barra adicionales y los une con la lista de productos."""
         self.datos_PRODUCTOS_COMPLETOS = []
-
+        
         if not self.datos_ARTICULOS:
-            print("No hay datos en ARTICULO")
+            self.mostrar_accion("No hay datos en ARTICULO")
             return
-
-        # Obtener lista de referencias (CREF) de los productos
+        
         crefs = tuple(producto[0] for producto in self.datos_ARTICULOS)
-
-        # Consulta optimizada: buscar todos los códigos adicionales en una sola consulta
+        
         CONSULTA_SQL_BUSCAR_DATOS_CODBARP = f"""
             SELECT CREF, CDETALLE, CCODEBAR 
             FROM CODBARP 
-            WHERE CREF IN {crefs} AND CCODEBAR IS NOT NULL AND CCODEBAR <> '';
+            WHERE CREF IN {crefs} AND CCODEBAR IS NOT NULL AND CCODEBAR <> ''
+            ORDER BY dFechaU ASC;
         """
-
-        # Ejecutar la consulta de una sola vez
-        datos_codbarp = self.CONEXIONDBA_SYBASE.ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_CODBARP)
         
-        # Convertir los resultados en un diccionario {CREF: [(CDETALLE, CCODEBAR), ...]}
+        self.mostrar_accion("Obteniendo códigos de barra adicionales...")
+        datos_codbarp = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_CODBARP)
+        
         codbarp_dict = {}
         if datos_codbarp:
             for cref, cdetalle, ccodebar in datos_codbarp:
                 if cref not in codbarp_dict:
                     codbarp_dict[cref] = []
                 codbarp_dict[cref].append((cdetalle, ccodebar))
+        
+        total_productos = len(self.datos_ARTICULOS)
+        total_codigos_barra = len(datos_codbarp)
+        total = total_productos + total_codigos_barra
+        progreso = 0
 
-        # Unir los datos de ARTICULO con CODBARP
-        for producto in self.datos_ARTICULOS:
-            cref, cdetalle, ccodebar, npvp1 = producto
+        for idx, producto in enumerate(self.datos_ARTICULOS):
+            cref, cdetalle, ccodebar, ctipoiva, npvp1 = producto
             self.datos_PRODUCTOS_COMPLETOS.append(producto)
-
-            # Si hay más códigos de barra, agregarlos
+            progreso += 1
+            if progreso % 10 == 0:  # Actualiza la barra cada 10 productos
+                self.actualizar_barra(progreso, total)
+            
             if cref in codbarp_dict:
                 for cdetalle_extra, ccodebar_extra in codbarp_dict[cref]:
-                    self.datos_PRODUCTOS_COMPLETOS.append((cref, cdetalle_extra, ccodebar_extra, npvp1))
+                    self.datos_PRODUCTOS_COMPLETOS.append((cref, cdetalle_extra, ccodebar_extra, ctipoiva, npvp1))
+                    progreso += 1
+                    if progreso % 10 == 0:  # Actualiza la barra cada 10 productos
+                        self.actualizar_barra(progreso, total)
+
+        self.mostrar_accion(f"{len(self.datos_PRODUCTOS_COMPLETOS)} productos completos.")
+
+
+    def buscar_datos_tabla_IVAS(self):
+        """Obtiene los datos de IVAS y muestra la barra de progreso mientras se realiza la consulta."""
+        
+        self.mostrar_accion("Obteniendo datos de IVAS...")
+        
+        # Iniciar la barra de progreso en 0%
+        self.actualizar_barra(0, 100)
+
+        # Simular el tiempo de espera para la consulta (esto es solo para efectos de la barra)
+        # Realmente, la consulta se ejecuta de forma bloqueante, por lo que la barra de progreso puede ir del 0% al 100% al final
+        try:
+            CONSULTA_SQL_BUSCAR_DATOS_IVAS = f"""
+                SELECT * FROM IVAS;
+            """
+            # Aquí ejecutamos la consulta y almacenamos los resultados
+            self.datos_IVAS = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_IVAS)
+
+            # Una vez que la consulta finalice, actualizamos el progreso al 100%
+            self.actualizar_barra(100, 100)
             
+            self.mostrar_accion(f"{len(self.datos_IVAS)} tipos de IVA encontrados.")
+        except Exception as e:
+            self.mostrar_accion(f"Error al obtener los datos de IVAS: {str(e)}")
+
+        
+    def actualizar_precios_con_iva(self):
+        """Actualiza los precios de los productos agregando el IVA correspondiente y muestra el progreso."""
+        iva_dict = {str(iva[0]): iva[2] for iva in self.datos_IVAS}
+        productos_actualizados = []
+
+        self.mostrar_accion("Actualizando precios con IVA...")
+
+        total_productos = len(self.datos_PRODUCTOS_COMPLETOS)
+        if total_productos == 0:
+            self.mostrar_accion("No hay productos para actualizar.")
+            return
+
+        self.actualizar_barra(0, total_productos)
+
+        for idx, producto in enumerate(self.datos_PRODUCTOS_COMPLETOS):
+            codigo_iva = str(producto[3])
+            precio_base = producto[4]
+
+            porcentaje_iva = iva_dict.get(codigo_iva, 0.0)
+            nuevo_precio = precio_base * (1 + porcentaje_iva / 100)
+
+            producto_actualizado = list(producto)
+            del producto_actualizado[3]
+            producto_actualizado[3] = format(round(nuevo_precio, 2), ".2f")
+            productos_actualizados.append(tuple(producto_actualizado))
+
+            self.actualizar_barra(idx + 1, total_productos)
+
+        self.datos_PRODUCTOS_COMPLETOS = productos_actualizados
+        self.mostrar_accion(f"{len(self.datos_PRODUCTOS_COMPLETOS)} productos actualizados con IVA.")
+
             
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+        
+    def insertar_o_actualizar_productos(self):
+        """Elimina los datos y los reemplazo con los nuevos"""
+        consulta_limpieza = """
+        DELETE FROM productos
+        """
+        """Inserta o actualiza los productos en la base de datos SQLite y muestra el progreso."""
+        self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA").ejecutar_consulta(consulta_limpieza)
+        consulta = """
+        INSERT OR REPLACE INTO productos (CREF, codigo, descripcion, precio) 
+        VALUES (?, ?, ?, ?)
+        """
+
+        self.mostrar_accion("Insertando o actualizando productos...")
+        
+        total_productos = len(self.datos_PRODUCTOS_COMPLETOS)  # Número total de productos
+        if total_productos == 0:
+            self.mostrar_accion("No hay productos para insertar o actualizar.")
+            return
+
+        # Iniciar la barra de progreso en 0%
+        self.actualizar_barra(0, total_productos)
+        
+        # Preparar todos los parámetros para la inserción o actualización
+        parametros = [(producto[0], producto[2], producto[1], producto[3]) for producto in self.datos_PRODUCTOS_COMPLETOS]
+
+        # Ejecutar la consulta para todos los productos a la vez
+        self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consultamany(consulta, parametros)
+        
+        # Actualizar la barra de progreso al 100% una vez que se han insertado/actualizado todos los productos
+        self.actualizar_barra(total_productos, total_productos)
+
+        self.mostrar_accion("Productos insertados o actualizados correctamente.")
+
+
+
+
+
             
     def cierre_top_level_configuracion(self):
         """Cierra la ventana y la elimina del gestor de ventanas"""

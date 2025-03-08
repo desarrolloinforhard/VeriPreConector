@@ -1,3 +1,4 @@
+import os
 import ttkbootstrap as ttk
 from ASSETS.path_img import *
 from FUNC.ctk_components.ctk_components import CTkLoader
@@ -186,16 +187,30 @@ class GUI_MAIN:
         
 
     def CONEXIONES_DBA(self):
-        self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA", SQLiteDB(r"db/veripre.db"))
-        conexion = {
-            "user": "dba",
-            "password": "gestion",
-            "dsn": "GestionIH0101"
-        }
-        self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
+
+        ruta_db = os.path.join(os.path.dirname(__file__), "..", "db", "veripre.db")
+        print(ruta_db)  # Imprimirá "db/veripre.db" si está en el mismo directorio del script
+
+        self.DICT_WIDGETS.register("DATABASE", "CONEXIONDBA", SQLiteDB(ruta_db))
         self.CONEXIONDBA = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA")
         self.CONEXIONDBA.crear_tablas()
-        self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
+        try: 
+            inserccion_sql = """
+            SELECT * FROM VERIPRE_CONEXION
+            """
+            datos_conexion = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA").ejecutar_consulta(inserccion_sql)
+            if not datos_conexion == None:
+                datos_conexion = datos_conexion[0]
+                conexion = {
+                    "user": datos_conexion[1],
+                    "password": datos_conexion[2],
+                    "dsn": datos_conexion[0]
+                }
+                self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
+                self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
+        except Exception as e:
+            print(e)
+            print("Sin conexión external")
     
     def VARIABLES_GLOBALES(self):
         self.DICT_WIDGETS.register("VARIABLES_GLOBALES","top_level_configuracion_abierta", False)

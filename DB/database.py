@@ -1,7 +1,7 @@
 import sqlite3
 
 class SQLiteDB:
-    def __init__(self, db_name="database.db"):
+    def __init__(self, db_name):
         """Inicializa la conexión con la base de datos."""
         self.db_name = db_name
         self.connection = None
@@ -12,21 +12,22 @@ class SQLiteDB:
         try:
             self.connection = sqlite3.connect(self.db_name)
             self.cursor = self.connection.cursor()
-            #self.crear_tablas()
             print("Conexión establecida con la base de datos.")
         except sqlite3.Error as e:
             print(f"Error al conectar con la base de datos: {e}")
             
     def crear_tablas(self):
+        """Crea las tablas necesarias en la base de datos."""
         try:
             self.conectar()
             self.crear_tabla_VERIPRE_EQUIPOS()
             self.crear_tabla_VERIPRE_productos()
             self.crear_tabla_VERIPRE_ad_medias()
             self.crear_tabla_VERIPRE_CONEXION()
-            self.cerrar_conexion()
         except sqlite3.Error as e:
-            print(e)
+            print(f"Error al crear las tablas: {e}")
+        finally:
+            self.cerrar_conexion()
 
     def ejecutar_consulta(self, consulta, parametros=()):
         """Ejecuta una consulta SQL con o sin parámetros."""
@@ -38,64 +39,114 @@ class SQLiteDB:
         except sqlite3.Error as e:
             print(f"Error al ejecutar la consulta: {e}")
             return None
+        
+    def ejecutar_consultamany(self, consulta, parametros=()):
+        """Ejecuta una consulta SQL con o sin parámetros en múltiples registros."""
+        try:
+            self.conectar()  # Establece la conexión a la base de datos
+            self.cursor.executemany(consulta, parametros)  # Ejecuta la consulta para todos los parámetros
+            self.connection.commit()  # Guarda los cambios en la base de datos
+            return True  # Retorna True para indicar que la operación fue exitosa
+        except sqlite3.Error as e:
+            print(f"Error al ejecutar la consulta: {e}")
+            return False  # Retorna False en caso de error
+
+
+    def ejecutar_transaccion(self, consulta_borrar, consulta_insertar, parametros):
+        """Ejecuta una transacción con las consultas de borrar e insertar."""
+        try:
+            # Crear una conexión y un cursor
+            conn = self.obtener_conexion()
+            cursor = conn.cursor()
+
+            # Si tienes una consulta de borrar, ejecutarla
+            if consulta_borrar:
+                cursor.execute(consulta_borrar)
+            
+            # Ejecutar la consulta de inserción
+            cursor.executemany(consulta_insertar, parametros)
+
+            # Confirmar la transacción
+            conn.commit()
+
+        except sqlite3.Error as e:
+            # Manejar el error y hacer un rollback si hay un problema
+            conn.rollback()
+            print(f"Error en la transacción: {e}")
+            raise  # Relanzar la excepción para que la maneje el código que llama a esta función
+
+        finally:
+            # Asegurarse de cerrar el cursor y la conexión
+            if cursor:
+                cursor.close()  # Cerrar el cursor
+            if conn:
+                conn.close()  # Cerrar la conexión
+
+
+    def obtener_columnas(self, nombre_tabla):
+        """Obtiene los nombres de las columnas de una tabla."""
+        try:
+            self.conectar()
+            self.cursor.execute(f"PRAGMA table_info({nombre_tabla})")
+            columnas = [columna[1] for columna in self.cursor.fetchall()]
+            return columnas
+        except sqlite3.Error as e:
+            print(f"Error al obtener las columnas de la tabla {nombre_tabla}: {e}")
+            return []
         finally:
             self.cerrar_conexion()
-    def obtener_columnas(self, nombre_tabla):
-        
-        self.conectar()
 
-        # Ejecutar PRAGMA para obtener información de la tabla
-        self.cursor.execute(f"PRAGMA table_info({nombre_tabla})")
-        
-        # Extraer los nombres de las columnas
-        columnas = [columna[1] for columna in self.cursor.fetchall()]
-
-        # Cerrar conexión
-        self.cerrar_conexion()
-
-        return columnas
-    
     def crear_tabla_VERIPRE_productos(self):
-        self.ejecutar_consulta("""
-            CREATE TABLE productos (
+        """Crea la tabla de productos."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS productos (
             CREF TEXT,
             codigo TEXT UNIQUE,
             descripcion TEXT,
             precio REAL,
             img_base64 TEXT,
             formato_imagen TEXT
-            )""")
-        
-        
+            )
+        """
+        self.ejecutar_consulta(consulta)
+
     def crear_tabla_VERIPRE_EQUIPOS(self):
-        self.ejecutar_consulta("""
-            CREATE TABLE "VERIPRE_EQUIPOS" (
-                "nombre"	TEXT,
-                "direccion_conexion"	TEXT,
-                "puerto"	TEXT,
-                "comentarios"	TEXT,
-                "fecha_alta"	TEXT,
-                "fecha_ultimo_envio"	TEXT,
-                PRIMARY KEY("direccion_conexion")
-            )""")
-        
-        
+        """Crea la tabla VERIPRE_EQUIPOS."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS VERIPRE_EQUIPOS (
+                nombre TEXT,
+                direccion_conexion TEXT,
+                puerto TEXT,
+                comentarios TEXT,
+                fecha_alta TEXT,
+                fecha_ultimo_envio TEXT,
+                PRIMARY KEY(direccion_conexion)
+            )
+        """
+        self.ejecutar_consulta(consulta)
+
     def crear_tabla_VERIPRE_ad_medias(self):
-        self.ejecutar_consulta("""
-            CREATE TABLE ad_medias (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            formato TEXT NOT NULL
-            )""")
-        
+        """Crea la tabla ad_medias."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ad_medias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                formato TEXT NOT NULL
+            )
+        """
+        self.ejecutar_consulta(consulta)
+
     def crear_tabla_VERIPRE_CONEXION(self):
-        self.ejecutar_consulta("""
-            CREATE TABLE VERIPRE_CONEXION (
-            dsn TEXT NOT NULL PRIMARY KEY,
-            user TEXT NOT NULL,
-            password TEXT NOT NULL,
-            activo BIT
-            )""")
+        """Crea la tabla VERIPRE_CONEXION."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS VERIPRE_CONEXION (
+                dsn TEXT NOT NULL PRIMARY KEY,
+                user TEXT NOT NULL,
+                password TEXT NOT NULL,
+                activo BIT
+            )
+        """
+        self.ejecutar_consulta(consulta)
 
     def cerrar_conexion(self):
         """Cierra la conexión con la base de datos."""
@@ -103,5 +154,8 @@ class SQLiteDB:
             self.connection.close()
             print("Conexión cerrada.")
             
-            
-    
+    def obtener_conexion(self):
+        """Devuelve la conexión activa o la crea si no existe."""
+        if self.connection is None:
+            self.conectar()
+        return self.connection

@@ -1,0 +1,5 @@
+# Ignorar base de datos
+/DB/veripre.db
+
+# Ignorar carpeta ctk_components
+/FUNC/ctk_components/
