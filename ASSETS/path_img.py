@@ -38,6 +38,9 @@ def PNG_Info():
 def PNG_No_Foto():
     return os.path.join(path_script, 'producto_.png')
 
+def PNG_Check():
+    return os.path.join(path_script, 'check.png')
+
 def READ_IMG(path, widht, height):
     image_logo = Image.open(path)
     image_logo = image_logo.resize((widht, height), Image.Resampling.LANCZOS)  # Redimensionar
