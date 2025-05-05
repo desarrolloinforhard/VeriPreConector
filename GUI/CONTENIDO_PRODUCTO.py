@@ -1,23 +1,27 @@
-#import tkinter as tk
 import base64
-import json
+from datetime import datetime
 import os
 import threading
 import time
 import requests
 import ttkbootstrap as ttk
 from io import BytesIO
+from plyer import notification
 from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk  # Para manejar imágenes
+from PIL import Image, ImageTk
 from ASSETS.path_img import *
 from ttkbootstrap.tableview import Tableview
 from ttkbootstrap.constants import *
 from pprint import pprint
+from core.network.api_client import DispositivoAPIClient
+from core.network.urls_dispositivos import VeriPreDispositivosURLBuilder
 
 
 class ContenidoProducto:
     def __init__(self, DICT_WIDGETS):
         self.DICT_WIDGETS = DICT_WIDGETS
+        self.config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
+        self._vigia_iniciado = False
         self.CONEXIONDBA = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA")
         self.CONEXION_INFORHARD = self.DICT_WIDGETS.get_widget("DATABASE","CONEXION_INFORHARD")
         if self.CONEXION_INFORHARD:
@@ -155,84 +159,86 @@ class ContenidoProducto:
         if not self.CONEXION_INFORHARD:
             messagebox.showerror("Error de conexión", "No hay conexión con la base de datos.")
             return
-        try:
-            threading.Thread(target=self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "start")).start()
-            self.buscar_datos_en_tabla_ARTICULOS()
-            threading.Thread(target=self.insertar_datos_en_table_view).start()
-            self.button_crear_datos.configure(text="Actualizar Datos", command=self.command_actualizar_datos)
-        except Exception as e:
-            print(f"Error: {e}")
 
-            
+        # Iniciar loader (en el hilo principal, así se ve)
+        self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "start")()
+
+        def tarea():
+            try:
+                # Paso 1: buscar artículos
+                self.buscar_datos_en_tabla_ARTICULOS()
+
+                if not self.datos_ARTICULOS:
+                    messagebox.showwarning("Sin datos", "No se encontraron productos para mostrar.")
+                    return
+
+                # Paso 2: preparar datos y mostrar
+                self.datos_PRODUCTOS_COMPLETOS = self.datos_ARTICULOS
+                self.insertar_datos_en_table_view()
+
+            except Exception as e:
+                print(f"Error: {e}")
+
+            finally:
+                # Detener loader siempre al final
+                self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
+
+        # Ejecutar toda la tarea en segundo plano
+        threading.Thread(target=tarea, daemon=True).start()
+
+        # Activar el vigía solo si está habilitado
+        if self.config.get("sincronizacion_automatica", True) and not self._vigia_iniciado:
+            self.iniciar_vigia_actualizacion_productos(intervalo=10)
+            self._vigia_iniciado = True
+
+        self.button_crear_datos.config(
+            state="disabled", text="Actualizar Datos", command=self.command_actualizar_datos
+        )
 
     def command_transmitir_datos(self):
-        """
-        Obtiene los datos de la tabla ARTICULOS, los procesa en lotes de 1000 y
-        envía cada lote a la API con manejo de errores y reintentos.
-        """
-        # Obtener los datos y almacenarlos en self.datos_ARTICULOS
-        
-        print(self.limpiar_base_dispositivo())
-        
         self.buscar_datos_en_tabla_ARTICULOS()
         total_registros = len(self.datos_ARTICULOS)
-        
-        print(f"Total de registros a enviar: {total_registros}")
-        
+
         if total_registros == 0:
             print("No hay datos para enviar.")
             return
 
-        # Configuración de la API
-        url_api = "http://192.168.1.152:8080/api/veri/batch_productos"
-        headers = {"Content-Type": "application/json"}
-        
+        builder = VeriPreDispositivosURLBuilder(self.CONEXIONDBA)
+        urls = builder.obtener_urls_api("/api/veri/batch_productos")
+        urls_delete = builder.obtener_urls_api("/api/veri/ALL_PRODUCTOS")
+
+        # Primero: eliminar productos de cada dispositivo
+        for url in urls_delete:
+            print(f"[{url}] → Enviando DELETE para limpiar base de productos...")
+            client = DispositivoAPIClient(url, estado_callback=lambda m: print(f"[{url}] {m}"))
+            response = client.enviar_delete()
+            if response is None:
+                print(f"[{url}] ❌ No se pudo limpiar la base, abortando transmisión.")
+                return
+
+        # Segundo: enviar datos por lote en hilos (uno por dispositivo)
         batch_size = 1000
-        total_batches = (total_registros + batch_size - 1) // batch_size  # Número total de lotes
+        total_batches = (total_registros + batch_size - 1) // batch_size
 
-        # Itera sobre los registros, procesando un batch a la vez
-        for i in range(0, total_registros, batch_size):
-            batch = self.datos_ARTICULOS[i:i + batch_size]
+        for url in urls:
+            def enviar_a_dispositivo(url=url):
+                client = DispositivoAPIClient(url, estado_callback=lambda m: print(f"[{url}] {m}"))
+                for i in range(0, total_registros, batch_size):
+                    batch = self.datos_ARTICULOS[i:i + batch_size]
+                    batch_json = [
+                        {
+                            "codigo": item[1],
+                            "descripcion": item[2],
+                            "precio": item[3],
+                            "img_base64": item[4],
+                            "formato_imagen": item[5]
+                        } for item in batch
+                    ]
+                    client.enviar_post_json(batch_json)
+            threading.Thread(target=enviar_a_dispositivo, daemon=True).start()
 
-            # Crear el JSON para este batch con las claves solicitadas
-            batch_json = [
-                {
-                    "codigo": item[1],
-                    "descripcion": item[2],
-                    "precio": item[3],
-                    "img_base64": item[4],
-                    "formato_imagen": item[5]
-                } for item in batch
-            ]
+                
             
-            batch_number = i // batch_size + 1
-            print(f"Enviando lote {batch_number} de {total_batches} con {len(batch)} registros...")
-
-            # Reintentar en caso de error
-            intentos = 3
-            while intentos > 0:
-                try:
-                    response = requests.post(url_api, json=batch_json, headers=headers, timeout=30)
-                    
-                    if response.status_code == 200:
-                        print(f"Lote {batch_number} enviado correctamente.")
-                        break
-                    else:
-                        print(f"Error en el lote {batch_number}: {response.status_code} - {response.text}")
-                
-                except requests.exceptions.RequestException as e:
-                    print(f"Error al enviar el lote {batch_number}: {str(e)}")
-                
-                intentos -= 1
-                if intentos > 0:
-                    print(f"Reintentando envío del lote {batch_number} ({3 - intentos}/3)...")
-                    time.sleep(5)  # Esperar antes de reintentar
-                else:
-                    print(f"No se pudo enviar el lote {batch_number} tras 3 intentos.")
-
-        print("Proceso de envío finalizado.")
-        
-        
     def command_transmitir_novedades(self):
         """Envía solo los productos modificados a la API."""
         if not self.productos_modificados:
@@ -241,9 +247,6 @@ class ContenidoProducto:
 
         print(f"Transmitiendo {len(self.productos_modificados)} productos modificados...")
 
-        url_api = "http://192.168.1.152:8080/api/veri/batch_productos"
-        headers = {"Content-Type": "application/json"}
-        
         # Buscar solo los productos modificados en la base de datos
         productos_a_enviar = []
         for codigo in self.productos_modificados:
@@ -256,7 +259,7 @@ class ContenidoProducto:
             print("No se encontraron productos en la base de datos.")
             return
 
-        # Formatear datos para la API
+        # Formatear datos para enviar a la API
         batch_json = [
             {
                 "codigo": item[1],
@@ -267,17 +270,26 @@ class ContenidoProducto:
             } for item in productos_a_enviar
         ]
 
+        builder = VeriPreDispositivosURLBuilder(self.CONEXIONDBA)
+        urls = builder.obtener_urls_api("/api/veri/batch_productos")
+
+        for url in urls:
+            client = DispositivoAPIClient(url, estado_callback=lambda m: print(f"[{url}] {m}"))
+            threading.Thread(target=lambda: client.enviar_post_json(batch_json), daemon=True).start()
+
+        # Mostrar notificación y limpiar cambios
         try:
-            response = requests.post(url_api, json=batch_json, headers=headers, timeout=30)
-            if response.status_code == 200:
-                print("Productos modificados enviados correctamente.")
-                messagebox.showinfo("Transmisión exitosa", "Se enviaron las novedades correctamente.")
-                self.productos_modificados.clear()  # Limpiar el registro de cambios
-                self.button_transmitir_novedades.config(state=DISABLED)  # Deshabilitar el botón
-            else:
-                print(f"Error al enviar: {response.status_code} - {response.text}")
-        except requests.exceptions.RequestException as e:
-            print(f"Error en la transmisión: {e}")
+            notification.notify(
+                title="Transmisión de novedades",
+                message="Los productos modificados fueron enviados.",
+                timeout=5
+            )
+        except Exception as e:
+            print(f"⚠️ No se pudo mostrar notificación: {e}")
+
+        self.productos_modificados.clear()
+        self.button_transmitir_novedades.config(state=DISABLED)
+
             
             
     def command_actualizar_datos(self):
@@ -292,38 +304,41 @@ class ContenidoProducto:
             
             
     def limpiar_base_dispositivo(self):
-        
-        url = "http://192.168.1.152:8080/api/veri/ALL_PRODUCTOS"
+        builder = VeriPreDispositivosURLBuilder(self.CONEXIONDBA)
+        urls = builder.obtener_urls_api("/api/veri/ALL_PRODUCTOS")
         headers = {"Content-Type": "application/json"}
-        
-        return requests.delete(url, headers=headers)
+
+        for url in urls:
+            def estado(msg): print(f"DELETE {url}: {msg}")
+            client = DispositivoAPIClient(url, estado_callback=estado)
+            threading.Thread(target=client.enviar_delete, daemon=True).start()
 
         
         
     def procesar_productos_a_actualizar(self):
-        # Paso 1: Obtener los datos de los artículos
         self.buscar_datos_en_tabla_ARTICULOS_actualizados()
-
-        # Paso 2: Obtener los códigos de barra adicionales
         self.buscar_datos_tabla_CODBARP()
-
-        # Paso 3: Obtener los tipos de IVA
         self.buscar_datos_tabla_IVAS()
-
-        # Paso 4: Actualizar los precios de los productos con el IVA correspondiente
         self.actualizar_precios_con_iva()
-
-        # Paso 5: Insertar o actualizar los productos en la base de datos
         self.insertar_o_actualizar_productos()
 
         self.mostrar_accion("Proceso completo.")
+
         if self.datos_ARTICULOS:
-            messagebox.showinfo("Proceso completo", "Se han insertado los nuevos productos y actualizados los pendientes.")
+            pass
+            #messagebox.showinfo("Proceso completo", "Se han insertado los nuevos productos y actualizados los pendientes.")
         else:
             messagebox.showwarning("Sin cambios", "No se registraron cambios ha actualizar.")
+
         self.top_level_carga.destroy()
-        if self.datos_ARTICULOS:
-            self.command_crear_datos()
+
+        # 🔁 🔽 AGREGADO: recargar todos los productos completos
+        self.buscar_datos_en_tabla_ARTICULOS()
+        threading.Thread(target=self.insertar_datos_en_table_view).start()
+
+        self.button_crear_datos.config(state="disabled", text="Actualizar Datos", command=self.command_actualizar_datos)
+
+
 
     #/////////////////////////////////////////// DATABASE ///////////////////////////////////////////
     def buscar_datos_en_tabla_ARTICULOS(self):
@@ -333,17 +348,20 @@ class ContenidoProducto:
         """
         self.datos_ARTICULOS = self.CONEXIONDBA.ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS)
         print(len(self.datos_ARTICULOS))
+        print(self.datos_ARTICULOS)
+        self.datos_PRODUCTOS_COMPLETOS = self.datos_ARTICULOS
         
         
     def buscar_datos_en_tabla_ARTICULOS_actualizados(self):
         """Obtiene los artículos con códigos de barras válidos y fecha de actualización de hoy."""
         CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS = """
-            SELECT CREF, CDETALLE, CCODEBAR, CTIPOIVA, NPVP1 
+            SELECT CREF, CDETALLE, CCODEBAR, CTIPOIVA, NPVP1, CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
             FROM ARTICULO 
             WHERE CCODEBAR IS NOT NULL 
             AND CCODEBAR <> '' 
             AND CONVERT(DATE, dFechaU) = CONVERT(DATE, GETDATE())
             ORDER BY dFechaU DESC;
+            ;
         """
 
         try:
@@ -351,7 +369,6 @@ class ContenidoProducto:
             self.datos_ARTICULOS = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(
                 CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS
             )
-
             print(f"Total de registros actualizados: {len(self.datos_ARTICULOS)}")
 
 
@@ -374,7 +391,7 @@ class ContenidoProducto:
 
         crefs_str = f"('{ "','".join(crefs) }')"  # Convertir a cadena de consulta válida
         CONSULTA_SQL_BUSCAR_DATOS_CODBARP = f"""
-            SELECT CREF, CDETALLE, CCODEBAR 
+            SELECT CREF, CDETALLE, CCODEBAR, CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
             FROM CODBARP 
             WHERE CREF IN {crefs_str} AND CCODEBAR IS NOT NULL AND CCODEBAR <> ''
             ORDER BY dFechaU ASC;
@@ -385,10 +402,10 @@ class ContenidoProducto:
         
         codbarp_dict = {}
         if datos_codbarp:
-            for cref, cdetalle, ccodebar in datos_codbarp:
+            for cref, cdetalle, ccodebar, dfechau in datos_codbarp:
                 if cref not in codbarp_dict:
                     codbarp_dict[cref] = []
-                codbarp_dict[cref].append((cdetalle, ccodebar))
+                codbarp_dict[cref].append((cdetalle, ccodebar, dfechau))
         
         total_productos = len(self.datos_ARTICULOS)
         total_codigos_barra = len(datos_codbarp)
@@ -397,15 +414,15 @@ class ContenidoProducto:
 
         for idx, producto in enumerate(self.datos_ARTICULOS):
             print(f"Producto {idx}: {producto}")
-            cref, cdetalle, ccodebar, ctipoiva, npvp1 = producto
+            cref, cdetalle, ccodebar, ctipoiva, npvp1, dfechau = producto
             self.datos_PRODUCTOS_COMPLETOS.append(producto)
             progreso += 1
             if progreso % 10 == 0:  # Actualiza la barra cada 10 productos
                 self.actualizar_barra(progreso, total)
             
             if cref in codbarp_dict:
-                for cdetalle_extra, ccodebar_extra in codbarp_dict[cref]:
-                    self.datos_PRODUCTOS_COMPLETOS.append((cref, cdetalle_extra, ccodebar_extra, ctipoiva, npvp1))
+                for cdetalle_extra, ccodebar_extra, _ in codbarp_dict[cref]:
+                    self.datos_PRODUCTOS_COMPLETOS.append((cref, cdetalle_extra, ccodebar_extra, ctipoiva, npvp1, dfechau))
                     progreso += 1
                     if progreso % 10 == 0:  # Actualiza la barra cada 10 productos
                         self.actualizar_barra(progreso, total)
@@ -459,10 +476,16 @@ class ContenidoProducto:
             porcentaje_iva = iva_dict.get(codigo_iva, 0.0)
             nuevo_precio = precio_base * (1 + porcentaje_iva / 100)
 
-            producto_actualizado = list(producto)
-            del producto_actualizado[3]
-            producto_actualizado[3] = format(round(nuevo_precio, 2), ".2f")
-            productos_actualizados.append(tuple(producto_actualizado))
+            producto_actualizado = (
+                producto[0],  # cref
+                producto[1],  # descripcion
+                producto[2],  # codigo
+                format(round(nuevo_precio, 2), ".2f"),  # precio actualizado
+                producto[5],  # dfechau
+            )
+            print("actualizar_precios_con_iva", producto_actualizado)
+            productos_actualizados.append(producto_actualizado)
+
 
             self.actualizar_barra(idx + 1, total_productos)
 
@@ -475,12 +498,13 @@ class ContenidoProducto:
         """Inserta o actualiza los productos en la base de datos SQLite en batch con executemany()."""
         
         consulta = """
-        INSERT INTO productos (CREF, codigo, descripcion, precio) 
-        VALUES (?, ?, ?, ?)
+        INSERT INTO productos (CREF, codigo, descripcion, precio, dfechau) 
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(codigo) DO UPDATE SET 
             CREF = excluded.CREF,
             descripcion = excluded.descripcion,
-            precio = excluded.precio
+            precio = excluded.precio,
+            dfechau = excluded.dfechau
         """
 
         self.mostrar_accion("Insertando o actualizando productos...")
@@ -491,7 +515,8 @@ class ContenidoProducto:
             return
 
         # Preparar los datos para el execute many
-        parametros = [(p[0], p[2], p[1], p[3]) for p in self.datos_PRODUCTOS_COMPLETOS]
+        parametros = [(p[0], p[2], p[1], p[3], p[4]) for p in self.datos_PRODUCTOS_COMPLETOS]
+        print(parametros)
 
         try:
             self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consultamany(consulta, parametros)
@@ -521,34 +546,32 @@ class ContenidoProducto:
         
     def insertar_datos_en_table_view(self):
         try:
-            # Insertar nuevos datos
             self.dt.delete_rows()
-            
-            for producto in self.datos_ARTICULOS:
-                precio_formateado = f"${producto[3]:,.2f}"  # Formatea con dos decimales y separador de miles
-                self.dt.insert_row("end", [producto[2], producto[1], precio_formateado])
 
-
-            # Recargar datos en la tabla
+            for producto in self.datos_PRODUCTOS_COMPLETOS:
+                descripcion = str(producto[2]).strip() if producto[2] else ""
+                codigo = producto[1] if producto[1] else ""
+                precio = float(producto[3]) if producto[3] else 0.0
+                precio_formateado = f"${precio:,.2f}"
+                self.dt.insert_row("end", [descripcion, codigo, precio_formateado])
             self.dt.load_table_data()
             self.dt.autofit_columns()
 
-            # 🔹 Ajustar la altura dinámicamente según la cantidad de filas
-            nueva_altura = min(20, len(self.datos_PRODUCTOS_COMPLETOS))  # Máximo 20 filas visibles
-            self.dt.configure(height=nueva_altura)  # Cambia la altura del widget
-
-            # 🔹 Volver a empaquetar para reflejar cambios
-            self.dt.pack_forget()  # Elimina el widget temporalmente
-            self.dt.pack(side="left", fill=BOTH, padx=10, pady=10)  # Vuelve a empaquetar
-
-            self.dt.update_idletasks()  # 🔹 Fuerza la actualización de la interfaz
-            self.DICT_WIDGETS.get_widget("CTK_Loader_Frame","stop")()
+            nueva_altura = min(20, len(self.datos_PRODUCTOS_COMPLETOS))
+            self.dt.configure(height=nueva_altura)
+            self.dt.pack_forget()
+            self.dt.pack(side="left", fill=BOTH, padx=10, pady=10)
+            self.dt.update_idletasks()
+            time.sleep(2)
+            self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
             self.button_transmitir_datos.config(state=NORMAL)
-            #self.button_actualizar_datos.config(state=NORMAL)
 
         except Exception as e:
-            print(e)
-            self.DICT_WIDGETS.get_widget("CTK_Loader_Frame","stop")()
+            print(f"❌ Error al insertar en la tabla: {e}")
+            self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
+
+
+
             
     def mostrar_imagen_producto(self, event):
         """Función para obtener y mostrar la imagen almacenada en la base de datos."""
@@ -761,3 +784,54 @@ class ContenidoProducto:
 
         except Exception as e:
             print(f"Error al guardar en la base de datos: {e}")
+
+    def iniciar_vigia_actualizacion_productos(self, intervalo=60):
+        def vigia():
+            puntos = ["", ".", "..", "..."]
+            anim_index = 0
+
+            while True:
+                if not self.config.get("sincronizacion_automatica", True):
+                    print("⏸️ Vigía pausado por configuración. Esperando activación...", end="\r")
+                    time.sleep(5)
+                    continue
+
+                try:
+                    print(f"🕵️‍♂️ Vigía ejecutando revisión{puntos[anim_index % 4]}   ", end="\r")
+                    anim_index += 1
+
+                    sql_local = "SELECT dFechaU FROM productos ORDER BY dFechaU DESC LIMIT 1"
+                    res_local = self.CONEXIONDBA.ejecutar_consulta(sql_local)
+                    fecha_local = res_local[0][0] if res_local else "2000-01-01 00:00:00"
+
+                    sql_sybase = """
+                    SELECT MAX(dFechaU) FROM ARTICULO 
+                    WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
+                    """
+                    res_sybase = self.CONEXIONDBA_SYBASE.ejecutar_consulta(sql_sybase)
+                    fecha_remota = res_sybase[0][0] if res_sybase else None
+
+                    if fecha_remota:
+                        fmt = "%Y-%m-%d %H:%M:%S"
+                        f_local = datetime.strptime(str(fecha_local), fmt)
+                        f_remota = datetime.strptime(str(fecha_remota), fmt)
+
+                        if f_remota > f_local:
+                            print("🟡 Nueva actualización detectada. Ejecutando actualización...")
+                            self.command_actualizar_datos()
+
+                            try:
+                                notification.notify(
+                                    title="Actualización automática",
+                                    message="Se detectaron nuevos productos y se actualizó el catálogo.",
+                                    timeout=5
+                                )
+                            except Exception as e:
+                                print(f"⚠️ No se pudo mostrar notificación: {e}")
+
+                except Exception as e:
+                    print(f"❌ Vigía error: {e}")
+
+                time.sleep(intervalo)
+
+        threading.Thread(target=vigia, daemon=True).start()

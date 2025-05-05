@@ -10,7 +10,7 @@ class SQLiteDB:
     def conectar(self):
         """Establece la conexión con la base de datos."""
         try:
-            self.connection = sqlite3.connect(self.db_name)
+            self.connection = sqlite3.connect(self.db_name, check_same_thread=False)
             self.cursor = self.connection.cursor()
             print("Conexión establecida con la base de datos.")
         except sqlite3.Error as e:
@@ -32,7 +32,8 @@ class SQLiteDB:
     def ejecutar_consulta(self, consulta, parametros=()):
         """Ejecuta una consulta SQL con o sin parámetros."""
         try:
-            self.conectar()
+            if not self.conexion_activa():
+                self.conectar()
             self.cursor.execute(consulta, parametros)
             self.connection.commit()
             return self.cursor.fetchall()
@@ -43,14 +44,24 @@ class SQLiteDB:
     def ejecutar_consultamany(self, consulta, parametros=()):
         """Ejecuta una consulta SQL con o sin parámetros en múltiples registros."""
         try:
-            self.conectar()  # Establece la conexión a la base de datos
+            if not self.conexion_activa():
+                self.conectar()
             self.cursor.executemany(consulta, parametros)  # Ejecuta la consulta para todos los parámetros
             self.connection.commit()  # Guarda los cambios en la base de datos
             return True  # Retorna True para indicar que la operación fue exitosa
         except sqlite3.Error as e:
             print(f"Error al ejecutar la consulta: {e}")
             return False  # Retorna False en caso de error
-
+        
+    def conexion_activa(self):
+        """Verifica si la conexión a SQLite sigue activa y funcional."""
+        try:
+            if self.connection:
+                self.connection.execute("SELECT 1")
+                return True
+        except:
+            return False
+        return False
 
     def ejecutar_transaccion(self, consulta_borrar, consulta_insertar, parametros):
         """Ejecuta una transacción con las consultas de borrar e insertar."""
@@ -97,18 +108,20 @@ class SQLiteDB:
             self.cerrar_conexion()
 
     def crear_tabla_VERIPRE_productos(self):
-        """Crea la tabla de productos."""
+        """Crea la tabla de productos con campo de fecha de última actualización."""
         consulta = """
             CREATE TABLE IF NOT EXISTS productos (
-            CREF TEXT,
-            codigo TEXT UNIQUE,
-            descripcion TEXT,
-            precio REAL,
-            img_base64 TEXT,
-            formato_imagen TEXT
+                CREF TEXT,
+                codigo TEXT UNIQUE,
+                descripcion TEXT,
+                precio REAL,
+                img_base64 TEXT,
+                formato_imagen TEXT,
+                dFechaU TEXT
             )
         """
         self.ejecutar_consulta(consulta)
+
 
     def crear_tabla_VERIPRE_EQUIPOS(self):
         """Crea la tabla VERIPRE_EQUIPOS."""

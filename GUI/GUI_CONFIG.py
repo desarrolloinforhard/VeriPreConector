@@ -1,13 +1,14 @@
 from pprint import pprint
 import threading
 import time
-from tkinter import messagebox
+from tkinter import BooleanVar, messagebox
 import ttkbootstrap as ttk
 from FUNC.windows_manager import VentanaManager 
 from DB.database_sybase import ConexionSybase, dsn_configurados
 from ttkbootstrap.constants import *
 from ttkbootstrap.tooltip import ToolTip
 from ASSETS.path_img import *
+
 
 class GUI_CONFIG:
     def __init__(self, DICT_WIDGETS):
@@ -312,11 +313,27 @@ class GUI_CONFIG:
         self.label_info_notebook_config_datos = ttk.Label(self.frame_notebook_config_datos)
         self.label_info_notebook_config_datos.pack(fill="x", padx=5, pady=5)
         
+        
+        
         inserccion_sql = """
         SELECT * FROM VERIPRE_CONEXION
         """
         datos_conexion = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consulta(inserccion_sql)
         self.creacion_frame_config_datos_INFORHARD()
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
+        valor_configurado = config.get("sincronizacion_automatica", True)
+        self.auto_sync_var = BooleanVar(value=valor_configurado)
+        # Crear checkbox de sincronización automática
+        self.checkbox_auto_sync = ttk.Checkbutton(
+            self.frame_notebook_config_datos,
+            text="Sincronización automática de productos",
+            variable=self.auto_sync_var,
+            command=self.actualizar_config_sincronizacion_automatica
+        )
+        self.checkbox_auto_sync.pack(pady=15)
+
+        # Registrar en el diccionario global
+        self.DICT_WIDGETS.register("VARIABLES_GLOBALES", "sincronizacion_automatica", self.auto_sync_var)
         
         print(datos_conexion)
 
@@ -530,6 +547,15 @@ class GUI_CONFIG:
         except Exception as e:
             print(e)
             
+    def actualizar_config_sincronizacion_automatica(self):
+        valor = self.auto_sync_var.get()
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
+        config["sincronizacion_automatica"] = valor
+
+        from GUI.GUI_MAIN import guardar_config
+        guardar_config(config)
+
+            
             
     def procesar_productos_completos(self):
         """Llama a todas las funciones para procesar los productos en conjunto."""
@@ -581,7 +607,7 @@ class GUI_CONFIG:
     def buscar_datos_en_tabla_ARTICULOS(self):
         """Obtiene los artículos con códigos de barras válidos y muestra información de lo que está haciendo."""
         CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS = """
-            SELECT CREF, CDETALLE, CCODEBAR, CTIPOIVA, NPVP1 
+            SELECT CREF, CDETALLE, CCODEBAR, CTIPOIVA, NPVP1, dFechaU
             FROM ARTICULO 
             WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
             ORDER BY dFechaU ASC;
@@ -615,7 +641,7 @@ class GUI_CONFIG:
         crefs = tuple(producto[0] for producto in self.datos_ARTICULOS)
         
         CONSULTA_SQL_BUSCAR_DATOS_CODBARP = f"""
-            SELECT CREF, CDETALLE, CCODEBAR 
+            SELECT CREF, CDETALLE, CCODEBAR, dFechaU
             FROM CODBARP 
             WHERE CREF IN {crefs} AND CCODEBAR IS NOT NULL AND CCODEBAR <> ''
             ORDER BY dFechaU ASC;
@@ -626,10 +652,10 @@ class GUI_CONFIG:
         
         codbarp_dict = {}
         if datos_codbarp:
-            for cref, cdetalle, ccodebar in datos_codbarp:
+            for cref, cdetalle, ccodebar, dfechau in datos_codbarp:
                 if cref not in codbarp_dict:
                     codbarp_dict[cref] = []
-                codbarp_dict[cref].append((cdetalle, ccodebar))
+                codbarp_dict[cref].append((cdetalle, ccodebar, dfechau))
         
         total_productos = len(self.datos_ARTICULOS)
         total_codigos_barra = len(datos_codbarp)
@@ -637,15 +663,15 @@ class GUI_CONFIG:
         progreso = 0
 
         for idx, producto in enumerate(self.datos_ARTICULOS):
-            cref, cdetalle, ccodebar, ctipoiva, npvp1 = producto
+            cref, cdetalle, ccodebar, ctipoiva, npvp1, dfechau = producto
             self.datos_PRODUCTOS_COMPLETOS.append(producto)
             progreso += 1
             if progreso % 10 == 0:  # Actualiza la barra cada 10 productos
                 self.actualizar_barra(progreso, total)
             
             if cref in codbarp_dict:
-                for cdetalle_extra, ccodebar_extra in codbarp_dict[cref]:
-                    self.datos_PRODUCTOS_COMPLETOS.append((cref, cdetalle_extra, ccodebar_extra, ctipoiva, npvp1))
+                for cdetalle_extra, ccodebar_extra, dfechau in codbarp_dict[cref]:
+                    self.datos_PRODUCTOS_COMPLETOS.append((cref, cdetalle_extra, ccodebar_extra, ctipoiva, npvp1, dfechau))
                     progreso += 1
                     if progreso % 10 == 0:  # Actualiza la barra cada 10 productos
                         self.actualizar_barra(progreso, total)
@@ -719,8 +745,8 @@ class GUI_CONFIG:
         """Inserta o actualiza los productos en la base de datos SQLite y muestra el progreso."""
         self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA").ejecutar_consulta(consulta_limpieza)
         consulta = """
-        INSERT OR REPLACE INTO productos (CREF, codigo, descripcion, precio) 
-        VALUES (?, ?, ?, ?)
+        INSERT OR REPLACE INTO productos (CREF, codigo, descripcion, precio, dfechau) 
+        VALUES (?, ?, ?, ?, ?)
         """
 
         self.mostrar_accion("Insertando o actualizando productos...")
@@ -734,7 +760,7 @@ class GUI_CONFIG:
         self.actualizar_barra(0, total_productos)
         
         # Preparar todos los parámetros para la inserción o actualización
-        parametros = [(producto[0], producto[2], producto[1], producto[3]) for producto in self.datos_PRODUCTOS_COMPLETOS]
+        parametros = [(producto[0], producto[2], producto[1], producto[3], producto[4]) for producto in self.datos_PRODUCTOS_COMPLETOS]
 
         # Ejecutar la consulta para todos los productos a la vez
         self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consultamany(consulta, parametros)

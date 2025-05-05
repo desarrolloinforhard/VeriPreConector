@@ -1,4 +1,4 @@
-__version__ = "0.4.72"
+__version__ = "1.2.0"
 from GUI.GUI_MAIN import GUI_MAIN
 
 if __name__ == "__main__":

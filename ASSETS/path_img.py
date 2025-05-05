@@ -5,6 +5,9 @@ path_script = os.path.dirname(os.path.abspath(__file__))
 def ICON():
     return os.path.join(path_script, 'Ico_VeriPre.png')
 
+def ICON_ico():
+    return os.path.join(path_script, 'Ico_VeriPre.ico')
+
 def Logo_info():
     return os.path.join(path_script, 'Logo_cuadrado_W.png')
 

@@ -277,18 +277,22 @@ class ContenidoPublicidad:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el archivo: {e}")
 
-    def guardar_ubicaciones(self, archivo="ubicaciones.json"):
-        with open(archivo, "w", encoding="utf-8") as f:
-            json.dump(self.items_dict, f, indent=4, ensure_ascii=False)
+    def guardar_ubicaciones(self):
+        config = self.widgets.get_widget("CONFIG", "config_json")
+        config["ubicaciones"] = self.items_dict
 
-    def cargar_ubicaciones(self, archivo="ubicaciones.json"):
-        if not os.path.exists(archivo):
-            return
-        with open(archivo, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        from GUI.GUI_MAIN import guardar_config
+        guardar_config(config)
+
+
+    def cargar_ubicaciones(self):
+        config = self.widgets.get_widget("CONFIG", "config_json")
+        data = config.get("ubicaciones", {})
+
         for ruta, info in data.items():
             if os.path.exists(ruta):
                 self.agregar_item_multimedia("Multimedia", ruta, fila=info.get("fila"), col=info.get("columna"))
+
 
     def recalcular_y_cargar_ubicaciones(self):
         self.canvas.update_idletasks()

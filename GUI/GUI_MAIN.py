@@ -1,6 +1,9 @@
 import os
+import threading
+import json
 import ttkbootstrap as ttk
 from ASSETS.path_img import *
+from pystray import Icon as TrayIcon, Menu as TrayMenu, MenuItem
 from FUNC.ctk_components.ctk_components import CTkLoader
 from FUNC.create_widget import WidgetRegistry
 #from FUNC.config_manager_json import ConfigManager
@@ -11,49 +14,101 @@ from GUI.GUI_CONFIG import GUI_CONFIG
 from DB.database import SQLiteDB
 from DB.database_sybase import ConexionSybase
 
+import socket
+import sys
+from tkinter import messagebox
+
+def comprobar_instancia_unica(puerto=55665):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(('127.0.0.1', puerto))
+        return sock  # mantiene el socket abierto
+    except OSError:
+        messagebox.showinfo(
+            "Aplicación ya en ejecución",
+            "La aplicación ya está abierta.\nRevisá la bandeja del sistema (icono cerca del reloj)."
+        )
+        sys.exit(0)
+
+
+
+CONFIG_PATH = os.path.join(os.getcwd(), "config.json")
+
+def cargar_config():
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def guardar_config(data):
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(data, f, indent=4)
+
 
 class GUI_MAIN:
     def __init__(self, version):
+        self.socket_lock = comprobar_instancia_unica()  # ← ¡esto es clave!
         self.DICT_WIDGETS = WidgetRegistry()
         self.VIGIA_FRAME = "INICIO"
         self.VIGIA_VOLVER = [self.VIGIA_FRAME]
-        #sself.DICT_WIDGETS.register("DATABASE","config_json", ConfigManager())
 
-        # Crear ventana principal
+        self.config_data = cargar_config()
+        self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
+
         self.ventana_creacion_caja = ttk.Window(themename="flatly", iconphoto=ICON())
         self.ventana_creacion_caja.title(f"VeriPre_Connector, V.{version}")
-        #self.ventana_creacion_caja.resizable(False, False)
         self.ventana_creacion_caja.state('zoomed')
-        #center_window(self.ventana_creacion_caja, 1100, 700)
-        
-        # Configurar diseño de la ventana
-        # Configurar un ancho fijo para la columna 0
-        self.ventana_creacion_caja.grid_columnconfigure(0, minsize=250, weight=0)  # Ancho fijo de 200px
-        self.ventana_creacion_caja.grid_columnconfigure(1, weight=1)  # Columna de contenido se ajusta al resto
 
-        self.ventana_creacion_caja.rowconfigure(0, weight=1)  # Fila para todo el contenido
+        self.ventana_creacion_caja.grid_columnconfigure(0, minsize=250, weight=0)
+        self.ventana_creacion_caja.grid_columnconfigure(1, weight=1)
+        self.ventana_creacion_caja.rowconfigure(0, weight=1)
 
-        # Agregar widgets a DICT_WIDGETS
+        self.ventana_creacion_caja.protocol("WM_DELETE_WINDOW", self.ocultar_a_bandeja)
+
         self.DICT_WIDGETS.register("GUI_MAIN","ventana_creacion_caja", self.ventana_creacion_caja)
         self.CONEXIONES_DBA()
         self.VARIABLES_GLOBALES()
-        #print(self.CONEXIONDBA.obtener_columnas("VERIPRE_EQUIPOS"))
 
-        # Inicializar los marcos
         self.frameMenu()
         self.frameContenido()
         self.seccion_inicio()
         self.seccion_productos()
         self.seccion_publicidad()
         self.selector_seccion()
-        
+
         self.ctk_loader = CTkLoader(self.ventana_creacion_caja, opacity=0.8, width=40, height=40)
         self.DICT_WIDGETS.register("CTK_Loader_Frame","start", self.ctk_loader.start_loader)
         self.DICT_WIDGETS.register("CTK_Loader_Frame","stop", self.ctk_loader.stop_loader)
 
-        # Ejecutar el bucle principal
+        self.crear_icono_bandeja()
+
         self.ventana_creacion_caja.mainloop()
         self.DICT_WIDGETS.print_dict()
+
+    def ocultar_a_bandeja(self):
+        self.ventana_creacion_caja.withdraw()
+
+    def crear_icono_bandeja(self):
+        from PIL import Image
+
+        ruta_icono = os.path.join(ICON_ico())
+        image = Image.open(ruta_icono).resize((64, 64), Image.Resampling.LANCZOS)
+
+        def mostrar_ventana(icon, item):
+            self.ventana_creacion_caja.deiconify()
+            self.ventana_creacion_caja.state('zoomed')
+
+        def salir_app(icon, item):
+            icon.stop()
+            self.ventana_creacion_caja.destroy()
+
+        menu = TrayMenu(
+            MenuItem('Mostrar ventana', mostrar_ventana),
+            MenuItem('Salir', salir_app)
+        )
+
+        self.tray_icon = TrayIcon("VeriPre", image, menu=menu)
+        threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
 
 
