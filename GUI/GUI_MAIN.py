@@ -7,6 +7,7 @@ from ASSETS.path_img import *
 from pystray import Icon as TrayIcon, Menu as TrayMenu, MenuItem
 from FUNC.ctk_components.ctk_components import CTkLoader
 from FUNC.create_widget import WidgetRegistry
+from FUNC.config_json import *
 #from FUNC.config_manager_json import ConfigManager
 from FUNC.windows_manager import VentanaManager
 from GUI.CONTENIDO_PRODUCTO import ContenidoProducto
@@ -30,21 +31,6 @@ def comprobar_instancia_unica(puerto=55665):
             "La aplicación ya está abierta.\nRevisá la bandeja del sistema (icono cerca del reloj)."
         )
         sys.exit(0)
-
-
-
-CONFIG_PATH = os.path.join(os.getcwd(), "config.json")
-
-def cargar_config():
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r") as f:
-            return json.load(f)
-    return {}
-
-def guardar_config(data):
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(data, f, indent=4)
-
 
 class GUI_MAIN:
     def __init__(self, version):

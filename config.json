@@ -34,6 +34,12 @@
         "columna": 2,
         "posicion": 7
     },
-    "ubicaciones": {},
+    "ubicaciones": {
+        "C:/Users/Op_1111/Desktop/BG_ADS/LOGO_BG.png": {
+            "fila": 0,
+            "columna": 0,
+            "posicion": 1
+        }
+    },
     "sincronizacion_automatica": true
 }

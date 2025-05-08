@@ -1,5 +1,5 @@
-import json
-from pprint import pprint
+import os
+import sys
 import threading
 import time
 from tkinter import BooleanVar, filedialog, messagebox
@@ -10,6 +10,7 @@ from ttkbootstrap.constants import *
 from ttkbootstrap.tooltip import ToolTip
 from ASSETS.path_img import *
 from core.network.dispositivo_sender import DispositivoSender
+from FUNC.config_json import guardar_config
 
 
 class GUI_CONFIG:
@@ -572,13 +573,30 @@ class GUI_CONFIG:
         except Exception as e:
             print(e)
             
-    def actualizar_config_sincronizacion_automatica(self):
-        valor = self.auto_sync_var.get()
-        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
-        config["sincronizacion_automatica"] = valor
 
-        from GUI.GUI_MAIN import guardar_config
-        guardar_config(config)
+    def actualizar_config_sincronizacion_automatica(self):
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
+        nuevo_valor = self.auto_sync_var.get()
+        valor_anterior = config.get("sincronizacion_automatica", False)
+
+        # Solo preguntar si se está activando (no al desactivar)
+        if not valor_anterior and nuevo_valor:
+            respuesta = messagebox.askyesno(
+                "Reiniciar aplicación",
+                "Se activó la sincronización automática.\n¿Deseás reiniciar la aplicación para aplicar los cambios?"
+            )
+            if respuesta:
+                config["sincronizacion_automatica"] = True
+                guardar_config(config)
+                python = sys.executable
+                os.execl(python, python, *sys.argv)
+            else:
+                self.auto_sync_var.set(valor_anterior)
+        else:
+            # Si se desactiva o no cambia, solo guardar
+            config["sincronizacion_automatica"] = nuevo_valor
+            guardar_config(config)
+
 
             
             
