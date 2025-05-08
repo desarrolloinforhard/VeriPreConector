@@ -1,13 +1,15 @@
+import json
 from pprint import pprint
 import threading
 import time
-from tkinter import BooleanVar, messagebox
+from tkinter import BooleanVar, filedialog, messagebox
 import ttkbootstrap as ttk
 from FUNC.windows_manager import VentanaManager 
 from DB.database_sybase import ConexionSybase, dsn_configurados
 from ttkbootstrap.constants import *
 from ttkbootstrap.tooltip import ToolTip
 from ASSETS.path_img import *
+from core.network.dispositivo_sender import DispositivoSender
 
 
 class GUI_CONFIG:
@@ -308,6 +310,29 @@ class GUI_CONFIG:
     def creacion_frame_notebook_config_datos(self):
         self.frame_notebook_config_datos = ttk.Labelframe(self.notebook_widget_configuracion, text="Configurar Datos")
         self.frame_notebook_config_datos.pack(fill="both", expand=True)
+        
+        frame_logo = ttk.LabelFrame(self.frame_notebook_config_datos, text="Logo Principal", padding=10)
+        frame_logo.pack(fill="x", padx=10, pady=10)
+
+        self.label_logo_preview = ttk.Label(frame_logo, width=200)
+        self.label_logo_preview.pack(fill="both", expand=True, padx=10, pady=10)
+        self.label_logo_preview.config(anchor="center")
+        self.label_logo_preview.config(style="preview.TLabel")
+
+
+
+        self._mostrar_logo_actual()
+        # Contenedor para los botones en línea
+        frame_botones_logo = ttk.Frame(frame_logo)
+        frame_botones_logo.pack(fill="x", pady=5)
+
+        # Botón izquierda
+        ttk.Button(frame_botones_logo, text="Seleccionar Imagen", command=self._seleccionar_logo).pack(side="left", padx=(0, 5))
+
+        # Botón derecha
+        ttk.Button(frame_botones_logo, text="Enviar Logo a Dispositivos", command=self._enviar_logo_a_dispositivos).pack(side="right", padx=(5, 0))
+
+
         
         
         self.label_info_notebook_config_datos = ttk.Label(self.frame_notebook_config_datos)
@@ -869,3 +894,87 @@ class GUI_CONFIG:
         
     def bloquear_cierre(self):
         pass  # No hace nada al intentar cerrar
+
+    from PIL import Image, ImageTk
+
+    def _mostrar_logo_actual(self):
+        ruta_logo = PNG_LOGO_PRINCIPAL()
+        if not os.path.exists(ruta_logo):
+            ruta_logo = PNG_LOGO_SECUNDARIO()
+
+        if os.path.exists(ruta_logo):
+            self.label_logo_preview.update_idletasks()
+            ancho_disp = self.label_logo_preview.winfo_width()
+            alto_disp = self.label_logo_preview.winfo_height()
+
+            if ancho_disp <= 1 or alto_disp <= 1:
+                ancho_disp, alto_disp = 300, 300  # mayor área visible
+
+            img = Image.open(ruta_logo)
+            img.thumbnail((ancho_disp, alto_disp), Image.Resampling.LANCZOS)
+
+            self.logo_img_tk = ImageTk.PhotoImage(img)
+            self.label_logo_preview.config(image=self.logo_img_tk, text="")
+        else:
+            self.label_logo_preview.config(image="", text="Sin logo")
+
+            
+    def _seleccionar_logo(self):
+        filetypes = [("Imágenes", "*.png *.jpg *.jpeg *.webp")]
+        filepath = filedialog.askopenfilename(title="Seleccionar Logo", filetypes=filetypes)
+        if not filepath:
+            return
+
+        # Mostrar preview adaptado
+        self.label_logo_preview.update_idletasks()
+        ancho_disp = self.label_logo_preview.winfo_width()
+        alto_disp = self.label_logo_preview.winfo_height()
+
+        if ancho_disp <= 1 or alto_disp <= 1:
+            ancho_disp, alto_disp = 300, 300
+
+        img = Image.open(filepath)
+        img.thumbnail((ancho_disp, alto_disp), Image.Resampling.LANCZOS)
+
+        self.logo_img_tk = ImageTk.PhotoImage(img)
+        self.label_logo_preview.config(image=self.logo_img_tk, text="")
+
+        # Guardar para enviar
+        self.ruta_logo_seleccionado = filepath
+
+        # Guardar copia en carpeta /assets/ con nombre !!!LOGO_PRINCIPAL!!!.png
+        try:
+            from pathlib import Path
+            destino = Path("assets") / "!!!LOGO_PRINCIPAL!!!.png"
+            destino.parent.mkdir(parents=True, exist_ok=True)  # crear carpeta si no existe
+
+            img_original = Image.open(filepath).convert("RGBA")  # asegura transparencia
+            img_original.save(destino, format="PNG")
+
+            print(f"✅ Logo guardado como {destino}")
+        except Exception as e:
+            print(f"❌ No se pudo guardar el logo en assets/: {e}")
+
+
+
+    def _enviar_logo_a_dispositivos(self):
+        # Ruta del logo seleccionado (por el usuario)
+        ruta_logo = getattr(self, "ruta_logo_seleccionado", None)
+
+        # Si no hay logo seleccionado, buscar el logo principal o uno secundario
+        if not ruta_logo:
+            ruta_logo = PNG_LOGO_PRINCIPAL()
+            if not os.path.exists(ruta_logo):
+                ruta_logo = PNG_LOGO_SECUNDARIO()  # ← definilo como ruta alternativa
+                if not os.path.exists(ruta_logo):
+                    messagebox.showwarning("Logo no disponible", "No se encontró ningún logo para enviar.")
+                    return
+        ventana_padre = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
+        sender = DispositivoSender(self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA"), ventana_padre)
+        urls = sender.seleccionar_dispositivos()
+        if not urls:
+            return
+
+        sender.enviar_logo_principal(urls, ruta_logo)
+        messagebox.showinfo("Logo Enviado", "El logo fue enviado exitosamente.")
+

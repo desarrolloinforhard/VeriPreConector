@@ -1,9 +1,8 @@
 import base64
-from datetime import datetime
+from datetime import datetime, date
 import os
 import threading
 import time
-import requests
 import ttkbootstrap as ttk
 from io import BytesIO
 from plyer import notification
@@ -12,9 +11,11 @@ from PIL import Image, ImageTk
 from ASSETS.path_img import *
 from ttkbootstrap.tableview import Tableview
 from ttkbootstrap.constants import *
-from pprint import pprint
-from core.network.api_client import DispositivoAPIClient
-from core.network.urls_dispositivos import VeriPreDispositivosURLBuilder
+from core.network.dispositivo_sender import DispositivoSender
+from ttkbootstrap.widgets import DateEntry
+
+#from core.network.selector_envio_dispositivos import EnvioDispositivos
+
 
 
 class ContenidoProducto:
@@ -43,8 +44,11 @@ class ContenidoProducto:
         self.button_transmitir_novedades = ttk.Button(self.frame_buttons_productos, text="Transmitir Novedades", command=self.command_transmitir_novedades, state=DISABLED)
         self.button_transmitir_novedades.grid(row=0, column=1, padx=10)
 
+        self.button_transmitir_datos_fecha = ttk.Button(self.frame_buttons_productos, text="Transmitir por Fecha", command=self.command_transmitir_por_fecha, state=DISABLED)
+        self.button_transmitir_datos_fecha.grid(row=0, column=2, padx=10)
+        
         self.button_transmitir_datos = ttk.Button(self.frame_buttons_productos, text="Transmitir Datos Completos", command=self.command_transmitir_datos, state=DISABLED)
-        self.button_transmitir_datos.grid(row=0, column=2, padx=10)
+        self.button_transmitir_datos.grid(row=0, column=3, padx=10)
         
         # Agregar el nuevo botón en la columna 3
         #self.button_actualizar_datos = ttk.Button(self.frame_buttons_productos, text="Actualizar Datos", command=self.command_actualizar_datos, state=DISABLED)
@@ -156,6 +160,7 @@ class ContenidoProducto:
         
 #/////////////////////////////////////////// COMMAND_BUTTONS ///////////////////////////////////////////
     def command_crear_datos(self):
+        self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind("<F5>", lambda event: self.command_actualizar_datos())
         if not self.CONEXION_INFORHARD:
             messagebox.showerror("Error de conexión", "No hay conexión con la base de datos.")
             return
@@ -188,7 +193,7 @@ class ContenidoProducto:
 
         # Activar el vigía solo si está habilitado
         if self.config.get("sincronizacion_automatica", True) and not self._vigia_iniciado:
-            self.iniciar_vigia_actualizacion_productos(intervalo=10)
+            self.iniciar_vigia_actualizacion_productos(intervalo=1)
             self._vigia_iniciado = True
 
         self.button_crear_datos.config(
@@ -202,93 +207,125 @@ class ContenidoProducto:
         if total_registros == 0:
             print("No hay datos para enviar.")
             return
+        sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        urls = sender.seleccionar_dispositivos()
+        if urls:
+            productos = self.completar_con_imagenes(self.datos_ARTICULOS)
+            sender.enviar_datos(urls, productos, modo="completo")
 
-        builder = VeriPreDispositivosURLBuilder(self.CONEXIONDBA)
-        urls = builder.obtener_urls_api("/api/veri/batch_productos")
-        urls_delete = builder.obtener_urls_api("/api/veri/ALL_PRODUCTOS")
 
-        # Primero: eliminar productos de cada dispositivo
-        for url in urls_delete:
-            print(f"[{url}] → Enviando DELETE para limpiar base de productos...")
-            client = DispositivoAPIClient(url, estado_callback=lambda m: print(f"[{url}] {m}"))
-            response = client.enviar_delete()
-            if response is None:
-                print(f"[{url}] ❌ No se pudo limpiar la base, abortando transmisión.")
+        
+    def command_transmitir_novedades(self):
+        sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        urls = sender.seleccionar_dispositivos()
+        print(self.productos_modificados)
+        if urls:
+            # Inspección para depurar
+            """ print("🧪 Verificando coincidencias entre productos y modificados:")
+            for prod in self.datos_PRODUCTOS_COMPLETOS:
+                print(f"prod[1]={repr(prod[1])}, ¿en modificados?: {prod[1] in self.productos_modificados}")"""
+
+
+            # Buscar todos los productos modificados desde la base local
+            productos_novedades = []
+
+            for codigo in self.productos_modificados:
+                consulta = """
+                SELECT codigo, descripcion, precio, img_base64, formato_imagen
+                FROM productos
+                WHERE codigo = ?
+                """
+                resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, (codigo,))
+                if resultado:
+                    productos_novedades.append(resultado[0])  # solo uno por código
+
+            print("productos_novedades", productos_novedades)
+
+            if not productos_novedades:
+                messagebox.showinfo("Sin novedades", "No hay productos modificados para transmitir.")
+                return
+            print("➡️ Productos a transmitir:")
+            for p in productos_novedades:
+                print(f"{p[0]} - {p[1]}")  # Código - Descripción
+            sender.enviar_datos(urls, productos_novedades, modo="novedades")
+
+            self.productos_modificados.clear()
+
+    def command_transmitir_por_fecha(self):
+        import locale
+
+        locale.setlocale(locale.LC_TIME, 'Spanish_Spain')  # O 'es_AR.UTF-8' en Linux
+
+        top = ttk.Toplevel()
+        top.title("Transmitir por Rango de Fechas")
+        top.geometry("400x230")
+        top.place_window_center()
+        top.grab_set()
+
+        today = date.today().strftime("%Y-%m-%d")
+
+        ttk.Label(top, text="Fecha desde:").pack(pady=(10, 0))
+        date_desde = DateEntry(top, bootstyle="info", width=20, dateformat="%Y-%m-%d", firstweekday=0)
+        date_desde.entry.delete(0, "end")
+        date_desde.entry.insert(0, today)
+        date_desde.pack()
+
+        ttk.Label(top, text="Fecha hasta:").pack(pady=(10, 0))
+        date_hasta = DateEntry(top, bootstyle="info", width=20, dateformat="%Y-%m-%d", firstweekday=0)
+        date_hasta.entry.delete(0, "end")
+        date_hasta.entry.insert(0, today)
+        date_hasta.pack()
+
+        def confirmar():
+            f1 = date_desde.entry.get()
+            f2 = date_hasta.entry.get()
+
+            if f1 > f2:
+                messagebox.showwarning("Fechas inválidas", "La fecha inicial no puede ser posterior a la final.")
                 return
 
-        # Segundo: enviar datos por lote en hilos (uno por dispositivo)
-        batch_size = 1000
-        total_batches = (total_registros + batch_size - 1) // batch_size
+            f_desde = f"{f1} 00:00:00"
+            f_hasta = f"{f2} 23:59:59"
 
-        for url in urls:
-            def enviar_a_dispositivo(url=url):
-                client = DispositivoAPIClient(url, estado_callback=lambda m: print(f"[{url}] {m}"))
-                for i in range(0, total_registros, batch_size):
-                    batch = self.datos_ARTICULOS[i:i + batch_size]
-                    batch_json = [
-                        {
-                            "codigo": item[1],
-                            "descripcion": item[2],
-                            "precio": item[3],
-                            "img_base64": item[4],
-                            "formato_imagen": item[5]
-                        } for item in batch
-                    ]
-                    client.enviar_post_json(batch_json)
-            threading.Thread(target=enviar_a_dispositivo, daemon=True).start()
-
-                
+            consulta = """
+            SELECT descripcion, codigo, precio, img_base64, formato_imagen
+            FROM productos
+            WHERE dFechaU BETWEEN ? AND ?
+            """
+            productos = self.CONEXIONDBA.ejecutar_consulta(consulta, (f_desde, f_hasta))
             
-    def command_transmitir_novedades(self):
-        """Envía solo los productos modificados a la API."""
-        if not self.productos_modificados:
-            print("No hay novedades para transmitir.")
-            return
+            print(consulta, f_desde, f_hasta)
 
-        print(f"Transmitiendo {len(self.productos_modificados)} productos modificados...")
+            if not productos:
+                messagebox.showinfo("Sin datos", "No hay productos en ese rango de fechas.")
+                return
 
-        # Buscar solo los productos modificados en la base de datos
-        productos_a_enviar = []
-        for codigo in self.productos_modificados:
-            CONSULTA_SQL = "SELECT * FROM productos WHERE codigo = ?"
-            producto = self.CONEXIONDBA.ejecutar_consulta(CONSULTA_SQL, (codigo,))
-            if producto:
-                productos_a_enviar.append(producto[0])
+            print(f"📦 Productos a transmitir por fecha: {len(productos)}")
+            sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+            urls = sender.seleccionar_dispositivos()
+            if urls:
+                sender.enviar_datos(urls, productos, modo="rango_fecha")
 
-        if not productos_a_enviar:
-            print("No se encontraron productos en la base de datos.")
-            return
+            top.destroy()
 
-        # Formatear datos para enviar a la API
-        batch_json = [
-            {
-                "codigo": item[1],
-                "descripcion": item[2],
-                "precio": item[3],
-                "img_base64": item[4],
-                "formato_imagen": item[5]
-            } for item in productos_a_enviar
-        ]
+        ttk.Button(top, text="Transmitir", command=confirmar).pack(pady=20)
 
-        builder = VeriPreDispositivosURLBuilder(self.CONEXIONDBA)
-        urls = builder.obtener_urls_api("/api/veri/batch_productos")
+        
+    def forzar_dias_en_espanol(self, date_entry):
+        dias_es = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do']
+        
+        # Esperar a que se cree el pop-up
+        def traducir_dias(*args):
+            top = date_entry._top_cal
+            headers = top.children.get('calendar').children.get('header')
+            for i, label in enumerate(headers.winfo_children()):
+                label.config(text=dias_es[i % 7])
 
-        for url in urls:
-            client = DispositivoAPIClient(url, estado_callback=lambda m: print(f"[{url}] {m}"))
-            threading.Thread(target=lambda: client.enviar_post_json(batch_json), daemon=True).start()
+        # Enganchar al evento que abre el calendario
+            date_entry.entry.bind("<Button-1>", lambda e: top.after(10, traducir_dias))
 
-        # Mostrar notificación y limpiar cambios
-        try:
-            notification.notify(
-                title="Transmisión de novedades",
-                message="Los productos modificados fueron enviados.",
-                timeout=5
-            )
-        except Exception as e:
-            print(f"⚠️ No se pudo mostrar notificación: {e}")
 
-        self.productos_modificados.clear()
-        self.button_transmitir_novedades.config(state=DISABLED)
+
 
             
             
@@ -301,20 +338,7 @@ class ContenidoProducto:
             threading.Thread(target=self.procesar_productos_a_actualizar).start()
         except Exception as e:
             print(e)
-            
-            
-    def limpiar_base_dispositivo(self):
-        builder = VeriPreDispositivosURLBuilder(self.CONEXIONDBA)
-        urls = builder.obtener_urls_api("/api/veri/ALL_PRODUCTOS")
-        headers = {"Content-Type": "application/json"}
 
-        for url in urls:
-            def estado(msg): print(f"DELETE {url}: {msg}")
-            client = DispositivoAPIClient(url, estado_callback=estado)
-            threading.Thread(target=client.enviar_delete, daemon=True).start()
-
-        
-        
     def procesar_productos_a_actualizar(self):
         self.buscar_datos_en_tabla_ARTICULOS_actualizados()
         self.buscar_datos_tabla_CODBARP()
@@ -565,6 +589,8 @@ class ContenidoProducto:
             time.sleep(2)
             self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
             self.button_transmitir_datos.config(state=NORMAL)
+            self.button_transmitir_datos_fecha.config(state=NORMAL)
+            self.button_transmitir_novedades.config(state=NORMAL)
 
         except Exception as e:
             print(f"❌ Error al insertar en la tabla: {e}")
@@ -787,28 +813,40 @@ class ContenidoProducto:
 
     def iniciar_vigia_actualizacion_productos(self, intervalo=60):
         def vigia():
+            print("🟢 Vigía activado (modo automático)")  # Línea fija que queda
+
             puntos = ["", ".", "..", "..."]
             anim_index = 0
 
             while True:
                 if not self.config.get("sincronizacion_automatica", True):
-                    print("⏸️ Vigía pausado por configuración. Esperando activación...", end="\r")
+                    print("⏸️ Vigía pausado por configuración. Esperando activación...")
                     time.sleep(5)
                     continue
 
                 try:
-                    print(f"🕵️‍♂️ Vigía ejecutando revisión{puntos[anim_index % 4]}   ", end="\r")
+                    print(f"\rRevisión en progreso{puntos[anim_index % 4]}   ", end="")
                     anim_index += 1
 
+                    # ✅ Nueva conexión SQLite (segura para este hilo)
+                    from DB.database import SQLiteDB
+                    nueva_sqlite = SQLiteDB(self.CONEXIONDBA.ruta_db)
                     sql_local = "SELECT dFechaU FROM productos ORDER BY dFechaU DESC LIMIT 1"
-                    res_local = self.CONEXIONDBA.ejecutar_consulta(sql_local)
+                    res_local = nueva_sqlite.ejecutar_consulta(sql_local)
                     fecha_local = res_local[0][0] if res_local else "2000-01-01 00:00:00"
 
+                    # ✅ Nueva conexión Sybase (segura para este hilo)
+                    from DB.database_sybase import ConexionSybase
+                    nueva_sybase = ConexionSybase(
+                        user=self.CONEXIONDBA_SYBASE.usuario,
+                        password=self.CONEXIONDBA_SYBASE.contrasena,
+                        dsn=self.CONEXIONDBA_SYBASE.dsn_name
+                    )
                     sql_sybase = """
                     SELECT MAX(dFechaU) FROM ARTICULO 
                     WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
                     """
-                    res_sybase = self.CONEXIONDBA_SYBASE.ejecutar_consulta(sql_sybase)
+                    res_sybase = nueva_sybase.ejecutar_consulta(sql_sybase)
                     fecha_remota = res_sybase[0][0] if res_sybase else None
 
                     if fecha_remota:
@@ -835,3 +873,29 @@ class ContenidoProducto:
                 time.sleep(intervalo)
 
         threading.Thread(target=vigia, daemon=True).start()
+
+    def completar_con_imagenes(self, productos):
+        productos_con_imagen = []
+
+        for prod in productos:
+            codigo = prod[1]
+            consulta = "SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?"
+            resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, (codigo,))
+            
+            print(resultado)
+
+            if resultado and resultado[0]:
+                img_base64, formato = resultado[0]
+            else:
+                img_base64, formato = None, None
+                
+
+            productos_con_imagen.append((
+                prod[1],  # Descripción
+                prod[2],  # Código de barras
+                prod[3],  # Precio
+                img_base64,
+                formato
+            ))
+
+        return productos_con_imagen

@@ -1,5 +1,3 @@
-import json
-import requests
 import os
 import cv2
 import tkinter as tk
@@ -12,6 +10,8 @@ from ttkbootstrap.constants import *
 from ttkbootstrap.scrolled import ScrolledFrame
 from PIL import Image, ImageTk, ImageDraw
 from ASSETS.path_img import READ_IMG, PNG_Check
+from core.network.dispositivo_sender import DispositivoSender
+#from core.network.selector_envio_dispositivos import EnvioDispositivos
 
 
 CELL_HEIGHT = 170  # Hacemos más rectangular
@@ -298,8 +298,21 @@ class ContenidoPublicidad:
         self.canvas.update_idletasks()
         self.cargar_ubicaciones()
         self.redimensionar_celdas()
-
+        
+    
     def enviar_multimedia(self):
+        if not self.items:
+            messagebox.showinfo("Sin contenido", "No hay contenido para enviar.")
+            return
+
+        sender = DispositivoSender(self.widgets.get_widget("DATABASE","CONEXIONDBA"), self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        urls = sender.seleccionar_dispositivos()
+        if urls:
+            sender.enviar_publicidades(urls, self.items)
+
+
+        """
+        def enviar_multimedia(self):
         for filepath, info in self.items_dict.items():
             if not os.path.exists(filepath):
                 print(f"Archivo no encontrado: {filepath}")
@@ -338,7 +351,7 @@ class ContenidoPublicidad:
                 print(f"❌ Error al enviar {filepath}: {e}")
         url = "http://192.168.1.161:8080/api/veri/reiniciar_launcher"
         response = requests.post(url)
-        print(response)
+        print(response)"""
         
     def mostrar_preview_general(self):
         if not self.items:
@@ -567,7 +580,7 @@ class ContenidoPublicidad:
 
         # Calcular tamaño exacto de ventana
         ancho_ventana = columnas * (cuadro_w + espacio_x) + 40
-        alto_ventana = min(filas * (cuadro_h + espacio_y) + 120, top.winfo_screenheight() - 100)
+        alto_ventana = min(filas * (cuadro_h + espacio_y) + 500, top.winfo_screenheight() - 100)
 
         # Centrar la ventana
         self.centrar_ventana(top, ancho_ventana, alto_ventana)

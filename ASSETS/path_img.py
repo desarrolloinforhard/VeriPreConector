@@ -43,6 +43,11 @@ def PNG_No_Foto():
 
 def PNG_Check():
     return os.path.join(path_script, 'check.png')
+def PNG_LOGO_PRINCIPAL():
+    return os.path.join(path_script, '!!!LOGO_PRINCIPAL!!!.png')
+
+def PNG_LOGO_SECUNDARIO():
+    return os.path.join(path_script, 'INFORHARD_HORIZONTAL.png')
 
 def READ_IMG(path, widht, height):
     image_logo = Image.open(path)

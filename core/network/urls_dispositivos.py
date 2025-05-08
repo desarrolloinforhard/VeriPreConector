@@ -4,22 +4,23 @@ class VeriPreDispositivosURLBuilder:
 
     def obtener_urls_api(self, endpoint="/api/veri/ad_medias_images"):
         """
-        Devuelve una lista de URLs armadas usando los dispositivos registrados en VERIPRE_EQUIPOS.
+        Devuelve una lista de diccionarios con 'nombre' y 'url' de los dispositivos registrados.
 
         :param endpoint: Ruta de la API a invocar (por defecto: /api/veri/ad_medias_images)
-        :return: Lista de URLs completas
+        :return: Lista de diccionarios [{'nombre': ..., 'url': ...}]
         """
         try:
-            consulta = "SELECT direccion_conexion, puerto FROM VERIPRE_EQUIPOS"
+            consulta = "SELECT nombre, direccion_conexion, puerto FROM VERIPRE_EQUIPOS"
             dispositivos = self.conexion_dba.ejecutar_consulta(consulta)
             urls = []
 
-            for direccion, puerto in dispositivos:
+            for nombre, direccion, puerto in dispositivos:
                 url = f"http://{direccion}:{puerto}{endpoint}"
-                urls.append(url)
+                urls.append({"nombre": nombre, "url": url})
 
             return urls
 
         except Exception as e:
             print(f"Error al obtener URLs de dispositivos: {e}")
             return []
+

@@ -1,6 +1,7 @@
 import os
 import threading
 import json
+import locale
 import ttkbootstrap as ttk
 from ASSETS.path_img import *
 from pystray import Icon as TrayIcon, Menu as TrayMenu, MenuItem
@@ -54,6 +55,7 @@ class GUI_MAIN:
 
         self.config_data = cargar_config()
         self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
+        locale.setlocale(locale.LC_TIME, 'Spanish_Spain')  # o 'es_AR.UTF-8'
 
         self.ventana_creacion_caja = ttk.Window(themename="flatly", iconphoto=ICON())
         self.ventana_creacion_caja.title(f"VeriPre_Connector, V.{version}")

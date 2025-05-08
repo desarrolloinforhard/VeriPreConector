@@ -4,15 +4,16 @@ class SQLiteDB:
     def __init__(self, db_name):
         """Inicializa la conexión con la base de datos."""
         self.db_name = db_name
+        self.ruta_db = db_name  # 👈 Agregá esto
         self.connection = None
         self.cursor = None
+
 
     def conectar(self):
         """Establece la conexión con la base de datos."""
         try:
             self.connection = sqlite3.connect(self.db_name, check_same_thread=False)
             self.cursor = self.connection.cursor()
-            print("Conexión establecida con la base de datos.")
         except sqlite3.Error as e:
             print(f"Error al conectar con la base de datos: {e}")
             

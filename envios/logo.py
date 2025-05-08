@@ -15,7 +15,7 @@ def enviar_logo():
         messagebox.showerror("Error", "Selecciona un archivo primero")
         return
 
-    url = "http://192.168.1.150:8080/api/veri/LOGO_PRINCIPAL"
+    url = "http://192.168.1.161:8080/api/veri/LOGO_PRINCIPAL"
 
     try:
         with open(logo_path, "rb") as file:
