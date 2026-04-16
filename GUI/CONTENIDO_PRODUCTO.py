@@ -174,8 +174,10 @@ class ContenidoProducto:
                 self.buscar_datos_en_tabla_ARTICULOS()
 
                 if not self.datos_ARTICULOS:
-                    messagebox.showwarning("Sin datos", "No se encontraron productos para mostrar.")
+                    if not self.config.get("sincronizacion_automatica", False):
+                        messagebox.showwarning("Sin datos", "No se encontraron productos para mostrar.")
                     return
+
 
                 # Paso 2: preparar datos y mostrar
                 self.datos_PRODUCTOS_COMPLETOS = self.datos_ARTICULOS
@@ -859,10 +861,12 @@ class ContenidoProducto:
                             self.command_actualizar_datos()
 
                             try:
+                                icono = ICON_ico()
                                 notification.notify(
                                     title="Actualización automática",
                                     message="Se detectaron nuevos productos y se actualizó el catálogo.",
-                                    timeout=5
+                                    timeout=5,
+                                    app_icon=icono  # ← Agregado
                                 )
                             except Exception as e:
                                 print(f"⚠️ No se pudo mostrar notificación: {e}")

@@ -1,0 +1,109 @@
+{
+ "version": "auto-py-to-exe-configuration_v1",
+ "pyinstallerOptions": [
+  {
+   "optionDest": "noconfirm",
+   "value": true
+  },
+  {
+   "optionDest": "filenames",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/main.py"
+  },
+  {
+   "optionDest": "onefile",
+   "value": false
+  },
+  {
+   "optionDest": "console",
+   "value": true
+  },
+  {
+   "optionDest": "icon_file",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/ASSETS/Ico_VeriPre.ico"
+  },
+  {
+   "optionDest": "name",
+   "value": "SmartPrice"
+  },
+  {
+   "optionDest": "upx_dir",
+   "value": "J:/Tool Python/upx-4.2.4-win64"
+  },
+  {
+   "optionDest": "clean_build",
+   "value": true
+  },
+  {
+   "optionDest": "optimize",
+   "value": "2"
+  },
+  {
+   "optionDest": "strip",
+   "value": false
+  },
+  {
+   "optionDest": "noupx",
+   "value": false
+  },
+  {
+   "optionDest": "hide_console",
+   "value": "minimize-early"
+  },
+  {
+   "optionDest": "disable_windowed_traceback",
+   "value": false
+  },
+  {
+   "optionDest": "uac_admin",
+   "value": false
+  },
+  {
+   "optionDest": "uac_uiaccess",
+   "value": false
+  },
+  {
+   "optionDest": "argv_emulation",
+   "value": false
+  },
+  {
+   "optionDest": "bootloader_ignore_signals",
+   "value": false
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/ASSETS;ASSETS/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/core;core/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/DB;DB/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/FUNC;FUNC/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/GUI;GUI/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/AppData/Local/Programs/Python/Python313-32/Lib/site-packages/plyer;plyer/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/AppData/Local/Programs/Python/Python313-32/Lib/site-packages/plyer-2.1.0.dist-info;plyer-2.1.0.dist-info/"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pystray"
+  }
+ ],
+ "nonPyinstallerOptions": {
+  "increaseRecursionLimit": true,
+  "manualArguments": ""
+ }
+}

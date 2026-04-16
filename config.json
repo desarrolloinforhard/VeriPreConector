@@ -35,10 +35,15 @@
         "posicion": 7
     },
     "ubicaciones": {
-        "C:/Users/Op_1111/Desktop/BG_ADS/LOGO_BG.png": {
+        "OUTPUT/ofertas\\OF_ofcanasta_1_OFERTA_VINO_SELECCIONADOS_2x1_20260411_122951_01.png": {
             "fila": 0,
             "columna": 0,
             "posicion": 1
+        },
+        "OUTPUT/ofertas\\OF_ofplu_8_20_EN_VINOS_SELECCIONADOS_20260411_123236_01.png": {
+            "fila": 0,
+            "columna": 1,
+            "posicion": 2
         }
     },
     "sincronizacion_automatica": true

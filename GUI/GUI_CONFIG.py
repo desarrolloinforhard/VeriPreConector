@@ -31,10 +31,12 @@ class GUI_CONFIG:
         self.creacion_frame_notebook_dispositivos()
         self.creacion_frame_notebook_fuente_datos()
         self.creacion_frame_notebook_config_datos()
+        self.creacion_frame_notebook_go_upc()
         
         self.notebook_widget_configuracion.add(self.frame_notebook_dispositivos, text="Dispositivos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_fuente_datos, text="Fuente de Datos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_config_datos, text="Configuración de Datos", padding=10)
+        self.notebook_widget_configuracion.add(self.frame_notebook_go_upc, text="Conexión GO-UPC", padding=10)
         
         self.notebook_widget_configuracion.pack(side="top", expand=True, fill="both")
         
@@ -412,6 +414,99 @@ class GUI_CONFIG:
         self.entry_acciones = ttk.Entry(self.top_level_carga, state="readonly", width=40, font=("Arial", 12))
         self.entry_acciones.pack(pady=10)
         self.mostrar_accion("Iniciando la carga de datos...")
+        
+    #///////////////////////////////////////////////////// NOTEBOOK GO-UPC /////////////////////////////////////////////////////
+
+    def creacion_frame_notebook_go_upc(self):
+        """Pestaña para configurar la API KEY de GO-UPC (guardada en SQLite)."""
+        self.frame_notebook_go_upc = ttk.Frame(self.notebook_widget_configuracion)
+        self.frame_notebook_go_upc.pack(fill="both", expand=True)
+        self.DICT_WIDGETS.register("GUI_CONFIG", "frame_notebook_go_upc", self.frame_notebook_go_upc)
+
+        lab = ttk.Labelframe(self.frame_notebook_go_upc, text="Conexión GO-UPC", bootstyle="primary", padding=15)
+        lab.pack(fill="both", expand=True, padx=10, pady=10)
+
+        ttk.Label(
+            lab,
+            text="API KEY (se guarda localmente en la base de datos):",
+            font=("Arial", 12, "bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.entry_go_upc_api_key = ttk.Entry(lab, show="•")
+        self.entry_go_upc_api_key.pack(fill="x", pady=(0, 10))
+        self.DICT_WIDGETS.register("GUI_CONFIG", "entry_go_upc_api_key", self.entry_go_upc_api_key)
+
+        frame_btn = ttk.Frame(lab)
+        frame_btn.pack(fill="x")
+
+        self.btn_guardar_go_upc = ttk.Button(
+            frame_btn,
+            text="Guardar",
+            bootstyle="success",
+            command=self.command_guardar_go_upc_api_key,
+        )
+        self.btn_guardar_go_upc.pack(side="left")
+
+        self.btn_limpiar_go_upc = ttk.Button(
+            frame_btn,
+            text="Limpiar",
+            bootstyle="secondary",
+            command=lambda: self.entry_go_upc_api_key.delete(0, "end"),
+        )
+        self.btn_limpiar_go_upc.pack(side="left", padx=8)
+
+        self.lbl_estado_go_upc = ttk.Label(lab, text="", bootstyle="secondary")
+        self.lbl_estado_go_upc.pack(anchor="w", pady=(10, 0))
+
+        # Cargar valor guardado (si existe)
+        self._asegurar_tabla_go_upc_api_key()
+        self._cargar_go_upc_api_key()
+
+    def _asegurar_tabla_go_upc_api_key(self):
+        """Crea la tabla api_key si no existe (por las dudas)."""
+        try:
+            sql = """
+            CREATE TABLE IF NOT EXISTS api_key (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                api_key TEXT NOT NULL
+            )
+            """
+            self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consulta(sql)
+        except Exception as e:
+            print(f"[GO-UPC] Error creando tabla api_key: {e}")
+
+    def _cargar_go_upc_api_key(self):
+        """Carga la API KEY desde la DB y la muestra en el Entry (si existe)."""
+        try:
+            rows = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consulta(
+                "SELECT api_key FROM api_key ORDER BY id DESC LIMIT 1"
+            )
+            if rows and rows[0] and rows[0][0]:
+                self.entry_go_upc_api_key.delete(0, "end")
+                self.entry_go_upc_api_key.insert(0, rows[0][0])
+                self.lbl_estado_go_upc.config(text="API KEY cargada desde la base.", bootstyle="success")
+            else:
+                self.lbl_estado_go_upc.config(text="No hay API KEY guardada.", bootstyle="warning")
+        except Exception as e:
+            self.lbl_estado_go_upc.config(text=f"Error leyendo API KEY: {e}", bootstyle="danger")
+
+    def command_guardar_go_upc_api_key(self):
+        """Guarda la API KEY en la DB (deja una sola vigente)."""
+        api_key = self.entry_go_upc_api_key.get().strip()
+        if not api_key:
+            messagebox.showwarning("GO-UPC", "Ingresá la API KEY.")
+            return
+
+        try:
+            db = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA")
+            self._asegurar_tabla_go_upc_api_key()
+            db.ejecutar_consulta("DELETE FROM api_key")
+            db.ejecutar_consulta("INSERT INTO api_key (api_key) VALUES (?)", (api_key,))
+            self.lbl_estado_go_upc.config(text="API KEY guardada correctamente.", bootstyle="success")
+        except Exception as e:
+            self.lbl_estado_go_upc.config(text=f"Error guardando API KEY: {e}", bootstyle="danger")
+            messagebox.showerror("GO-UPC", f"No se pudo guardar la API KEY.\n\n{e}")
+
 
             
 #//////////////////////////////////////////////// COMMAND DE BOTONES ///////////////////////////////////////////////

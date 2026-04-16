@@ -1,15 +1,18 @@
 import pypyodbc
-#import json
-import traceback
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def dsn_configurados():
     try:
-        # Obtener una lista de DSNs
         dsn_list = pypyodbc.dataSources()
+        logger.debug("DSN configurados obtenidos correctamente.")
         return dsn_list
-    except pypyodbc.Error as ex:
-        print("Error al obtener la lista de DSNs:", ex)
+    except pypyodbc.Error:
+        logger.exception("Error al obtener la lista de DSNs.")
+        return {}
+
 
 class ConexionSybase:
     def __init__(self, **kwargs):
@@ -19,64 +22,91 @@ class ConexionSybase:
         self.contrasena = kwargs["password"]
         self.dsn_name = kwargs["dsn"]
 
-    #CONEXION DE LA BASE DE DATOS
+        logger.info(
+            "ConexionSybase inicializada | dsn=%s | user=%s",
+            self.dsn_name,
+            self.usuario
+        )
+
     def conectar(self):
+        """Conexión de la base de datos."""
         try:
+            logger.debug("Intentando conectar a Sybase | dsn=%s", self.dsn_name)
+
             self.conexion = pypyodbc.connect(
                 DSN=self.dsn_name,
                 user=self.usuario,
                 password=self.contrasena,
-                Driver="{Adaptive Server Anywhere 9.0}",                
+                Driver="{Adaptive Server Anywhere 9.0}",
             )
-            self.cursor = self.conexion.cursor()  # Crea el cursor
+            self.cursor = self.conexion.cursor()
+
+            logger.info("Conexión a Sybase establecida correctamente | dsn=%s", self.dsn_name)
             return True
-        except pypyodbc.Error as err:
-            print(f"Error al conectar a Sybase: {err}")
+
+        except pypyodbc.Error:
+            logger.exception("Error al conectar a Sybase | dsn=%s", self.dsn_name)
             return False
-        
-    def ejecutar_consulta(self, sentencia_sql):
+
+    def ejecutar_consulta(self, sentencia_sql, parametros=None):
+        """
+        Ejecuta una consulta SQL en Sybase.
+        Acepta parámetros opcionales para mantener compatibilidad y mejorar seguridad.
+        """
         try:
-            # Intentar conectar si no se ha hecho antes
             if not self.conexion:
+                logger.debug("No había conexión Sybase activa. Se intentará conectar.")
                 self.conectar()
 
-            # Crear un cursor para ejecutar la sentencia SQL
+            if not self.conexion:
+                logger.error("No se pudo ejecutar SQL en Sybase porque no hay conexión activa.")
+                return None
+
+            parametros = parametros or ()
+
+            logger.debug("SQL Sybase: %s", sentencia_sql.strip())
+            if parametros:
+                logger.debug("SQL Sybase params: %s", parametros)
+
             with self.conexion.cursor() as cursor:
-                # Verificación antes de ejecutar la consulta para asegurarse de que la conexión esté activa
                 try:
-                    # Intentar ejecutar una consulta de prueba (como un SELECT vacío)
-                    cursor.execute('SELECT 1')
+                    cursor.execute("SELECT 1")
                 except pypyodbc.Error:
-                    # Si la conexión se ha cerrado, reconectar
+                    logger.warning("Conexión Sybase caída. Reintentando reconexión.")
                     self.conectar()
-                
-                # Ahora ejecutar la consulta principal
-                cursor.execute(sentencia_sql)
-                
-                # Obtener los resultados si la consulta es un SELECT
-                if sentencia_sql.strip().upper().startswith('SELECT'):
+                    cursor = self.conexion.cursor()
+
+                if parametros:
+                    cursor.execute(sentencia_sql, parametros)
+                else:
+                    cursor.execute(sentencia_sql)
+
+                if sentencia_sql.strip().upper().startswith("SELECT"):
                     resultados = cursor.fetchall()
+                    logger.debug("Consulta Sybase ejecutada correctamente | filas=%s", len(resultados))
                     return resultados
                 else:
-                    # Para otros tipos de consultas (INSERT, UPDATE, DELETE)
                     self.conexion.commit()
+                    logger.info("Operación Sybase ejecutada correctamente | tipo=no-select")
                     return "Operación exitosa"
 
-        except pypyodbc.Error as e:
-            error_traceback = traceback.format_exc()
-            print(f"Error al recargar dispositivos: {e}\nTraceback:\n{error_traceback}")
-            print(f"Error al ejecutar la consulta: {e}")
+        except pypyodbc.Error:
+            logger.exception("Error al ejecutar consulta Sybase.")
             return None
-        except Exception as e:
-            print(f"Error inesperado: {e}")
+        except Exception:
+            logger.exception("Error inesperado al ejecutar consulta Sybase.")
             return None
-        
-    # DESCONECTAR DE LA BASE DE DATOS
+
     def desconectar(self):
+        """Desconectar de la base de datos."""
         try:
             if self.conexion and self.conexion.connected:
                 self.conexion.close()
+                logger.info("Conexión Sybase cerrada correctamente.")
             else:
-                print("La conexión ya estaba cerrada.")
-        except pypyodbc.Error as err:
-            print(f"Error al cerrar la conexión: {err}")
+                logger.debug("La conexión Sybase ya estaba cerrada.")
+        except pypyodbc.Error:
+            logger.exception("Error al cerrar la conexión Sybase.")
+        finally:
+            self.conexion = None
+            self.cursor = None

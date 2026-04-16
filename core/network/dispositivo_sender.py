@@ -260,6 +260,7 @@ class DispositivoSender:
         finalizados = {"count": 0}
 
         def enviar(url):
+            
             label, barra = barras_estado[url]
 
             def actualizar(msg):
@@ -271,6 +272,18 @@ class DispositivoSender:
                         ttk.Button(top_estado, text="Cerrar", command=top_estado.destroy).pack(pady=10)
 
             try:
+                # ✅ 0) Mandar API KEY
+                api_key = self.obtener_go_upc_key_guardada()
+                if api_key:
+                    ok_key, msg_key = self.enviar_go_upc_key(url, api_key)
+                    if ok_key:
+                        actualizar(f"✅ {msg_key}")
+                    else:
+                        actualizar(f"⚠ No se pudo enviar API KEY: {msg_key}")
+                else:
+                    actualizar("⚠ No hay API KEY guardada para enviar")
+
+                # ... tu lógica actual de enviar logo ...
                 nombre = "!!!LOGO_PRINCIPAL!!!"
                 formato = os.path.splitext(ruta_imagen_logo)[1][1:].lower()
 
@@ -278,7 +291,7 @@ class DispositivoSender:
                     actualizar(f"❌ Formato no soportado: {formato}")
                     return
 
-                path_api = "/api/veri/ad_medias_images"
+                path_api = "/api/veri/LOGO_PRINCIPAL"
                 url_post = url.split("/api")[0] + path_api
                 json_data = {
                     "nro_posicion": 0,
@@ -309,4 +322,57 @@ class DispositivoSender:
 
         for url in urls:
             threading.Thread(target=enviar, args=(url,), daemon=True).start()
+            
+            
+    def obtener_go_upc_key_guardada(self):
+        """
+        Obtiene la GO-UPC API KEY guardada en la DB local del software (PC).
+        Ajustá el acceso según cómo tengas tu conexión/DAO.
+        Devuelve string o None.
+        """
+        try:
+            # ✅ Si vos ya tenés un objeto DB en self (ej: self.db / self.conexion / etc.)
+            # Reemplazá esta parte por tu método real.
+            # Ejemplo genérico:
+            rows = self.conexion_dba.ejecutar_consulta("SELECT api_key FROM api_key LIMIT 1")
+            if rows and rows[0] and rows[0][0]:
+                return str(rows[0][0]).strip()
+            return None
+        except Exception as e:
+            print(f"[GO-UPC] Error leyendo api_key local: {e}")
+            return None
+
+
+    def enviar_go_upc_key(self, base_url, api_key):
+        """
+        Envía la API KEY al dispositivo (Android) usando el endpoint /api/veri/GO_UPC_KEY
+        """
+        try:
+            if not api_key:
+                print(f"[GO-UPC][WARN] API KEY vacía. No se envía a {base_url}")
+                return False, "API KEY vacía"
+
+            # No mostramos la key completa (solo últimos 4)
+            key_mask = f"{'*' * (len(api_key) - 4)}{api_key[-4:]}" if len(api_key) > 4 else "***"
+
+            host = base_url.split("/api")[0]
+            url_post = host + "/api/veri/GO_UPC_KEY"
+
+            payload = {"api_key": api_key}
+
+            print(f"[GO-UPC][INFO] Enviando API KEY a {url_post} | key={key_mask} | len={len(api_key)}")
+
+            r = requests.post(url_post, json=payload, timeout=5)
+
+            if r.status_code == 200:
+                print(f"[GO-UPC][OK] API KEY enviada correctamente a {host}")
+                return True, "API KEY enviada"
+            else:
+                print(f"[GO-UPC][ERROR] HTTP {r.status_code} al enviar API KEY a {host}")
+                return False, f"HTTP {r.status_code}"
+
+        except Exception as e:
+            print(f"[GO-UPC][EXCEPTION] Error enviando API KEY a {base_url}: {e}")
+            return False, f"Error: {e}"
+
 
