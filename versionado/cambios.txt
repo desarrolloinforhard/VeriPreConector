@@ -1,0 +1,153 @@
+Version 1.16.13
+- El envio de publicidades ahora adapta la lista al dispositivo real seleccionado.
+- Si el dispositivo soporta multi-monitor y no hay pantallas configuradas por grupo, duplica el grupo activo en todas las pantallas detectadas.
+- Si el dispositivo es de una sola pantalla y existen grupos con display configurado, envia solo el grupo activo para evitar mezclas.
+- La confirmacion previa de envio ahora aclara esta regla de fallback por dispositivo.
+
+Version 1.16.12
+- Antes de enviar publicidades ahora se muestra un resumen por pantalla y grupo para confirmar la transmision.
+
+Version 1.16.11
+- El envio de publicidades vuelve a mandar todos los grupos que tengan pantalla asignada en una sola corrida.
+- Si no hay grupos con pantalla configurada, se mantiene el comportamiento de enviar solo el grupo activo.
+
+Version 1.16.10
+- Corregido el icono de bandeja para que el click izquierdo vuelva a abrir la ventana principal.
+- El reingreso desde bandeja ahora se hace con `after(...)` para evitar tocar Tkinter desde el hilo del tray.
+
+Version 1.16.9
+- El envio de publicidades ahora incluye `grupo_id` ademas de `grupo` y `display_index`.
+- La consulta de estado del dispositivo ahora muestra `grupos_activos` cuando el player Android lo informa.
+
+Version 1.16.8
+- Agrandada la ventana principal de Configuracion para acomodar mejor los nuevos controles de dispositivos y player.
+- Ajustado el envio de publicidades para transmitir solo el grupo activo, evitando enviar varios grupos a la vez.
+
+Version 1.16.7
+- Agregada asignacion de pantalla por grupo de publicidades.
+- El envio de publicidades ahora puede incluir `display_index` y `grupo` para players multi-monitor.
+- Si el dispositivo no soporta `/api/veri/configuracion_player`, el envio mantiene compatibilidad legacy de una sola pantalla.
+- Si el player informa una sola pantalla, se omite `display_index` para evitar romper verificadores, totems o APKs anteriores.
+- Cuando hay grupos con pantalla especifica configurada, el envio incluye esos grupos en una misma transmision.
+
+Version 1.16.6
+- Agregado soporte para consultar y guardar configuracion remota del player Android.
+- Nueva accion "Player" en Configuracion > Dispositivos para elegir pantalla/HDMI.
+- Soporte para editar `display_index`, `image_duration_seconds`, `api_key`, `exit_password` y `reload`.
+- Integrado con el endpoint `/api/veri/configuracion_player`.
+
+Version 1.16.5
+- Las publicidades ahora se copian y administran desde una carpeta interna de SmartPrice.
+- Agregada migracion automatica de publicidades antiguas a storage interno.
+- Agregadas herramientas de Validacion, Biblioteca e Historial en el modulo de Publicidades.
+- Se guarda metadata por archivo: estado, tamano, duracion, resolucion, grupos y ultimo envio.
+- El resumen del grupo ahora muestra cantidad de publicidades pendientes de envio.
+- Antes de enviar se validan errores y advertencias de peso y duracion.
+- El envio de publicidades ahora registra historial por dispositivo y actualiza el estado de cada archivo.
+
+Version 1.16.4
+- Agregado checkbox en Configuracion de Datos para enviar videos de publicidades con audio en modo prueba.
+- Cuando el modo esta activo, el JSON de videos incluye `mantener_audio: true` al enviarse a Android.
+- Mejorado el mensaje de progreso para distinguir videos enviados con audio.
+
+Version 1.16.3
+- Aumentado el timeout de envio de videos en publicidades a 900 segundos manteniendo 10 segundos para conectar.
+- El servicio de publicidades ahora expone constantes separadas para timeout de imagen y video.
+- Mejorado el mensaje de progreso y timeout para videos largos.
+
+Version 1.16.2
+- Agregado envio de la URL de API propia de imagenes al verificador mediante POST /api/veri/IMAGES_API_URL.
+- Los envios de productos y logo ahora intentan actualizar en Android la API KEY GO-UPC y la URL de imagenes antes de transmitir.
+- Si el APK aun no soporta el endpoint de URL de imagenes, Python muestra advertencia y continua sin romper el envio.
+
+Version 1.16.1
+- Ajustada la busqueda de imagenes en Python para usar solo SQLite y carpetas locales F:\Sp\IMAGEN / S:\Sp\IMAGEN.
+- La GUI de Productos y la preparacion de envios ya no consultan API propia ni GO-UPC para evitar bloqueos al seleccionar productos.
+- La busqueda remota de imagenes queda reservada para la app Android verificadora al momento de escanear un producto.
+
+Version 1.16.0
+- Agregado resolvedor de imagenes de productos con prioridad SQLite, carpetas locales, API propia y GO-UPC.
+- Las imagenes encontradas fuera de SQLite se guardan en la base local para reutilizarse en proximos envios.
+- Las imagenes obtenidas por GO-UPC se guardan en F:\Sp\IMAGEN o S:\Sp\IMAGEN y se suben a la API propia si esta configurada.
+- Agregado atajo Ctrl+Shift+I en Configuracion > Conexion GO-UPC para configurar la URL base de la API propia de imagenes.
+- Los envios por GUI y por parametro preparan imagenes faltantes antes de transmitir productos.
+
+Version 1.15.1
+- Mejorada la visual de la seccion Publicidad con una cabecera compacta.
+- Las acciones de grupos y publicidades ahora quedan ocultas bajo el boton Opciones.
+- La cabecera muestra resumen del grupo activo, publicidades globales y total a enviar.
+
+Version 1.15.0
+- Agregados grupos de publicidades en la seccion Publicidad.
+- Se migra automaticamente la configuracion anterior de ubicaciones al grupo General.
+- Agregado selector de grupo activo, creacion, renombrado y eliminacion de grupos.
+- Agregada gestion de publicidades globales para enviar contenido comun con cualquier grupo.
+- El envio y la vista completa combinan publicidades globales con el grupo activo sin requerir cambios en Android.
+
+Version 1.14.3
+- Corregido reinicio de la aplicacion compilada con PyInstaller cuando la ruta del exe tiene espacios.
+- El parser de parametros ahora ignora argumentos desconocidos agregados por accesos directos o reinicios defectuosos.
+- El reinicio desde configuracion ya no reenvia sys.argv[0] como argumento adicional en modo exe.
+
+Version 1.14.2
+- Corregido reenvio repetido de novedades automaticas cuando la fecha remota era igual a la fecha local maxima.
+- El vigia automatico ahora dispara sincronizacion solo cuando Sybase tiene una fecha mayor a SQLite.
+- La sincronizacion automatica usa comparacion estricta de fecha para evitar reenviar productos ya procesados.
+- Se guarda la ultima fecha procesada automaticamente en config.json.
+- El vigia cierra las conexiones SQLite/Sybase que abre en cada revision.
+
+Version 1.14.1
+- Corregido envio de datos completos cuando existen productos locales sin codigo o con codigo en blanco.
+- Los listados para transmision ahora excluyen productos con codigo vacio.
+- El servicio de envio omite productos sin codigo antes de enviarlos a Android y muestra advertencia.
+- El payload de productos limpia espacios alrededor del codigo antes de enviarlo.
+
+Version 1.14.0
+- Agregado soporte Python para el nuevo endpoint Android /api/veri/status.
+- El cliente HTTP ahora puede interpretar respuestas JSON nuevas y mantiene compatibilidad con respuestas de texto.
+- Los envios de productos muestran resumen Android cuando el APK devuelve recibidos, insertados, actualizados y errores.
+- La transmision completa consulta el status final del dispositivo y advierte si el conteo de productos no coincide.
+- Los chequeos de dispositivos prefieren /api/veri/status y mantienen fallback al health anterior.
+- Agregado boton Estado en configuracion de dispositivos para consultar productos, publicidades, logo y API key GO-UPC.
+
+Version 1.13.0
+- Agregado checkbox de envio automatico de novedades en Configuracion de Datos.
+- El envio automatico queda habilitado solo si la sincronizacion automatica esta activa.
+- Cuando el vigia detecta cambios, puede sincronizar SQLite y luego enviar novedades a todos los dispositivos online.
+- El envio automatico usa un flujo separado del boton manual y no abre selector de dispositivos.
+- Agregada proteccion para evitar envios automaticos superpuestos.
+
+Version 1.12.2
+- La ventana de progreso del modo por parametro ahora usa ttkbootstrap.
+- Reemplazada la vista de detalle extensa por una sola linea de estado actualizable.
+- Agregado Floodgauge animado para mantener una interfaz mas simple durante el envio.
+
+Version 1.12.1
+- Agregada ventana de progreso para envios ejecutados por parametro.
+- Al finalizar el envio, el proceso queda esperando el boton Aceptar antes de cerrar.
+- Los mensajes del modo headless ahora se pueden mostrar en consola y en la ventana de progreso.
+- Agregado parametro --sin-ventana-progreso para conservar el modo solo consola cuando sea necesario.
+
+Version 1.12.0
+- Agregado modo headless por parametros de ejecucion:
+  - --transmitir-completo
+  - --transmitir-novedades
+- El modo headless no abre la GUI y envia a todos los dispositivos online.
+- Los envios headless reutilizan el servicio de envio existente.
+- La version de la aplicacion ahora se lee desde versionado/version.txt.
+- Agregada carpeta de versionado con historial simple de cambios.
+
+Version 1.11.0
+- Version previa declarada directamente en main.py.
+
+Version 1.16.14
+- Agregada configuracion multipantalla por dispositivo en Publicidades.
+- El envio ahora arma el contenido despues de seleccionar dispositivos y resume por equipo.
+- Si un player tiene varias pantallas y no tiene configuracion guardada, se replica el grupo activo en todas por defecto.
+- El envio de publicidades ahora puede resolver items distintos por URL/dispositivo.
+
+Version 1.16.15
+- La configuracion multipantalla ahora permite varios grupos por dispositivo.
+- Cada grupo puede enviarse a Ambas, Pantalla 1 o Pantalla 2.
+- Se mantiene compatibilidad con configuraciones anteriores y se migran en lectura.
+- En dispositivos de una sola pantalla, los grupos multipantalla se unifican en un solo envio normal.

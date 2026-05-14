@@ -1,6 +1,8 @@
 import base64
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 import os
+import requests
 import threading
 import time
 import ttkbootstrap as ttk
@@ -12,17 +14,34 @@ from ASSETS.path_img import *
 from ttkbootstrap.tableview import Tableview
 from ttkbootstrap.constants import *
 from core.network.dispositivo_sender import DispositivoSender
+from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
+from core.services.dispositivos_envio_service import DispositivosEnvioService
 from ttkbootstrap.widgets import DateEntry
+from core.services.image_resolver import ProductImageResolver
+from core.services.productos_sync_service import ProductosSyncService
+from FUNC.config_json import guardar_config
 
 #from core.network.selector_envio_dispositivos import EnvioDispositivos
 
 
 
 class ContenidoProducto:
+    AUTO_SYNC_INTERVAL_SECONDS = 5
+    TABLE_HEIGHT = 20
+    IMAGE_PANEL_WIDTH = 470
+    IMAGE_PANEL_HEIGHT = 470
+    PREVIEW_IMAGE_SIZE = (450, 450)
+    DETAIL_IMAGE_SIZE = (200, 200)
+
     def __init__(self, DICT_WIDGETS):
         self.DICT_WIDGETS = DICT_WIDGETS
         self.config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
         self._vigia_iniciado = False
+        self._actualizacion_en_curso = False
+        self._ultima_fecha_remota_procesada = self.config.get("ultima_sincronizacion_automatica_productos")
+        self._carga_local_en_curso = False
+        self._productos_cargados = False
+        self._envio_auto_en_curso = False
         self.CONEXIONDBA = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA")
         self.CONEXION_INFORHARD = self.DICT_WIDGETS.get_widget("DATABASE","CONEXION_INFORHARD")
         if self.CONEXION_INFORHARD:
@@ -38,7 +57,7 @@ class ContenidoProducto:
         self.frame_buttons_productos = ttk.Frame(self.frame_producto)
         self.frame_buttons_productos.pack(padx=50, pady=10)
         
-        self.button_crear_datos = ttk.Button(self.frame_buttons_productos, text="Buscar Datos", command=self.command_crear_datos)
+        self.button_crear_datos = ttk.Button(self.frame_buttons_productos, text="Recargar Productos", command=self.command_crear_datos)
         self.button_crear_datos.grid(row=0, column=0, padx=10)
         
         self.button_transmitir_novedades = ttk.Button(self.frame_buttons_productos, text="Transmitir Novedades", command=self.command_transmitir_novedades, state=DISABLED)
@@ -56,11 +75,35 @@ class ContenidoProducto:
 
         
         self.ctk_loader =  self.DICT_WIDGETS.get_widget("VARIABLES_GLOBALES", "ctk_loader")
+
+    def _run_en_ui(self, callback, *args, **kwargs):
+        root = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
+        root.after(0, lambda: callback(*args, **kwargs))
+
+    def _sync_progress(self, mensaje=None, progreso=None, total=None):
+        if mensaje:
+            self._run_en_ui(self.mostrar_accion, mensaje)
+        if progreso is not None and total:
+            self._run_en_ui(self.actualizar_barra, progreso, total)
+
+    def _crear_productos_sync_service(self):
+        return ProductosSyncService(self.CONEXIONDBA, self.CONEXIONDBA_SYBASE)
+
+    def _crear_image_resolver(self, estado_callback=None):
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or self.config
+        return ProductImageResolver(
+            self.CONEXIONDBA,
+            config=config,
+            estado_callback=estado_callback or print,
+            incluir_api_propia=False,
+            incluir_go_upc=False,
+        )
         
         
     def crear_interfaz_table_view(self):
         self.frame_table_view = ttk.Frame(self.frame_producto)
         self.frame_table_view.pack(fill=BOTH, expand=YES, padx=10, pady=10)
+        self.frame_table_view.pack_propagate(False)
         colors = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style.colors
         coldata = [
             {"text": "Producto", "stretch": False},
@@ -77,7 +120,7 @@ class ContenidoProducto:
             pagesize=100,
             searchable=True,
             autoalign=True,
-            height=3,
+            height=self.TABLE_HEIGHT,
             bootstyle=PRIMARY,
             stripecolor=(colors.light, None),
         )
@@ -87,12 +130,17 @@ class ContenidoProducto:
         self.dt.align_column_center(cid=0)
         self.dt.align_column_center(cid=1)
         self.dt.align_column_center(cid=2)
-        self.dt.pack(side="left", fill=BOTH, padx=10, pady=10)
+        self.dt.pack(side="left", fill=BOTH, expand=False, padx=10, pady=10)
         self.dt.view.bind("<<TreeviewSelect>>", self.mostrar_imagen_producto)
         self.dt.view.bind("<Double-1>", self.abrir_detalle_producto)
         
-        self.frame_img_producto = ttk.Frame(self.frame_table_view)
-        self.frame_img_producto.pack(side="right", fill=BOTH, expand=True, padx=10, pady=10)
+        self.frame_img_producto = ttk.Frame(
+            self.frame_table_view,
+            width=self.IMAGE_PANEL_WIDTH,
+            height=self.IMAGE_PANEL_HEIGHT,
+        )
+        self.frame_img_producto.pack(side="right", fill=BOTH, expand=False, padx=10, pady=10)
+        self.frame_img_producto.pack_propagate(False)
         self.label_img_producto = ttk.Label(
             self.frame_img_producto, 
             text="", 
@@ -101,7 +149,24 @@ class ContenidoProducto:
             #bootstyle="inverse-success"
         )
 
-        self.label_img_producto.place(relx=0.5, rely=0.5, relwidth=1, relheight=1, anchor="center")
+        self.label_img_producto.place(relx=0.5, rely=0.5, anchor="center")
+        self._fijar_layout_productos()
+
+    def _fijar_layout_productos(self):
+        self.frame_img_producto.configure(
+            width=self.IMAGE_PANEL_WIDTH,
+            height=self.IMAGE_PANEL_HEIGHT,
+        )
+        self.dt.configure(height=self.TABLE_HEIGHT)
+        try:
+            self.dt.view.column("#0", width=0, minwidth=0, stretch=False)
+            columnas = self.dt.view["columns"]
+            anchos = (260, 150, 110)
+            for columna, ancho in zip(columnas, anchos):
+                self.dt.view.column(columna, width=ancho, minwidth=ancho, stretch=False)
+        except Exception as e:
+            print(f"No se pudo fijar el ancho de columnas: {e}")
+        self.frame_table_view.update_idletasks()
         
         
     def actualizar_barra(self, progreso, total):            
@@ -159,7 +224,7 @@ class ContenidoProducto:
 
         
 #/////////////////////////////////////////// COMMAND_BUTTONS ///////////////////////////////////////////
-    def command_crear_datos(self):
+    def _command_crear_datos_legacy(self):
         self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind("<F5>", lambda event: self.command_actualizar_datos())
         if not self.CONEXION_INFORHARD:
             messagebox.showerror("Error de conexión", "No hay conexión con la base de datos.")
@@ -195,12 +260,88 @@ class ContenidoProducto:
 
         # Activar el vigía solo si está habilitado
         if self.config.get("sincronizacion_automatica", True) and not self._vigia_iniciado:
-            self.iniciar_vigia_actualizacion_productos(intervalo=1)
+            self.iniciar_vigia_actualizacion_productos(intervalo=self.AUTO_SYNC_INTERVAL_SECONDS)
             self._vigia_iniciado = True
 
         self.button_crear_datos.config(
             state="disabled", text="Actualizar Datos", command=self.command_actualizar_datos
         )
+
+    def command_crear_datos(self):
+        self.cargar_productos_locales_con_loader(force=True, mostrar_sin_datos=True)
+
+    def cargar_productos_locales_con_loader(self, force=False, mostrar_sin_datos=False):
+        if self._carga_local_en_curso:
+            return
+        if self._productos_cargados and not force:
+            return
+
+        self._carga_local_en_curso = True
+        self.button_crear_datos.config(state=DISABLED, text="Cargando...")
+        self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind(
+            "<F5>",
+            lambda event: self.command_actualizar_datos(),
+        )
+
+        if self.config.get("sincronizacion_automatica", True) and not self._vigia_iniciado:
+            self.iniciar_vigia_actualizacion_productos(intervalo=self.AUTO_SYNC_INTERVAL_SECONDS)
+            self._vigia_iniciado = True
+
+        try:
+            self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "start")()
+        except Exception as e:
+            print(f"No se pudo iniciar loader de productos: {e}")
+
+        def tarea():
+            try:
+                self.buscar_datos_en_tabla_ARTICULOS()
+
+                def finalizar():
+                    try:
+                        if not self.datos_ARTICULOS:
+                            if mostrar_sin_datos:
+                                messagebox.showwarning("Sin datos", "No se encontraron productos para mostrar.")
+                            return
+
+                        self.datos_PRODUCTOS_COMPLETOS = self.datos_ARTICULOS
+                        self.insertar_datos_en_table_view()
+                        self._productos_cargados = True
+                    finally:
+                        self._carga_local_en_curso = False
+                        self.button_crear_datos.config(
+                            state=NORMAL,
+                            text="Recargar Productos",
+                            command=lambda: self.cargar_productos_locales_con_loader(
+                                force=True,
+                                mostrar_sin_datos=True,
+                            ),
+                        )
+                        try:
+                            self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
+                        except Exception as e:
+                            print(f"No se pudo detener loader de productos: {e}")
+
+                self._run_en_ui(finalizar)
+            except Exception as e:
+                def finalizar_error():
+                    self._carga_local_en_curso = False
+                    self.button_crear_datos.config(
+                        state=NORMAL,
+                        text="Recargar Productos",
+                        command=lambda: self.cargar_productos_locales_con_loader(
+                            force=True,
+                            mostrar_sin_datos=True,
+                        ),
+                    )
+                    try:
+                        self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
+                    except Exception:
+                        pass
+                    messagebox.showerror("Error", f"No se pudieron cargar los productos: {e}")
+
+                self._run_en_ui(finalizar_error)
+
+        threading.Thread(target=tarea, daemon=True).start()
 
     def command_transmitir_datos(self):
         self.buscar_datos_en_tabla_ARTICULOS()
@@ -212,8 +353,39 @@ class ContenidoProducto:
         sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         urls = sender.seleccionar_dispositivos()
         if urls:
-            productos = self.completar_con_imagenes(self.datos_ARTICULOS)
-            sender.enviar_datos(urls, productos, modo="completo")
+            top_preparacion, barra_preparacion, label_preparacion = self._crear_ventana_preparacion_envio(total_registros)
+
+            def actualizar_preparacion(progreso, total, mensaje):
+                def aplicar():
+                    if top_preparacion.winfo_exists():
+                        barra_preparacion.configure(value=progreso, maximum=total)
+                        label_preparacion.configure(text=mensaje)
+                self._run_en_ui(aplicar)
+
+            def preparar_y_enviar():
+                nueva_sqlite = None
+                nueva_sybase = None
+                try:
+                    productos = self.completar_con_imagenes(
+                        self.datos_ARTICULOS,
+                        progress_callback=actualizar_preparacion,
+                    )
+
+                    def finalizar():
+                        if top_preparacion.winfo_exists():
+                            top_preparacion.destroy()
+                        sender.enviar_datos(urls, productos, modo="completo")
+
+                    self._run_en_ui(finalizar)
+                except Exception as e:
+                    def mostrar_error():
+                        if top_preparacion.winfo_exists():
+                            top_preparacion.destroy()
+                        messagebox.showerror("Error", f"No se pudieron preparar los datos completos: {e}")
+
+                    self._run_en_ui(mostrar_error)
+
+            threading.Thread(target=preparar_y_enviar, daemon=True).start()
 
 
         
@@ -222,24 +394,7 @@ class ContenidoProducto:
         urls = sender.seleccionar_dispositivos()
         print(self.productos_modificados)
         if urls:
-            # Inspección para depurar
-            """ print("🧪 Verificando coincidencias entre productos y modificados:")
-            for prod in self.datos_PRODUCTOS_COMPLETOS:
-                print(f"prod[1]={repr(prod[1])}, ¿en modificados?: {prod[1] in self.productos_modificados}")"""
-
-
-            # Buscar todos los productos modificados desde la base local
-            productos_novedades = []
-
-            for codigo in self.productos_modificados:
-                consulta = """
-                SELECT codigo, descripcion, precio, img_base64, formato_imagen
-                FROM productos
-                WHERE codigo = ?
-                """
-                resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, (codigo,))
-                if resultado:
-                    productos_novedades.append(resultado[0])  # solo uno por código
+            productos_novedades = self._obtener_productos_novedades_por_codigos(self.productos_modificados)
 
             print("productos_novedades", productos_novedades)
 
@@ -252,6 +407,161 @@ class ContenidoProducto:
             sender.enviar_datos(urls, productos_novedades, modo="novedades")
 
             self.productos_modificados.clear()
+
+    def _obtener_productos_novedades_por_codigos(self, codigos, conexion=None):
+        conexion = conexion or self.CONEXIONDBA
+        resolver = ProductImageResolver(
+            conexion,
+            config=self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or self.config,
+            estado_callback=print,
+            incluir_api_propia=False,
+            incluir_go_upc=False,
+        )
+        productos_novedades = []
+        vistos = set()
+        consulta = """
+        SELECT codigo, descripcion, precio, img_base64, formato_imagen
+        FROM productos
+        WHERE codigo = ?
+        """
+
+        for codigo in codigos:
+            codigo = str(codigo).strip()
+            if not codigo or codigo in vistos:
+                continue
+            vistos.add(codigo)
+            resultado = conexion.ejecutar_consulta(consulta, (codigo,))
+            if resultado:
+                codigo_prod, descripcion, precio, img_base64, formato = resultado[0]
+                if not img_base64:
+                    img_base64, formato = resolver.resolver(codigo_prod, img_base64, formato)
+                productos_novedades.append((codigo_prod, descripcion, precio, img_base64, formato))
+
+        return productos_novedades
+
+    def _envio_automatico_novedades_habilitado(self):
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or self.config
+        return bool(config.get("sincronizacion_automatica", False)) and bool(
+            config.get("envio_automatico_novedades", False)
+        )
+
+    def _obtener_dispositivos_online_automatico(self, conexion):
+        builder = VeriPreDispositivosURLBuilder(conexion)
+        dispositivos = builder.obtener_urls_api("/api/veri/batch_productos")
+        online = []
+
+        for dispositivo in dispositivos:
+            try:
+                base_url = dispositivo["url"].split("/api")[0]
+                status = requests.get(f"{base_url}{ENDPOINT_STATUS}", timeout=2)
+                if status.status_code == 200:
+                    online.append(dispositivo)
+                    print(f"[auto-envio] Online: {dispositivo['nombre']}")
+                    continue
+            except Exception:
+                pass
+
+            try:
+                base_url = dispositivo["url"].split("/api")[0]
+                respuesta = requests.get(f"{base_url}/", timeout=2)
+                if respuesta.status_code == 200:
+                    online.append(dispositivo)
+                    print(f"[auto-envio] Online: {dispositivo['nombre']}")
+                else:
+                    print(f"[auto-envio] Offline: {dispositivo['nombre']}")
+            except Exception:
+                print(f"[auto-envio] Offline: {dispositivo['nombre']}")
+
+        return online
+
+    def _enviar_novedades_automaticas(self, codigos):
+        if self._envio_auto_en_curso:
+            print("[auto-envio] Ya hay un envio automatico en curso. Se omite esta solicitud.")
+            return
+
+        codigos = [str(codigo) for codigo in codigos if codigo]
+        if not codigos:
+            return
+
+        self._envio_auto_en_curso = True
+        sqlite_thread = None
+        try:
+            from DB.database import SQLiteDB
+
+            sqlite_thread = SQLiteDB(self.CONEXIONDBA.ruta_db)
+            sqlite_thread.crear_tablas()
+
+            productos = self._obtener_productos_novedades_por_codigos(codigos, sqlite_thread)
+            if not productos:
+                self._notificar_sistema(
+                    "Envio automatico",
+                    "Se detectaron novedades, pero no se encontraron productos para enviar.",
+                )
+                return
+
+            dispositivos = self._obtener_dispositivos_online_automatico(sqlite_thread)
+            if not dispositivos:
+                self._notificar_sistema(
+                    "Envio automatico",
+                    "No hay dispositivos online para enviar las novedades.",
+                )
+                return
+
+            self._notificar_sistema(
+                "Envio automatico",
+                f"Enviando {len(productos)} novedades a {len(dispositivos)} dispositivos.",
+            )
+            envio_service = DispositivosEnvioService(sqlite_thread)
+            resultados = {}
+
+            def enviar(dispositivo):
+                def estado(mensaje):
+                    print(f"[auto-envio][{dispositivo['nombre']}] {mensaje}")
+
+                envio_service.enviar_productos(
+                    dispositivo["url"],
+                    productos,
+                    modo="novedades",
+                    estado_callback=estado,
+                )
+
+            max_workers = min(4, len(dispositivos))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(enviar, dispositivo): dispositivo
+                    for dispositivo in dispositivos
+                }
+                for future in as_completed(futures):
+                    dispositivo = futures[future]
+                    try:
+                        future.result()
+                        resultados[dispositivo["nombre"]] = True
+                    except Exception as e:
+                        resultados[dispositivo["nombre"]] = False
+                        print(f"[auto-envio] ERROR {dispositivo['nombre']}: {e}")
+
+            enviados_ok = sum(1 for ok in resultados.values() if ok)
+            enviados_error = len(resultados) - enviados_ok
+            if enviados_error == 0:
+                self.productos_modificados.difference_update(codigos)
+                estado_boton = NORMAL if self.productos_modificados else DISABLED
+                self._run_en_ui(self.button_transmitir_novedades.config, state=estado_boton)
+                self._notificar_sistema(
+                    "Envio automatico",
+                    f"Novedades enviadas correctamente a {enviados_ok} dispositivos.",
+                )
+            else:
+                self._notificar_sistema(
+                    "Envio automatico",
+                    f"Envio finalizado con errores. OK={enviados_ok}, ERROR={enviados_error}.",
+                )
+        except Exception as e:
+            print(f"[auto-envio] Error general: {e}")
+            self._notificar_sistema("Envio automatico", f"No se pudieron enviar novedades: {e}")
+        finally:
+            if sqlite_thread:
+                sqlite_thread.cerrar_conexion()
+            self._envio_auto_en_curso = False
 
     def command_transmitir_por_fecha(self):
         import locale
@@ -290,7 +600,7 @@ class ContenidoProducto:
             f_hasta = f"{f2} 23:59:59"
 
             consulta = """
-            SELECT descripcion, codigo, precio, img_base64, formato_imagen
+            SELECT codigo, descripcion, precio, img_base64, formato_imagen
             FROM productos
             WHERE dFechaU BETWEEN ? AND ?
             """
@@ -312,6 +622,29 @@ class ContenidoProducto:
 
         ttk.Button(top, text="Transmitir", command=confirmar).pack(pady=20)
 
+    def _crear_ventana_preparacion_envio(self, total):
+        top = ttk.Toplevel(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        top.title("Preparando datos completos")
+        top.geometry("420x160")
+        top.place_window_center()
+        top.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        top.grab_set()
+        top.protocol("WM_DELETE_WINDOW", self.bloquear_cierre)
+
+        ttk.Label(
+            top,
+            text="Preparando productos para enviar...",
+            font=("Segoe UI", 11),
+            anchor="center",
+        ).pack(fill="x", pady=(18, 8))
+
+        barra = ttk.Progressbar(top, mode="determinate", maximum=max(total, 1))
+        barra.pack(fill="x", padx=24, pady=8)
+
+        label = ttk.Label(top, text=f"0 de {total}", anchor="center")
+        label.pack(fill="x", pady=(4, 12))
+        return top, barra, label
+
         
     def forzar_dias_en_espanol(self, date_entry):
         dias_es = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do']
@@ -331,50 +664,88 @@ class ContenidoProducto:
 
             
             
-    def command_actualizar_datos(self):
+    def command_actualizar_datos(self, automatico=False):
+        if self._actualizacion_en_curso:
+            print("ActualizaciÃ³n ya en curso. Se omite nueva solicitud.")
+            return
         if not self.CONEXIONDBA_SYBASE:
+            if automatico:
+                return
             messagebox.showerror("Error de conexión", "No hay conexión con la base de datos Sybase.")
             return
         try:
-            self.creacion_toplevel_carga_datos()
-            threading.Thread(target=self.procesar_productos_a_actualizar).start()
+            self._actualizacion_en_curso = True
+            if not automatico:
+                self.creacion_toplevel_carga_datos()
+            def tarea_actualizacion():
+                try:
+                    self.procesar_productos_a_actualizar(automatico=automatico)
+                finally:
+                    self._actualizacion_en_curso = False
+            threading.Thread(
+                target=tarea_actualizacion,
+                daemon=True
+            ).start()
         except Exception as e:
+            self._actualizacion_en_curso = False
             print(e)
 
-    def procesar_productos_a_actualizar(self):
-        self.buscar_datos_en_tabla_ARTICULOS_actualizados()
-        self.buscar_datos_tabla_CODBARP()
-        self.buscar_datos_tabla_IVAS()
-        self.actualizar_precios_con_iva()
-        self.insertar_o_actualizar_productos()
-
-        self.mostrar_accion("Proceso completo.")
-
-        if self.datos_ARTICULOS:
-            pass
-            #messagebox.showinfo("Proceso completo", "Se han insertado los nuevos productos y actualizados los pendientes.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se registraron cambios ha actualizar.")
-
-        self.top_level_carga.destroy()
-
-        # 🔁 🔽 AGREGADO: recargar todos los productos completos
+    def procesar_productos_a_actualizar(self, automatico=False):
+        resultado = self._crear_productos_sync_service().sincronizar_actualizados_hoy(
+            progress_callback=None if automatico else self._sync_progress,
+            incluir_ultima_fecha=not automatico,
+        )
+        self.datos_ARTICULOS = resultado["articulos"]
+        self.datos_PRODUCTOS_COMPLETOS = resultado["productos"]
+        self.productos_modificados.update(resultado["codigos"])
+        if resultado["codigos"]:
+            self._run_en_ui(self.button_transmitir_novedades.config, state=NORMAL)
+            if automatico:
+                self._notificar_sistema(
+                    "Catalogo actualizado",
+                    f"Se actualizaron {len(resultado['codigos'])} productos.",
+                )
+                if self._envio_automatico_novedades_habilitado():
+                    self._enviar_novedades_automaticas(resultado["codigos"])
+                self._registrar_sincronizacion_automatica_procesada(resultado)
+        if not automatico:
+            self._run_en_ui(self.mostrar_accion, "Proceso completo.")
+        if not automatico and not self.datos_ARTICULOS:
+            self._run_en_ui(messagebox.showwarning, "Sin cambios", "No se registraron cambios ha actualizar.")
+        if not automatico and hasattr(self, "top_level_carga") and self.top_level_carga.winfo_exists():
+            self._run_en_ui(self.top_level_carga.destroy)
         self.buscar_datos_en_tabla_ARTICULOS()
-        threading.Thread(target=self.insertar_datos_en_table_view).start()
+        self._run_en_ui(self.insertar_datos_en_table_view)
+        self._run_en_ui(
+            self.button_crear_datos.config,
+            state="disabled",
+            text="Actualizar Datos",
+            command=self.command_actualizar_datos,
+        )
+        self._actualizacion_en_curso = False
 
-        self.button_crear_datos.config(state="disabled", text="Actualizar Datos", command=self.command_actualizar_datos)
+    def _registrar_sincronizacion_automatica_procesada(self, resultado):
+        fechas = [str(producto[4]) for producto in resultado.get("productos", []) if len(producto) > 4 and producto[4]]
+        if not fechas:
+            return
 
-
-
+        fecha_procesada = max(fechas)
+        self._ultima_fecha_remota_procesada = fecha_procesada
+        self.config["ultima_sincronizacion_automatica_productos"] = fecha_procesada
+        try:
+            guardar_config(self.config)
+        except Exception as e:
+            print(f"No se pudo guardar ultima sincronizacion automatica: {e}")
     #/////////////////////////////////////////// DATABASE ///////////////////////////////////////////
     def buscar_datos_en_tabla_ARTICULOS(self):
         """Obtiene los artículos con códigos de barras válidos"""
         CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS = """
-            SELECT * FROM productos ORDER BY descripcion;
+            SELECT * FROM productos
+            WHERE codigo IS NOT NULL AND TRIM(codigo) <> ''
+            ORDER BY descripcion;
         """
         self.datos_ARTICULOS = self.CONEXIONDBA.ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS)
-        print(len(self.datos_ARTICULOS))
-        print(self.datos_ARTICULOS)
+        print(f"Productos locales encontrados: {len(self.datos_ARTICULOS)}")
         self.datos_PRODUCTOS_COMPLETOS = self.datos_ARTICULOS
         
         
@@ -572,6 +943,13 @@ class ContenidoProducto:
         
     def insertar_datos_en_table_view(self):
         try:
+            codigo_seleccionado = None
+            seleccion = self.dt.view.selection()
+            if seleccion:
+                valores = self.dt.view.item(seleccion[0]).get("values", [])
+                if len(valores) > 1:
+                    codigo_seleccionado = str(valores[1])
+
             self.dt.delete_rows()
 
             for producto in self.datos_PRODUCTOS_COMPLETOS:
@@ -581,14 +959,15 @@ class ContenidoProducto:
                 precio_formateado = f"${precio:,.2f}"
                 self.dt.insert_row("end", [descripcion, codigo, precio_formateado])
             self.dt.load_table_data()
-            self.dt.autofit_columns()
-
-            nueva_altura = min(20, len(self.datos_PRODUCTOS_COMPLETOS))
-            self.dt.configure(height=nueva_altura)
-            self.dt.pack_forget()
-            self.dt.pack(side="left", fill=BOTH, padx=10, pady=10)
-            self.dt.update_idletasks()
-            time.sleep(2)
+            self.dt.configure(height=self.TABLE_HEIGHT)
+            self._fijar_layout_productos()
+            if codigo_seleccionado:
+                for item_id in self.dt.view.get_children():
+                    valores = self.dt.view.item(item_id).get("values", [])
+                    if len(valores) > 1 and str(valores[1]) == codigo_seleccionado:
+                        self.dt.view.selection_set(item_id)
+                        self.dt.view.see(item_id)
+                        break
             self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
             self.button_transmitir_datos.config(state=NORMAL)
             self.button_transmitir_datos_fecha.config(state=NORMAL)
@@ -611,42 +990,35 @@ class ContenidoProducto:
         codigo_producto = item["values"][1]  # Obtener el código del producto
 
         try:
-            # Consultar la base de datos para obtener la imagen en Base64 y su formato
-            CONSULTA_SQL_OBTENER_IMG = """
-            SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?
-            """
-            resultado = self.CONEXIONDBA.ejecutar_consulta(CONSULTA_SQL_OBTENER_IMG, (codigo_producto,))
-
-            if resultado and resultado[0]:  # Si hay datos y la imagen no es NULL
-                img_base64, tipo_imagen = resultado[0]  # Extrae la primera fila correctamente
-
-                if img_base64:  # Verificar que img_base64 no sea None
-                    # Decodificar la imagen en Base64
-                    imagen_bytes = base64.b64decode(img_base64)
-
-                    # Convertir los bytes en una imagen PIL
-                    imagen_pil = Image.open(BytesIO(imagen_bytes))
-                    imagen_pil = imagen_pil.resize((450, 450))  # Redimensionar si es necesario
-
-                    # Convertir la imagen PIL a un formato compatible con Tkinter
-                    imagen_tk = ImageTk.PhotoImage(imagen_pil)
-
-                    # Guardar la imagen en la instancia para evitar problemas de referencia
-                    self.label_img_producto.image = imagen_tk
-
-                    # Actualizar el widget con la imagen cargada
-                    self.label_img_producto.config(image=imagen_tk)
-                else:
-                    # Si img_base64 es None, mostrar la imagen por defecto
-                    self.label_img_producto.config(image=self.IMG_NO_FOTO)
-
-            else:
-                # Si no hay imagen en la BD, mostrar la imagen por defecto
+            img_base64, _ = self._obtener_imagen_producto(codigo_producto)
+            if not img_base64:
                 self.label_img_producto.config(image=self.IMG_NO_FOTO)
+                return
+
+            imagen_bytes = base64.b64decode(img_base64)
+            imagen_pil = Image.open(BytesIO(imagen_bytes))
+            imagen_pil = imagen_pil.resize(self.PREVIEW_IMAGE_SIZE)
+            imagen_tk = ImageTk.PhotoImage(imagen_pil)
+            self.label_img_producto.image = imagen_tk
+            self.label_img_producto.config(image=imagen_tk)
 
         except Exception as e:
             print(f"Error al recuperar la imagen desde la base de datos: {e}")
             self.label_img_producto.config(image=self.IMG_NO_FOTO)  # Mostrar imagen por defecto en caso de error
+
+    def _obtener_imagen_producto(self, codigo_producto):
+        consulta = "SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?"
+        resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, (codigo_producto,))
+        img_base64, tipo_imagen = (None, None)
+        if resultado and resultado[0]:
+            img_base64, tipo_imagen = resultado[0]
+        if not img_base64:
+            img_base64, tipo_imagen = self._crear_image_resolver().resolver(
+                codigo_producto,
+                img_base64,
+                tipo_imagen,
+            )
+        return img_base64, tipo_imagen
 
 
             
@@ -672,11 +1044,16 @@ class ContenidoProducto:
         self.top_level_abierto = top  # Guardar referencia al Toplevel
         top.title(f"Detalle del producto {codigo_producto}")
         top.geometry("650x280")
+        top.resizable(False, False)
         top.place_window_center()
 
         # Frame para organizar elementos
-        frame_info = ttk.Frame(top)
+        frame_info = ttk.Frame(top, width=630, height=250)
         frame_info.pack(fill="both", padx=10, pady=10, expand=True)
+        frame_info.pack_propagate(False)
+        frame_info.grid_propagate(False)
+        frame_info.columnconfigure(1, minsize=320)
+        frame_info.columnconfigure(2, minsize=220)
 
         # Función para crear un Entry en modo readonly con un Label
         def crear_entry(frame, texto, valor, fila):
@@ -693,15 +1070,38 @@ class ContenidoProducto:
         entry_precio = crear_entry(frame_info, "Precio:", precio_producto, 2)
 
         # Frame para la imagen
-        frame_img = ttk.Frame(frame_info)
+        frame_img = ttk.Frame(
+            frame_info,
+            width=self.DETAIL_IMAGE_SIZE[0],
+            height=self.DETAIL_IMAGE_SIZE[1],
+        )
         frame_img.grid(row=0, column=2, rowspan=3, padx=10, pady=5, sticky="n")
+        frame_img.grid_propagate(False)
+        frame_img.pack_propagate(False)
 
-        label_img = ttk.Label(frame_img)
-        label_img.pack()
+        label_img = ttk.Label(frame_img, anchor="center")
+        label_img.place(relx=0.5, rely=0.5, anchor="center")
 
         # Función para obtener la imagen desde la base de datos
         def cargar_imagen_desde_db():
             """Obtiene la imagen en Base64 desde la base de datos y la muestra en el label_img."""
+            img_base64, _ = self._obtener_imagen_producto(codigo_producto)
+            if not img_base64:
+                mostrar_imagen_por_defecto()
+                return
+
+            try:
+                imagen_bytes = base64.b64decode(img_base64)
+                imagen_pil = Image.open(BytesIO(imagen_bytes))
+                imagen_pil = imagen_pil.resize(self.DETAIL_IMAGE_SIZE)
+                imagen_tk = ImageTk.PhotoImage(imagen_pil)
+                label_img.config(image=imagen_tk, text="")
+                label_img.image = imagen_tk
+            except Exception as e:
+                print(f"Error al cargar la imagen desde la base de datos: {e}")
+                mostrar_imagen_por_defecto()
+            return
+
             CONSULTA_SQL_OBTENER_IMG = """
             SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?
             """
@@ -717,7 +1117,7 @@ class ContenidoProducto:
 
                         # Convertir los bytes en una imagen PIL
                         imagen_pil = Image.open(BytesIO(imagen_bytes))
-                        imagen_pil = imagen_pil.resize((200, 200))  # Redimensionar a 200x200 píxeles
+                        imagen_pil = imagen_pil.resize(self.DETAIL_IMAGE_SIZE)  # Redimensionar a 200x200 píxeles
 
                         # Convertir la imagen PIL a un formato compatible con Tkinter
                         imagen_tk = ImageTk.PhotoImage(imagen_pil)
@@ -739,7 +1139,7 @@ class ContenidoProducto:
             """Carga una imagen por defecto si no hay imagen en la base de datos."""
             try:
                 img = Image.open(PNG_No_Foto())  # Función que retorna la ruta de la imagen por defecto
-                img = img.resize((200, 200))
+                img = img.resize(self.DETAIL_IMAGE_SIZE)
                 img_tk = ImageTk.PhotoImage(img)
                 label_img.config(image=img_tk, text="")
                 label_img.image = img_tk
@@ -813,7 +1213,18 @@ class ContenidoProducto:
         except Exception as e:
             print(f"Error al guardar en la base de datos: {e}")
 
-    def iniciar_vigia_actualizacion_productos(self, intervalo=60):
+    def _notificar_sistema(self, titulo, mensaje):
+        try:
+            notification.notify(
+                title=titulo,
+                message=mensaje,
+                timeout=5,
+                app_icon=ICON_ico(),
+            )
+        except Exception as e:
+            print(f"No se pudo mostrar notificacion: {e}")
+
+    def iniciar_vigia_actualizacion_productos(self, intervalo=AUTO_SYNC_INTERVAL_SECONDS):
         def vigia():
             print("🟢 Vigía activado (modo automático)")  # Línea fija que queda
 
@@ -856,50 +1267,85 @@ class ContenidoProducto:
                         f_local = datetime.strptime(str(fecha_local), fmt)
                         f_remota = datetime.strptime(str(fecha_remota), fmt)
 
-                        if f_remota > f_local:
+                        fecha_remota_key = str(fecha_remota)
+                        if f_remota > f_local and fecha_remota_key != self._ultima_fecha_remota_procesada:
+                            self._ultima_fecha_remota_procesada = fecha_remota_key
                             print("🟡 Nueva actualización detectada. Ejecutando actualización...")
-                            self.command_actualizar_datos()
-
-                            try:
-                                icono = ICON_ico()
-                                notification.notify(
-                                    title="Actualización automática",
-                                    message="Se detectaron nuevos productos y se actualizó el catálogo.",
-                                    timeout=5,
-                                    app_icon=icono  # ← Agregado
-                                )
-                            except Exception as e:
-                                print(f"⚠️ No se pudo mostrar notificación: {e}")
+                            self._notificar_sistema(
+                                "Actualizacion automatica",
+                                "Se detectaron cambios en productos. Actualizando catalogo...",
+                            )
+                            self._run_en_ui(self.command_actualizar_datos, True)
+                            continue
 
                 except Exception as e:
                     print(f"❌ Vigía error: {e}")
+                finally:
+                    if nueva_sqlite:
+                        try:
+                            nueva_sqlite.cerrar_conexion()
+                        except Exception:
+                            pass
+                    if nueva_sybase:
+                        try:
+                            nueva_sybase.desconectar()
+                        except Exception:
+                            pass
 
                 time.sleep(intervalo)
 
         threading.Thread(target=vigia, daemon=True).start()
 
-    def completar_con_imagenes(self, productos):
+    def completar_con_imagenes(self, productos, progress_callback=None):
         productos_con_imagen = []
+        total = len(productos)
+        omitidos = 0
+        resolver = self._crear_image_resolver()
 
-        for prod in productos:
-            codigo = prod[1]
-            consulta = "SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?"
-            resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, (codigo,))
-            
-            print(resultado)
-
-            if resultado and resultado[0]:
-                img_base64, formato = resultado[0]
+        for idx, prod in enumerate(productos, start=1):
+            if len(prod) >= 6:
+                codigo = prod[1]
+                descripcion = prod[2]
+                precio = prod[3]
+                img_base64 = prod[4]
+                formato = prod[5]
+            elif len(prod) >= 5:
+                codigo = prod[0]
+                descripcion = prod[1]
+                precio = prod[2]
+                img_base64 = prod[3]
+                formato = prod[4]
             else:
-                img_base64, formato = None, None
-                
+                codigo = prod[1]
+                descripcion = prod[2]
+                precio = prod[3]
+                consulta = "SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?"
+                resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, (codigo,))
+                if resultado and resultado[0]:
+                    img_base64, formato = resultado[0]
+                else:
+                    img_base64, formato = None, None
+
+            codigo = str(codigo).strip() if codigo is not None else ""
+            if not codigo:
+                omitidos += 1
+                continue
+
+            if not img_base64:
+                img_base64, formato = resolver.resolver(codigo, img_base64, formato)
 
             productos_con_imagen.append((
-                prod[1],  # Descripción
-                prod[2],  # Código de barras
-                prod[3],  # Precio
+                codigo,
+                descripcion,
+                precio,
                 img_base64,
                 formato
             ))
+
+            if progress_callback and (idx == 1 or idx % 100 == 0 or idx == total):
+                progress_callback(idx, total, f"Preparados {idx} de {total} productos")
+
+        if omitidos and progress_callback:
+            progress_callback(total, total, f"Se omitieron {omitidos} productos sin codigo")
 
         return productos_con_imagen

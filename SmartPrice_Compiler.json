@@ -100,6 +100,10 @@
   {
    "optionDest": "hiddenimports",
    "value": "pystray"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Op_1111/Desktop/Proyectos/VeriPre_Connector/VeriPre_Connector/versionado;versionado/"
   }
  ],
  "nonPyinstallerOptions": {

@@ -1,4 +1,4 @@
-import os
+﻿import os
 import threading
 import json
 import locale
@@ -26,18 +26,18 @@ logger = get_logger(__name__)
 
 
 def comprobar_instancia_unica(puerto=55665):
-    logger.debug("Verificando instancia única de la aplicación | puerto=%s", puerto)
+    logger.debug("Verificando instancia Ãºnica de la aplicaciÃ³n | puerto=%s", puerto)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.bind(("127.0.0.1", puerto))
-        logger.info("Instancia única confirmada. Socket de bloqueo adquirido.")
+        logger.info("Instancia Ãºnica confirmada. Socket de bloqueo adquirido.")
         return sock  # mantiene el socket abierto
     except OSError:
-        logger.warning("Se detectó otra instancia en ejecución | puerto=%s", puerto)
+        logger.warning("Se detectÃ³ otra instancia en ejecuciÃ³n | puerto=%s", puerto)
         messagebox.showinfo(
-            "Aplicación ya en ejecución",
-            "La aplicación ya está abierta.\nRevisá la bandeja del sistema (icono cerca del reloj)."
+            "AplicaciÃ³n ya en ejecuciÃ³n",
+            "La aplicaciÃ³n ya estÃ¡ abierta.\nRevisÃ¡ la bandeja del sistema (icono cerca del reloj)."
         )
         sys.exit(0)
 
@@ -51,7 +51,7 @@ class GUI_MAIN:
         self.VIGIA_FRAME = "INICIO"
         self.VIGIA_VOLVER = [self.VIGIA_FRAME]
 
-        logger.debug("Cargando configuración JSON.")
+        logger.debug("Cargando configuraciÃ³n JSON.")
         self.config_data = cargar_config()
         self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
 
@@ -80,22 +80,22 @@ class GUI_MAIN:
         logger.debug("Inicializando variables globales.")
         self.VARIABLES_GLOBALES()
 
-        logger.debug("Construyendo frame del menú.")
+        logger.debug("Construyendo frame del menÃº.")
         self.frameMenu()
 
         logger.debug("Construyendo frame de contenido.")
         self.frameContenido()
 
-        logger.debug("Creando sección inicio.")
+        logger.debug("Creando secciÃ³n inicio.")
         self.seccion_inicio()
 
-        logger.debug("Creando sección productos.")
+        logger.debug("Creando secciÃ³n productos.")
         self.seccion_productos()
 
-        logger.debug("Creando sección publicidad.")
+        logger.debug("Creando secciÃ³n publicidad.")
         self.seccion_publicidad()
 
-        logger.debug("Seleccionando sección inicial.")
+        logger.debug("Seleccionando secciÃ³n inicial.")
         self.selector_seccion()
 
         logger.debug("Inicializando loader CTk.")
@@ -106,7 +106,7 @@ class GUI_MAIN:
         logger.debug("Creando icono de bandeja.")
         self.crear_icono_bandeja()
 
-        logger.info("Aplicación iniciada correctamente. Entrando en mainloop.")
+        logger.info("AplicaciÃ³n iniciada correctamente. Entrando en mainloop.")
         self.ventana_creacion_caja.mainloop()
 
         logger.debug("Mainloop finalizado. Imprimiendo WidgetRegistry.")
@@ -115,6 +115,13 @@ class GUI_MAIN:
     def ocultar_a_bandeja(self):
         logger.info("Ocultando ventana principal a bandeja del sistema.")
         self.ventana_creacion_caja.withdraw()
+
+    def mostrar_desde_bandeja(self):
+        logger.info("Accion bandeja: mostrar ventana principal.")
+        self.ventana_creacion_caja.deiconify()
+        self.ventana_creacion_caja.lift()
+        self.ventana_creacion_caja.focus_force()
+        self.ventana_creacion_caja.state("zoomed")
 
     def crear_icono_bandeja(self):
         from PIL import Image
@@ -126,17 +133,15 @@ class GUI_MAIN:
             image = Image.open(ruta_icono).resize((64, 64), Image.Resampling.LANCZOS)
 
             def mostrar_ventana(icon, item):
-                logger.info("Acción bandeja: mostrar ventana principal.")
-                self.ventana_creacion_caja.deiconify()
-                self.ventana_creacion_caja.state("zoomed")
+                self.ventana_creacion_caja.after(0, self.mostrar_desde_bandeja)
 
             def salir_app(icon, item):
                 logger.info("Acción bandeja: salir de la aplicación.")
                 icon.stop()
-                self.ventana_creacion_caja.destroy()
+                self.ventana_creacion_caja.after(0, self.ventana_creacion_caja.destroy)
 
             menu = TrayMenu(
-                MenuItem("Mostrar ventana", mostrar_ventana),
+                MenuItem("Mostrar ventana", mostrar_ventana, default=True),
                 MenuItem("Salir", salir_app)
             )
 
@@ -257,17 +262,18 @@ class GUI_MAIN:
         logger.debug("frameContenido construido correctamente.")
 
     def command_button_productos(self):
-        logger.info("Navegación solicitada a sección PRODUCTOS.")
+        logger.info("NavegaciÃ³n solicitada a secciÃ³n PRODUCTOS.")
         self.VIGIA_FRAME = "BOTON_PRODUCTOS"
         self.selector_seccion()
+        self.contenido_productos.cargar_productos_locales_con_loader(force=True, mostrar_sin_datos=True)
 
     def command_button_publicidad(self):
-        logger.info("Navegación solicitada a sección PUBLICIDAD.")
+        logger.info("NavegaciÃ³n solicitada a secciÃ³n PUBLICIDAD.")
         self.VIGIA_FRAME = "BOTON_PUBLICIDAD"
         self.selector_seccion()
 
     def command_button_volver(self):
-        logger.info("Navegación: volver a sección anterior.")
+        logger.info("NavegaciÃ³n: volver a secciÃ³n anterior.")
         try:
             self.VIGIA_VOLVER.pop(-1)
             logger.debug("Historial luego de primer pop: %s", self.VIGIA_VOLVER)
@@ -279,7 +285,7 @@ class GUI_MAIN:
             self.selector_seccion()
 
         except Exception:
-            logger.exception("Error al volver de sección.")
+            logger.exception("Error al volver de secciÃ³n.")
             self.VIGIA_FRAME = "INICIO"
             self.VIGIA_VOLVER = ["INICIO"]
             self.selector_seccion()
@@ -293,7 +299,7 @@ class GUI_MAIN:
 
     def selector_seccion(self):
         logger.debug(
-            "Seleccionando sección | VIGIA_FRAME=%s | historial_actual=%s",
+            "Seleccionando secciÃ³n | VIGIA_FRAME=%s | historial_actual=%s",
             self.VIGIA_FRAME,
             self.VIGIA_VOLVER
         )
@@ -320,10 +326,10 @@ class GUI_MAIN:
         if self.VIGIA_VOLVER[-1] != self.VIGIA_FRAME and self.VIGIA_FRAME not in self.VIGIA_VOLVER:
             self.VIGIA_VOLVER.append(self.VIGIA_FRAME)
 
-        logger.debug("Sección aplicada | historial_resultante=%s", self.VIGIA_VOLVER)
+        logger.debug("SecciÃ³n aplicada | historial_resultante=%s", self.VIGIA_VOLVER)
 
     def seccion_inicio(self):
-        logger.debug("Creando widgets de sección INICIO.")
+        logger.debug("Creando widgets de secciÃ³n INICIO.")
 
         self.frame_seccion_inicio = ttk.Frame(self.frame_contenido, bootstyle="default")
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_inicio", self.frame_seccion_inicio)
@@ -332,7 +338,7 @@ class GUI_MAIN:
         self.label_inicio.pack(pady=20)
 
     def seccion_productos(self):
-        logger.debug("Creando widgets de sección PRODUCTOS.")
+        logger.debug("Creando widgets de secciÃ³n PRODUCTOS.")
 
         self.frame_seccion_productos = ttk.Frame(self.frame_contenido, bootstyle="default")
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_productos", self.frame_seccion_productos)
@@ -341,7 +347,7 @@ class GUI_MAIN:
         logger.debug("ContenidoProducto inicializado correctamente.")
 
     def seccion_publicidad(self):
-        logger.debug("Creando widgets de sección PUBLICIDAD.")
+        logger.debug("Creando widgets de secciÃ³n PUBLICIDAD.")
 
         self.frame_seccion_publicidad = ttk.Frame(self.frame_contenido, bootstyle="default")
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_publicidad", self.frame_seccion_publicidad)
@@ -361,7 +367,7 @@ class GUI_MAIN:
             inserccion_sql = """
             SELECT * FROM VERIPRE_CONEXION
             """
-            logger.debug("Consultando configuración de conexión externa en SQLite.")
+            logger.debug("Consultando configuraciÃ³n de conexiÃ³n externa en SQLite.")
             datos_conexion = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA").ejecutar_consulta(inserccion_sql)
 
             if datos_conexion is not None and len(datos_conexion) > 0:
@@ -373,7 +379,7 @@ class GUI_MAIN:
                 }
 
                 logger.info(
-                    "Configuración externa encontrada | dsn=%s | user=%s",
+                    "ConfiguraciÃ³n externa encontrada | dsn=%s | user=%s",
                     conexion["dsn"],
                     conexion["user"]
                 )
@@ -381,14 +387,14 @@ class GUI_MAIN:
                 self.DICT_WIDGETS.register("DATABASE", "CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
                 self.DICT_WIDGETS.register("DATABASE", "CONEXION_INFORHARD", True)
 
-                logger.info("Conexión externa Sybase registrada correctamente.")
+                logger.info("ConexiÃ³n externa Sybase registrada correctamente.")
             else:
                 self.DICT_WIDGETS.register("DATABASE", "CONEXION_INFORHARD", False)
-                logger.warning("No se encontraron datos de conexión externa en VERIPRE_CONEXION.")
+                logger.warning("No se encontraron datos de conexiÃ³n externa en VERIPRE_CONEXION.")
 
         except Exception:
             self.DICT_WIDGETS.register("DATABASE", "CONEXION_INFORHARD", False)
-            logger.exception("Sin conexión externa o error al configurar ConexionSybase.")
+            logger.exception("Sin conexiÃ³n externa o error al configurar ConexionSybase.")
 
     def VARIABLES_GLOBALES(self):
         logger.debug("Registrando variables globales.")

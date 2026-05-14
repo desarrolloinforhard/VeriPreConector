@@ -1,6 +1,6 @@
-[Setup]
+Ôªø[Setup]
 AppName=SmartPrice
-AppVersion=1.11.2
+AppVersion=1.16.15
 DefaultDirName={pf}\SmartPrice
 DefaultGroupName=SmartPrice
 OutputBaseFilename=Instalador_SmartPrice
@@ -15,13 +15,14 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
-Name: "autostart"; Description: "Iniciar SmartPrice autom·ticamente al iniciar Windows"; GroupDescription: "Inicio autom·tico:"
+Name: "autostart"; Description: "Iniciar SmartPrice autom√°ticamente al iniciar Windows"; GroupDescription: "Inicio autom√°tico:"
 
 
 [Files]
 Source: "C:\Users\Op_1111\output\SmartPrice\SmartPrice.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Op_1111\output\SmartPrice\_internal\*"; DestDir: "{app}\_internal"; Flags: recursesubdirs createallsubdirs ignoreversion
-Source: "C:\Users\Op_1111\output\SmartPrice\vlc-3.0.21-win32.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "C:\Users\Op_1111\output\SmartPrice\_internal\*"; DestDir: "{app}\_internal"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "DB\veripre.db"
+Source: "C:\Users\Op_1111\output\SmartPrice\_internal\DB\veripre.db"; DestDir: "{app}\_internal\DB"; Flags: onlyifdoesntexist ignoreversion
+Source: "C:\Users\Op_1111\Downloads\vlc-3.0.21-win32.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\SmartPrice"; Filename: "{app}\SmartPrice.exe"; WorkingDir: "{app}\_internal"

@@ -1,3 +1,8 @@
+ENDPOINT_PRODUCTOS_BATCH = "/api/veri/batch_productos"
+ENDPOINT_STATUS = "/api/veri/status"
+ENDPOINT_CONFIGURACION_PLAYER = "/api/veri/configuracion_player"
+
+
 class VeriPreDispositivosURLBuilder:
     def __init__(self, conexion_dba):
         self.conexion_dba = conexion_dba
