@@ -42,8 +42,45 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
   - `C:\ProgramData\SmartPrice\config.json`
 - Guardado de config convertido a flujo atomico.
 - Se ajusto el instalador para no pisar la base `veripre.db` en updates.
+- Se actualizo el instalador para reflejar `1.16.17`.
 
 ## Robustez UI
 
 - Corregido problema de `CTkLoader` con escalado/DPI entre usuarios de Windows.
 - Varias ventanas de progreso y estado se movieron hacia un flujo mas seguro con `after(...)`.
+
+## Multiusuario / Permisos / Bandeja
+
+- La instancia unica ya no es global a toda la maquina: ahora se resuelve por usuario Windows.
+- Cada sesion de Windows puede abrir su propia instancia y mantener su propia bandeja.
+- Se agrego modelo de permisos por usuario Windows en `config.json`:
+  - `administrador`: acceso completo
+  - `pantalla`: solo `Publicidad`
+  - `default`: fallback con acceso completo
+- `GUI_MAIN.py` ahora arma menu, seccion inicial y accesos segun permisos efectivos.
+- `GUI_CONFIG.py` ahora incorpora pestaña `Usuarios y Permisos`:
+  - vista de perfiles configurados,
+  - permisos efectivos del usuario actual,
+  - alta de perfiles,
+  - edicion de modulos por perfil.
+- Se agregaron protecciones para:
+  - no dejar perfiles sin ningun modulo,
+  - no quitarse a uno mismo el acceso a `Configuracion` desde la GUI.
+- Se blindaron accesos secundarios:
+  - `Configuracion` valida permiso antes de abrir,
+  - `GUI_CONFIG` rechaza apertura si el usuario no tiene permiso,
+  - `VentanaManager` tolera aperturas denegadas,
+  - `selector_seccion()` hace fallback si se intenta forzar una pantalla restringida.
+- Se documento el proceso de validacion en `INTERNAL_DEV/MULTIUSER_TEST_CHECKLIST.md`.
+
+## Sidebar / Shell visual
+
+- El sidebar principal fue rediseñado hacia una linea visual mas tipo card/soft UI.
+- Se reemplazo el texto/branding viejo por el logo horizontal `INFORHARD_HORIZONTAL.png`.
+- Se ajustaron estados hover/activo con paleta verde alineada a la marca.
+- Se compactaron anchos, paddings y cards del menu para reducir el peso visual de la columna lateral.
+- El tray icon ahora tiene limpieza mas robusta:
+  - cleanup en `atexit`,
+  - cleanup al salir de `mainloop`,
+  - salida controlada desde el menu del tray,
+  - ocultado explicito antes de `stop()` para reducir iconos fantasma en Windows.

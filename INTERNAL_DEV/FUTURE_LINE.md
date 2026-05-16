@@ -10,11 +10,13 @@ Mantener compatibilidad con el sistema actual mientras se reduce el acoplamiento
 - Terminar de blindar configuracion persistente.
 - Seguir sacando logica de negocio de `GUI/`.
 - Mantener logs consistentes y trazabilidad de envios.
+- Cerrar validacion multiusuario real con la checklist interna y estabilizar comportamiento de bandeja por sesion.
 
 ### Etapa 2 - Servicios claros
 - Consolidar `core/services/` como capa real.
 - Introducir DAOs para productos, config, publicidades e historial.
 - Reducir dependencia directa de `WidgetRegistry` en modulos de negocio.
+- Mover la resolucion de permisos por usuario a un servicio/config adapter reutilizable y no dejarla embebida solo en `GUI_MAIN`.
 
 ### Etapa 3 - Publicidades maduras
 - Biblioteca con IDs internos reales.
@@ -31,6 +33,7 @@ Mantener compatibilidad con el sistema actual mientras se reduce el acoplamiento
 - Dividir `CONTENIDO_PRODUCTO.py` y `CONTENIDO_PUBLICIDAD.py`.
 - Minimizar hilos manuales y centralizar workers.
 - Mover mas datos de `config.json` a almacenamiento modelado cuando corresponda.
+- Separar permisos/UI policy de configuracion runtime general para que multiusuario no dependa solo de un JSON transversal.
 
 ## Principios que no se negocian
 

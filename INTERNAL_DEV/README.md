@@ -16,6 +16,7 @@ Archivos principales:
 - `BLOCKING_PROTOCOL.md`: protocolo obligatorio para bloquear archivos y modulos antes de editar.
 - `RECENT_EVOLUTION.md`: resumen de lo agregado y estabilizado hasta `1.16.5`.
 - `FUTURE_LINE.md`: direccion de arquitectura a futuro.
+- `MULTIUSER_TEST_CHECKLIST.md`: checklist operativo para validar escenarios multiusuario, permisos por usuario Windows y bandeja por sesion.
 
 Uso obligatorio:
 1. Leer `BLOCKING_PROTOCOL.md` antes de modificar codigo.

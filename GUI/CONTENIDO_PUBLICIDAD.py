@@ -38,6 +38,10 @@ class ContenidoPublicidad:
     MAX_IMAGE_MB = 15
     MAX_VIDEO_MB = 250
     MAX_VIDEO_SECONDS = 180
+    CARD_BG = "#ffffff"
+    CARD_BORDER = "#dce4ee"
+    PAGE_BG = "#f4f7fb"
+    ACCENT = "#0d6efd"
 
     def __init__(self, widgets):
         logger.info("Inicializando ContenidoPublicidad.")
@@ -66,65 +70,100 @@ class ContenidoPublicidad:
 
         frame_principal = self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad")
         self.contenedor_general = ttk.Frame(frame_principal)
-        self.contenedor_general.pack(fill="both", expand=True)
+        self.contenedor_general.pack(fill="both", expand=True, padx=10, pady=(6, 0))
 
         self.frame_resumen = ttk.Frame(self.contenedor_general)
-        self.frame_resumen.pack(fill="x", padx=10, pady=(0, 6))
+        self.frame_resumen.pack(fill="x", padx=10, pady=(0, 12))
+
+        self.frame_titulos = ttk.Frame(self.frame_resumen)
+        self.frame_titulos.pack(side="left", fill="x", expand=True)
+
+        self.lbl_titulo = ttk.Label(
+            self.frame_titulos,
+            text="Publicidad",
+            font=("Segoe UI", 22, "bold"),
+        )
+        self.lbl_titulo.pack(anchor="w")
 
         self.lbl_resumen_grupo = ttk.Label(
-            self.frame_resumen,
+            self.frame_titulos,
             text="Grupo: General | 0 publicidades",
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 11),
+            bootstyle="secondary",
         )
-        self.lbl_resumen_grupo.pack(side="left")
+        self.lbl_resumen_grupo.pack(anchor="w", pady=(4, 0))
 
         self.btn_opciones = ttk.Button(
             self.frame_resumen,
-            text="Opciones",
+            text="Ocultar opciones",
             command=self.toggle_opciones,
-            bootstyle="secondary",
+            bootstyle="secondary-outline",
         )
-        self.btn_opciones.pack(side="right")
+        self.btn_opciones.pack(side="right", pady=(4, 0))
 
-        self.frame_opciones = ttk.Frame(self.contenedor_general, padding=(10, 8))
+        self.panel_opciones = tk.Frame(
+            self.contenedor_general,
+            bg=self.CARD_BG,
+            highlightthickness=1,
+            highlightbackground=self.CARD_BORDER,
+            bd=0,
+            padx=18,
+            pady=16,
+        )
+        self.panel_opciones.pack(fill="x", padx=10, pady=(0, 14))
+
+        self.frame_opciones = ttk.Frame(self.panel_opciones, padding=(0, 0))
+        self.frame_opciones.pack(fill="x")
 
         self.frame_grupos = ttk.Frame(self.frame_opciones)
         self.frame_grupos.pack(fill="x", pady=(0, 8))
 
-        ttk.Label(self.frame_grupos, text="Grupo:").pack(side="left", padx=(0, 5))
-        self.combo_grupos = ttk.Combobox(self.frame_grupos, state="readonly", width=30)
-        self.combo_grupos.pack(side="left")
+        ttk.Label(self.frame_grupos, text="Grupo:", font=("Segoe UI", 12, "bold")).pack(side="left", padx=(0, 10))
+        self.combo_grupos = ttk.Combobox(self.frame_grupos, state="readonly", width=26)
+        self.combo_grupos.pack(side="left", padx=(0, 14), ipady=4)
         self.combo_grupos.bind("<<ComboboxSelected>>", self.cambiar_grupo_desde_combo)
 
-        ttk.Button(self.frame_grupos, text="Nuevo Grupo", command=self.crear_grupo).pack(side="left", padx=(8, 0))
-        ttk.Button(self.frame_grupos, text="Renombrar", command=self.renombrar_grupo).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_grupos, text="Eliminar Grupo", command=self.eliminar_grupo).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_grupos, text="Publicidades Globales", command=self.abrir_globales).pack(side="left", padx=(12, 0))
-        ttk.Button(self.frame_grupos, text="Multipantalla", command=self.abrir_config_multipantalla).pack(side="left", padx=(5, 0))
+        ttk.Button(self.frame_grupos, text="Nuevo Grupo", command=self.crear_grupo, bootstyle="primary-outline").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_grupos, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_grupos, text="Eliminar Grupo", command=self.eliminar_grupo, bootstyle="danger-outline").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_grupos, text="Publicidades Globales", command=self.abrir_globales, bootstyle="dark-outline").pack(side="left", padx=(6, 8))
+        ttk.Button(self.frame_grupos, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="info-outline").pack(side="left")
 
         self.frame_botones = ttk.Frame(self.frame_opciones)
         self.frame_botones.pack(fill="x")
 
-        ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia).pack(side="left")
-        ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_botones, text="Panel de control", command=self.abrir_panel_de_control).pack(side="left", padx=(5, 0))
-        ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas).pack(side="left", padx=(5, 0))
+        ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia, bootstyle="success").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="primary").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="info").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="dark").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general, bootstyle="dark-outline").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="dark").pack(side="left", padx=(0, 8))
+        ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="warning").pack(side="left")
 
-        self.contenedor = ttk.Frame(self.contenedor_general)
-        self.contenedor.pack(fill="both", expand=True, padx=10, pady=10)
+        self.grid_card = tk.Frame(
+            self.contenedor_general,
+            bg=self.CARD_BG,
+            highlightthickness=1,
+            highlightbackground=self.CARD_BORDER,
+            bd=0,
+            padx=12,
+            pady=12,
+        )
+        self.grid_card.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        self.contenedor = ttk.Frame(self.grid_card)
+        self.contenedor.pack(fill="both", expand=True)
 
         frame_canvas = ScrolledFrame(self.contenedor, autohide=True)
         frame_canvas.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(frame_canvas, bg="white")
+        self.canvas = tk.Canvas(frame_canvas, bg=self.PAGE_BG, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", self.redimensionar_celdas)
         self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
 
+        self._opciones_visibles = True
         frame_principal.after(100, self.inicializar_grupos_publicidad)
 
         logger.debug("Interfaz de ContenidoPublicidad creada correctamente.")
@@ -140,11 +179,11 @@ class ContenidoPublicidad:
 
     def toggle_opciones(self):
         if self._opciones_visibles:
-            self.frame_opciones.pack_forget()
-            self.btn_opciones.configure(text="Opciones")
+            self.panel_opciones.pack_forget()
+            self.btn_opciones.configure(text="Mostrar opciones")
             self._opciones_visibles = False
         else:
-            self.frame_opciones.pack(fill="x", padx=10, pady=(0, 8), after=self.frame_resumen)
+            self.panel_opciones.pack(fill="x", padx=10, pady=(0, 14), after=self.frame_resumen)
             self.btn_opciones.configure(text="Ocultar opciones")
             self._opciones_visibles = True
 
@@ -1097,8 +1136,11 @@ class ContenidoPublicidad:
                 self.canvas,
                 width=self.cell_width,
                 height=CELL_HEIGHT,
-                highlightthickness=3,
-                highlightbackground="#063970"
+                bg=self.CARD_BG,
+                highlightthickness=1,
+                highlightbackground=self.CARD_BORDER,
+                highlightcolor=self.ACCENT,
+                bd=0,
             )
             frame_item.pack_propagate(False)
 
@@ -1107,18 +1149,26 @@ class ContenidoPublicidad:
 
             self.insertar_contenido_multimedia(frame_item, filepath, tipo)
 
-            label_pos = tk.Label(frame_item, text="", font=("Arial", 10, "bold"), bg="white")
-            label_pos.place(x=5, y=5)
+            label_pos = tk.Label(
+                frame_item,
+                text="",
+                font=("Segoe UI", 11, "bold"),
+                bg="#f0f6ff",
+                fg=self.ACCENT,
+                padx=8,
+                pady=3,
+            )
+            label_pos.place(x=8, y=8)
             label_estado = tk.Label(
                 frame_item,
                 text=self._texto_estado_item(filepath),
-                font=("Arial", 8, "bold"),
-                bg="#063970",
+                font=("Segoe UI", 8, "bold"),
+                bg="#1aa053",
                 fg="white",
-                padx=4,
-                pady=1,
+                padx=8,
+                pady=3,
             )
-            label_estado.place(relx=1.0, rely=1.0, anchor="se", x=-5, y=-5)
+            label_estado.place(relx=1.0, rely=0.0, anchor="ne", x=-8, y=8)
 
             frame_item.bind("<ButtonPress-1>", lambda e, i=frame_item: self.start_drag(e, i))
             frame_item.bind("<B1-Motion>", self.do_drag)
@@ -1180,7 +1230,7 @@ class ContenidoPublicidad:
                     img = Image.new("RGB", (self.cell_width, CELL_HEIGHT), color="gray")
 
             img_tk = ImageTk.PhotoImage(img)
-            label = tk.Label(frame, image=img_tk)
+            label = tk.Label(frame, image=img_tk, bg=self.CARD_BG, bd=0, highlightthickness=0)
             label.image = img_tk
             label.pack(expand=True, fill="both")
 

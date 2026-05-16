@@ -151,3 +151,20 @@ Version 1.16.15
 - Cada grupo puede enviarse a Ambas, Pantalla 1 o Pantalla 2.
 - Se mantiene compatibilidad con configuraciones anteriores y se migran en lectura.
 - En dispositivos de una sola pantalla, los grupos multipantalla se unifican en un solo envio normal.
+
+Version 1.16.16
+- La instancia unica ahora se controla por usuario de Windows, evitando bloqueos entre sesiones distintas en la misma PC.
+- Agregados perfiles de permisos por usuario Windows en config.json.
+- Perfil inicial `administrador` con acceso completo.
+- Perfil inicial `pantalla` con acceso solo a Publicidad.
+- El menu lateral y la seccion inicial ahora respetan los permisos del usuario actual.
+- Ajustes visuales del sidebar para compactar ancho, mejorar hover/activo y alinear mejor con el logo de la marca.
+
+Version 1.16.17
+- Agregada pestaña `Usuarios y Permisos` en Configuración.
+- La pestaña muestra usuario Windows actual, permisos efectivos y perfiles configurados.
+- Agregado editor de permisos por perfil desde la GUI.
+- Se pueden crear perfiles nuevos para usuarios Windows desde Configuración.
+- Se agregaron protecciones para no dejar perfiles sin módulos y para no quitarse a uno mismo el acceso a Configuración desde la GUI.
+- Blindados accesos secundarios a Configuración y navegación forzada a módulos restringidos.
+- Documentado checklist de validación multiusuario en `INTERNAL_DEV/MULTIUSER_TEST_CHECKLIST.md`.

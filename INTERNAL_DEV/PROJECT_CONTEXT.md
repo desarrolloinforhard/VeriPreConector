@@ -1,6 +1,6 @@
 # Project Context
 
-Version actual: `1.16.5`
+Version actual: `1.16.17`
 
 ## 1. Objetivo del sistema
 
@@ -28,7 +28,7 @@ Modos:
   - `GUI_MAIN.py`: ventana principal, menu, secciones, tray, bootstrap general.
   - `CONTENIDO_PRODUCTO.py`: tabla/busqueda de productos, detalle, novedades y envio.
   - `CONTENIDO_PUBLICIDAD.py`: grupos, globales, grid multimedia, preview, envio, biblioteca.
-  - `GUI_CONFIG.py`: configuracion Sybase/SQLite/dispositivos/GO-UPC y toggles funcionales.
+  - `GUI_CONFIG.py`: configuracion Sybase/SQLite/dispositivos/GO-UPC, toggles funcionales y permisos por usuario Windows.
 - `DB/`
   - `database.py`: wrapper SQLite.
   - `database_sybase.py`: acceso Sybase.
@@ -70,8 +70,15 @@ Modos:
 
 ### Configuracion
 1. `GUI_CONFIG.py` edita DSN, API key, toggles y opciones de envio.
-2. `FUNC/config_json.py` guarda configuracion persistente.
-3. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
+2. `GUI_CONFIG.py` tambien expone pestaña `Usuarios y Permisos` para ver/editar perfiles por usuario Windows.
+3. `FUNC/config_json.py` guarda configuracion persistente.
+4. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
+
+### Multiusuario
+1. `GUI_MAIN.py` calcula una instancia unica por usuario Windows, no global a toda la maquina.
+2. Cada usuario obtiene su propia instancia, su propia bandeja y sus permisos efectivos.
+3. Los permisos actuales son por nombre de usuario Windows y viven en `config.json -> perfiles_usuario`.
+4. La base SQLite sigue siendo compartida por instalacion, por lo que los usuarios comparten datos aunque no compartan permisos de UI.
 
 ## 5. Contratos vigentes con Android
 
@@ -96,6 +103,8 @@ Mantener compatibilidad con:
 - SQLite usa `check_same_thread=False`; no asumir seguridad total por eso.
 - `CONTENIDO_PRODUCTO.py` y `CONTENIDO_PUBLICIDAD.py` siguen siendo modulos grandes.
 - Envio incremental real de publicidades aun depende de cambios en Android.
+- Multiusuario comparte la misma SQLite: funciona para escenarios controlados, pero puede exponer `database is locked` o demoras si dos sesiones escriben fuerte al mismo tiempo.
+- La seguridad actual es de capa aplicacion/UI; cualquier modulo nuevo debe integrarse explicitamente al sistema de permisos para no abrir bypasses.
 
 ## 7. Decisiones vigentes que no deben romperse
 
@@ -103,3 +112,5 @@ Mantener compatibilidad con:
 - Publicidades se guardan en storage interno para no depender de rutas del usuario.
 - Config compilada debe quedar fuera de `Program Files` para evitar perdida de datos entre usuarios.
 - La app debe poder correr con GUI o headless sin duplicar logica de negocio.
+- El usuario `pantalla` debe poder operar solo `Publicidad` sin acceder a `Productos` ni `Configuracion`.
+- La instancia unica debe ser por usuario Windows para no bloquear sesiones distintas en la misma PC/Windows Server.

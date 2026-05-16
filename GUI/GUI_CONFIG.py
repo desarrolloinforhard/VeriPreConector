@@ -21,6 +21,10 @@ from core.services.productos_sync_service import ProductosSyncService
 class GUI_CONFIG:
     def __init__(self, DICT_WIDGETS):
         self.DICT_WIDGETS = DICT_WIDGETS
+        self.permisos_usuario = self.DICT_WIDGETS.get_widget("CONFIG", "permisos_usuario") or {}
+        if not bool(self.permisos_usuario.get("configuracion", False)):
+            messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Configuración.")
+            raise PermissionError("Usuario sin permiso de configuración")
         self.datos_dispositivos = {}
         self.sqlite_db = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA")
         self.dispositivos_dao = DispositivosDAO(self.sqlite_db)
@@ -41,11 +45,13 @@ class GUI_CONFIG:
         self.creacion_frame_notebook_dispositivos()
         self.creacion_frame_notebook_fuente_datos()
         self.creacion_frame_notebook_config_datos()
+        self.creacion_frame_notebook_usuarios_permisos()
         self.creacion_frame_notebook_go_upc()
         
         self.notebook_widget_configuracion.add(self.frame_notebook_dispositivos, text="Dispositivos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_fuente_datos, text="Fuente de Datos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_config_datos, text="Configuración de Datos", padding=10)
+        self.notebook_widget_configuracion.add(self.frame_notebook_usuarios_permisos, text="Usuarios y Permisos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_go_upc, text="Conexión GO-UPC", padding=10)
         
         self.notebook_widget_configuracion.pack(side="top", expand=True, fill="both")
@@ -454,6 +460,266 @@ class GUI_CONFIG:
             self.label_info_notebook_config_datos.config(
                 text="No se encontrÃ³ ninguna conexiÃ³n a una fuente de datos"
             )
+
+    def creacion_frame_notebook_usuarios_permisos(self):
+        self.frame_notebook_usuarios_permisos = ttk.Frame(self.notebook_widget_configuracion)
+        self.frame_notebook_usuarios_permisos.pack(fill="both", expand=True)
+        self.DICT_WIDGETS.register("GUI_CONFIG", "frame_notebook_usuarios_permisos", self.frame_notebook_usuarios_permisos)
+
+        frame_superior = ttk.Labelframe(
+            self.frame_notebook_usuarios_permisos,
+            text="Usuario actual",
+            bootstyle="primary",
+            padding=12,
+        )
+        frame_superior.pack(fill="x", padx=10, pady=(10, 6))
+
+        self.label_usuario_windows_actual = ttk.Label(
+            frame_superior,
+            text="Usuario Windows: -",
+            font=("Segoe UI", 11, "bold"),
+        )
+        self.label_usuario_windows_actual.pack(anchor="w", pady=(0, 6))
+
+        self.label_permisos_efectivos = ttk.Label(
+            frame_superior,
+            text="Permisos efectivos: -",
+            bootstyle="secondary",
+            font=("Segoe UI", 10),
+        )
+        self.label_permisos_efectivos.pack(anchor="w")
+
+        frame_perfiles = ttk.Labelframe(
+            self.frame_notebook_usuarios_permisos,
+            text="Perfiles configurados",
+            bootstyle="primary",
+            padding=12,
+        )
+        frame_perfiles.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        columnas = ("usuario", "productos", "publicidad", "configuracion")
+        self.tree_perfiles_usuario = ttk.Treeview(
+            frame_perfiles,
+            columns=columnas,
+            show="headings",
+            height=8,
+            bootstyle="primary",
+        )
+        self.tree_perfiles_usuario.heading("usuario", text="Usuario / Perfil")
+        self.tree_perfiles_usuario.heading("productos", text="Productos")
+        self.tree_perfiles_usuario.heading("publicidad", text="Publicidad")
+        self.tree_perfiles_usuario.heading("configuracion", text="Configuración")
+        self.tree_perfiles_usuario.column("usuario", width=220, anchor="w")
+        self.tree_perfiles_usuario.column("productos", width=110, anchor="center")
+        self.tree_perfiles_usuario.column("publicidad", width=110, anchor="center")
+        self.tree_perfiles_usuario.column("configuracion", width=130, anchor="center")
+        self.tree_perfiles_usuario.pack(fill="both", expand=True, side="left")
+
+        scroll_y = ttk.Scrollbar(frame_perfiles, orient="vertical", command=self.tree_perfiles_usuario.yview)
+        scroll_y.pack(side="right", fill="y")
+        self.tree_perfiles_usuario.configure(yscrollcommand=scroll_y.set)
+        self.tree_perfiles_usuario.bind("<<TreeviewSelect>>", self._seleccionar_perfil_desde_tabla)
+
+        frame_editor = ttk.Labelframe(
+            self.frame_notebook_usuarios_permisos,
+            text="Editar perfil",
+            bootstyle="primary",
+            padding=12,
+        )
+        frame_editor.pack(fill="x", padx=10, pady=(0, 10))
+
+        ttk.Label(frame_editor, text="Perfil / usuario Windows:").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        self.perfil_permiso_var = StringVar()
+        self.combobox_perfiles_permiso = ttk.Combobox(
+            frame_editor,
+            textvariable=self.perfil_permiso_var,
+            state="readonly",
+            width=30,
+        )
+        self.combobox_perfiles_permiso.grid(row=0, column=1, sticky="w", pady=(0, 8))
+        self.combobox_perfiles_permiso.bind("<<ComboboxSelected>>", self._seleccionar_perfil_permiso)
+
+        self.perm_productos_var = BooleanVar(value=False)
+        self.perm_publicidad_var = BooleanVar(value=False)
+        self.perm_configuracion_var = BooleanVar(value=False)
+
+        ttk.Checkbutton(frame_editor, text="Productos", variable=self.perm_productos_var).grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(frame_editor, text="Publicidad", variable=self.perm_publicidad_var).grid(row=1, column=1, sticky="w", pady=2)
+        ttk.Checkbutton(frame_editor, text="Configuración", variable=self.perm_configuracion_var).grid(row=1, column=2, sticky="w", pady=2)
+
+        frame_acciones = ttk.Frame(self.frame_notebook_usuarios_permisos)
+        frame_acciones.pack(fill="x", padx=10, pady=(0, 10))
+
+        self.button_refrescar_perfiles = ttk.Button(
+            frame_acciones,
+            text="Refrescar",
+            bootstyle="outline",
+            command=self.refrescar_tab_usuarios_permisos,
+        )
+        self.button_refrescar_perfiles.pack(side="left")
+
+        self.button_nuevo_perfil = ttk.Button(
+            frame_acciones,
+            text="Nuevo perfil",
+            bootstyle="outline",
+            command=self._crear_nuevo_perfil_permiso,
+        )
+        self.button_nuevo_perfil.pack(side="left", padx=(8, 0))
+
+        self.button_guardar_perfil = ttk.Button(
+            frame_acciones,
+            text="Guardar permisos",
+            bootstyle="success",
+            command=self._guardar_perfil_permiso,
+        )
+        self.button_guardar_perfil.pack(side="left", padx=(8, 0))
+
+        self.label_info_permisos = ttk.Label(
+            frame_acciones,
+            text="Los cambios aplican al próximo ingreso del usuario afectado.",
+            bootstyle="secondary",
+        )
+        self.label_info_permisos.pack(side="right")
+
+        self.refrescar_tab_usuarios_permisos()
+
+    def refrescar_tab_usuarios_permisos(self):
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
+        usuario_actual = self.DICT_WIDGETS.get_widget("CONFIG", "usuario_windows") or "-"
+        permisos_actuales = self.DICT_WIDGETS.get_widget("CONFIG", "permisos_usuario") or {}
+        perfiles = config.get("perfiles_usuario", {})
+
+        self.label_usuario_windows_actual.config(text=f"Usuario Windows: {usuario_actual}")
+        self.label_permisos_efectivos.config(
+            text=(
+                "Permisos efectivos: "
+                f"Productos={'Sí' if permisos_actuales.get('productos') else 'No'} | "
+                f"Publicidad={'Sí' if permisos_actuales.get('publicidad') else 'No'} | "
+                f"Configuración={'Sí' if permisos_actuales.get('configuracion') else 'No'}"
+            )
+        )
+
+        for item in self.tree_perfiles_usuario.get_children():
+            self.tree_perfiles_usuario.delete(item)
+
+        for nombre_perfil in sorted(perfiles.keys()):
+            modulos = perfiles.get(nombre_perfil, {}).get("modulos", {})
+            self.tree_perfiles_usuario.insert(
+                "",
+                "end",
+                values=(
+                    nombre_perfil,
+                    "Sí" if modulos.get("productos", True) else "No",
+                    "Sí" if modulos.get("publicidad", True) else "No",
+                    "Sí" if modulos.get("configuracion", True) else "No",
+                ),
+            )
+
+        nombres = sorted(perfiles.keys())
+        self.combobox_perfiles_permiso.configure(values=nombres)
+        perfil_actual = self.perfil_permiso_var.get().strip()
+        if perfil_actual and perfil_actual in nombres:
+            self._cargar_editor_perfil(perfil_actual)
+        elif nombres:
+            self.perfil_permiso_var.set(nombres[0])
+            self._cargar_editor_perfil(nombres[0])
+        else:
+            self.perfil_permiso_var.set("")
+            self.perm_productos_var.set(False)
+            self.perm_publicidad_var.set(False)
+            self.perm_configuracion_var.set(False)
+
+    def _cargar_editor_perfil(self, nombre_perfil):
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
+        perfiles = config.get("perfiles_usuario", {})
+        modulos = perfiles.get(nombre_perfil, {}).get("modulos", {})
+        self.perfil_permiso_var.set(nombre_perfil)
+        self.perm_productos_var.set(bool(modulos.get("productos", True)))
+        self.perm_publicidad_var.set(bool(modulos.get("publicidad", True)))
+        self.perm_configuracion_var.set(bool(modulos.get("configuracion", True)))
+
+    def _seleccionar_perfil_permiso(self, event=None):
+        nombre_perfil = self.perfil_permiso_var.get().strip()
+        if nombre_perfil:
+            self._cargar_editor_perfil(nombre_perfil)
+
+    def _seleccionar_perfil_desde_tabla(self, event=None):
+        seleccion = self.tree_perfiles_usuario.selection()
+        if not seleccion:
+            return
+        valores = self.tree_perfiles_usuario.item(seleccion[0], "values")
+        if valores:
+            self._cargar_editor_perfil(str(valores[0]))
+
+    def _crear_nuevo_perfil_permiso(self):
+        nombre = simpledialog.askstring(
+            "Nuevo perfil",
+            "Nombre del usuario/perfil Windows:",
+            parent=self.top_level_configuracion,
+        )
+        if nombre is None:
+            return
+        nombre = nombre.strip().lower()
+        if not nombre:
+            messagebox.showwarning("Usuarios y Permisos", "Ingresá un nombre válido.")
+            return
+
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
+        perfiles = config.setdefault("perfiles_usuario", {})
+        if nombre in perfiles:
+            messagebox.showinfo("Usuarios y Permisos", f"El perfil '{nombre}' ya existe.")
+            self.refrescar_tab_usuarios_permisos()
+            self._cargar_editor_perfil(nombre)
+            return
+
+        perfiles[nombre] = {
+            "modulos": {
+                "productos": True,
+                "publicidad": True,
+                "configuracion": False,
+            }
+        }
+        guardar_config(config)
+        self.refrescar_tab_usuarios_permisos()
+        self._cargar_editor_perfil(nombre)
+        messagebox.showinfo("Usuarios y Permisos", f"Perfil '{nombre}' creado correctamente.")
+
+    def _guardar_perfil_permiso(self):
+        nombre = self.perfil_permiso_var.get().strip().lower()
+        if not nombre:
+            messagebox.showwarning("Usuarios y Permisos", "Seleccioná un perfil para guardar.")
+            return
+
+        productos = bool(self.perm_productos_var.get())
+        publicidad = bool(self.perm_publicidad_var.get())
+        configuracion = bool(self.perm_configuracion_var.get())
+
+        if not any((productos, publicidad, configuracion)):
+            messagebox.showwarning("Usuarios y Permisos", "El perfil debe tener al menos un módulo habilitado.")
+            return
+
+        usuario_actual = self.DICT_WIDGETS.get_widget("CONFIG", "usuario_windows") or ""
+        if nombre == str(usuario_actual).strip().lower() and not configuracion:
+            messagebox.showwarning(
+                "Usuarios y Permisos",
+                "No podés quitarte a vos mismo el acceso a Configuración desde esta pantalla.",
+            )
+            return
+
+        config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
+        perfiles = config.setdefault("perfiles_usuario", {})
+        perfil = perfiles.setdefault(nombre, {})
+        perfil["modulos"] = {
+            "productos": productos,
+            "publicidad": publicidad,
+            "configuracion": configuracion,
+        }
+        guardar_config(config)
+        self.refrescar_tab_usuarios_permisos()
+        messagebox.showinfo(
+            "Usuarios y Permisos",
+            f"Permisos guardados para '{nombre}'.\nLos cambios aplican al próximo ingreso de ese usuario.",
+        )
             
     def creacion_frame_config_datos_INFORHARD(self):
         self.frame_config_datos_INFORHARD = ttk.Frame(self.frame_notebook_config_datos)
