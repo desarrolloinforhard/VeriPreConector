@@ -80,6 +80,7 @@ def comprobar_instancia_unica(puerto_base=55665):
 class GUI_MAIN:
     def __init__(self, version):
         logger.info("Iniciando GUI_MAIN | version=%s", version)
+        self.version = version
 
         self.socket_lock = comprobar_instancia_unica()
         self.DICT_WIDGETS = WidgetRegistry()
@@ -88,6 +89,12 @@ class GUI_MAIN:
         self.tray_icon = None
         self.tray_thread = None
         self._tray_cleanup_done = False
+        self.contenido_productos = None
+        self.contenido_publicidad = None
+        self._seccion_productos_creada = False
+        self._seccion_publicidad_creada = False
+        self._bootstrap_finalizado = False
+        self._modulo_inicializando = None
 
         logger.debug("Cargando configuraciÃ³n JSON.")
         self.config_data = cargar_config()
@@ -119,12 +126,6 @@ class GUI_MAIN:
 
         self.DICT_WIDGETS.register("GUI_MAIN", "ventana_creacion_caja", self.ventana_creacion_caja)
 
-        logger.debug("Inicializando conexiones de base de datos.")
-        self.CONEXIONES_DBA()
-
-        logger.debug("Inicializando variables globales.")
-        self.VARIABLES_GLOBALES()
-
         logger.debug("Construyendo frame del menÃº.")
         self.frameMenu()
 
@@ -134,24 +135,14 @@ class GUI_MAIN:
         logger.debug("Creando secciÃ³n inicio.")
         self.seccion_inicio()
 
-        logger.debug("Creando secciÃ³n productos.")
-        self.seccion_productos()
-
-        logger.debug("Creando secciÃ³n publicidad.")
-        self.seccion_publicidad()
-
-        self._ajustar_seccion_inicial_por_permisos()
-
-        logger.debug("Seleccionando secciÃ³n inicial.")
-        self.selector_seccion()
-
         logger.debug("Inicializando loader CTk.")
         self.ctk_loader = CTkLoader(self.ventana_creacion_caja, opacity=0.8, width=40, height=40)
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "start", self.ctk_loader.start_loader)
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "stop", self.ctk_loader.stop_loader)
+        self.DICT_WIDGETS.register("CTK_Loader_Frame", "message", self.ctk_loader.set_message)
+        self.mostrar_loader_global("Iniciando SmartPrice...")
+        self.ventana_creacion_caja.after(80, self._iniciar_bootstrap)
 
-        logger.debug("Creando icono de bandeja.")
-        self.crear_icono_bandeja()
         atexit.register(self._cleanup_tray_icon)
 
         logger.info("AplicaciÃ³n iniciada correctamente. Entrando en mainloop.")
@@ -178,6 +169,116 @@ class GUI_MAIN:
         self.sidebar_border = "#e6edf4"
         self.sidebar_brand = "#149455"
         self.sidebar_item_width = 158
+
+    def mostrar_loader_global(self, mensaje="Cargando..."):
+        try:
+            self.ctk_loader.start_loader(mensaje)
+            self.ventana_creacion_caja.update_idletasks()
+        except Exception:
+            logger.exception("No se pudo mostrar el loader global.")
+
+    def actualizar_loader_global(self, mensaje):
+        try:
+            self.ctk_loader.set_message(mensaje)
+            self.ventana_creacion_caja.update_idletasks()
+        except Exception:
+            logger.exception("No se pudo actualizar el texto del loader global.")
+
+    def ocultar_loader_global(self):
+        try:
+            self.ctk_loader.stop_loader()
+        except Exception:
+            logger.exception("No se pudo ocultar el loader global.")
+
+    def _iniciar_bootstrap(self):
+        pasos = [
+            ("Preparando base local...", self.CONEXIONES_DBA),
+            ("Registrando variables globales...", self.VARIABLES_GLOBALES),
+            ("Preparando módulo inicial...", self._preparar_modulo_inicial),
+            ("Aplicando pantalla inicial...", self._bootstrap_seccion_inicial),
+            ("Inicializando bandeja del sistema...", self.crear_icono_bandeja),
+        ]
+        self._ejecutar_pasos_bootstrap(pasos, 0)
+
+    def _ejecutar_pasos_bootstrap(self, pasos, index):
+        if index >= len(pasos):
+            self._bootstrap_finalizado = True
+            self.ocultar_loader_global()
+            logger.info("Bootstrap inicial completado correctamente.")
+            return
+
+        mensaje, accion = pasos[index]
+        logger.debug("Bootstrap paso %s/%s | %s", index + 1, len(pasos), mensaje)
+        self.actualizar_loader_global(mensaje)
+
+        def correr_paso():
+            try:
+                accion()
+            except Exception:
+                logger.exception("Error en bootstrap inicial | paso=%s", mensaje)
+                self.actualizar_loader_global("Ocurrió un error al iniciar la aplicación.")
+                messagebox.showerror(
+                    "Error de inicio",
+                    f"No se pudo completar el inicio de SmartPrice.\n\nPaso: {mensaje}",
+                )
+                self.ocultar_loader_global()
+                return
+            self.ventana_creacion_caja.after(50, lambda: self._ejecutar_pasos_bootstrap(pasos, index + 1))
+
+        self.ventana_creacion_caja.after(20, correr_paso)
+
+    def _bootstrap_seccion_inicial(self):
+        self._ajustar_seccion_inicial_por_permisos()
+        logger.debug("Seleccionando sección inicial.")
+        self.selector_seccion()
+
+    def _preparar_modulo_inicial(self):
+        self._ajustar_seccion_inicial_por_permisos()
+        if self.VIGIA_FRAME == "BOTON_PRODUCTOS":
+            self._asegurar_modulo("productos")
+        elif self.VIGIA_FRAME == "BOTON_PUBLICIDAD":
+            self._asegurar_modulo("publicidad")
+
+    def _asegurar_modulo(self, modulo):
+        if modulo == "productos":
+            if not self._seccion_productos_creada:
+                self.seccion_productos()
+            return self.contenido_productos
+        if modulo == "publicidad":
+            if not self._seccion_publicidad_creada:
+                self.seccion_publicidad()
+            return self.contenido_publicidad
+        return None
+
+    def _abrir_modulo_con_loader(self, modulo, mensaje, callback_despues=None):
+        if self._modulo_inicializando == modulo:
+            return
+
+        self._modulo_inicializando = modulo
+        self.mostrar_loader_global(mensaje)
+
+        def tarea():
+            try:
+                self._asegurar_modulo(modulo)
+                if modulo == "productos":
+                    self.VIGIA_FRAME = "BOTON_PRODUCTOS"
+                elif modulo == "publicidad":
+                    self.VIGIA_FRAME = "BOTON_PUBLICIDAD"
+                self.selector_seccion()
+                if callback_despues:
+                    self._modulo_inicializando = None
+                    self.ocultar_loader_global()
+                    self.ventana_creacion_caja.after(20, callback_despues)
+                    return
+            except Exception:
+                logger.exception("No se pudo abrir el módulo %s.", modulo)
+                messagebox.showerror("Error", f"No se pudo abrir el módulo {modulo}.")
+            finally:
+                if self._modulo_inicializando == modulo:
+                    self._modulo_inicializando = None
+                    self.ocultar_loader_global()
+
+        self.ventana_creacion_caja.after(40, tarea)
 
     def _asegurar_perfiles_usuario_config(self):
         perfiles = self.config_data.setdefault("perfiles_usuario", {})
@@ -218,6 +319,21 @@ class GUI_MAIN:
                 if modulo not in modulos:
                     modulos[modulo] = valor
                     changed = True
+
+        if self.usuario_windows not in perfiles:
+            perfiles[self.usuario_windows] = {
+                "modulos": {
+                    "productos": False,
+                    "publicidad": False,
+                    "configuracion": False,
+                },
+                "estado": "pendiente",
+            }
+            changed = True
+            logger.info(
+                "Usuario Windows nuevo detectado. Se crea perfil pendiente sin accesos | usuario=%s",
+                self.usuario_windows,
+            )
 
         if changed:
             guardar_config(self.config_data)
@@ -624,17 +740,21 @@ class GUI_MAIN:
             messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Productos.")
             return
         logger.info("NavegaciÃ³n solicitada a secciÃ³n PRODUCTOS.")
-        self.VIGIA_FRAME = "BOTON_PRODUCTOS"
-        self.selector_seccion()
-        self.contenido_productos.cargar_productos_locales_con_loader(force=True, mostrar_sin_datos=True)
+        self._abrir_modulo_con_loader(
+            "productos",
+            "Cargando módulo Productos...",
+            callback_despues=lambda: self.contenido_productos.cargar_productos_locales_con_loader(
+                force=True,
+                mostrar_sin_datos=True,
+            ),
+        )
 
     def command_button_publicidad(self):
         if not self._tiene_permiso("publicidad"):
             messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Publicidad.")
             return
         logger.info("NavegaciÃ³n solicitada a secciÃ³n PUBLICIDAD.")
-        self.VIGIA_FRAME = "BOTON_PUBLICIDAD"
-        self.selector_seccion()
+        self._abrir_modulo_con_loader("publicidad", "Cargando módulo Publicidad...")
 
     def command_button_configuracion(self):
         if not self._tiene_permiso("configuracion"):
@@ -673,6 +793,8 @@ class GUI_MAIN:
             self.VIGIA_FRAME,
             self.VIGIA_VOLVER
         )
+        frame_productos = getattr(self, "frame_seccion_productos", None)
+        frame_publicidad = getattr(self, "frame_seccion_publicidad", None)
 
         if self.VIGIA_FRAME == "BOTON_PRODUCTOS" and not self._tiene_permiso("productos"):
             self._ajustar_seccion_inicial_por_permisos()
@@ -682,21 +804,27 @@ class GUI_MAIN:
         if self.VIGIA_FRAME == "INICIO":
             self.VIGIA_VOLVER = ["INICIO"]
             self.frame_seccion_inicio.pack(fill="both", expand=True)
-            self.frame_seccion_productos.pack_forget()
-            self.frame_seccion_publicidad.pack_forget()
+            if frame_productos:
+                frame_productos.pack_forget()
+            if frame_publicidad:
+                frame_publicidad.pack_forget()
             self.frame_barra_superior.pack_forget()
 
         elif self.VIGIA_FRAME == "BOTON_PRODUCTOS":
-            self.frame_seccion_publicidad.pack_forget()
+            if frame_publicidad:
+                frame_publicidad.pack_forget()
             self.frame_seccion_inicio.pack_forget()
             self.frame_barra_superior.pack(fill="x")
-            self.frame_seccion_productos.pack(fill="both", expand=True)
+            if frame_productos:
+                frame_productos.pack(fill="both", expand=True)
 
         elif self.VIGIA_FRAME == "BOTON_PUBLICIDAD":
-            self.frame_seccion_productos.pack_forget()
+            if frame_productos:
+                frame_productos.pack_forget()
             self.frame_seccion_inicio.pack_forget()
             self.frame_barra_superior.pack(fill="x")
-            self.frame_seccion_publicidad.pack(fill="both", expand=True)
+            if frame_publicidad:
+                frame_publicidad.pack(fill="both", expand=True)
 
         if self.VIGIA_VOLVER[-1] != self.VIGIA_FRAME and self.VIGIA_FRAME not in self.VIGIA_VOLVER:
             self.VIGIA_VOLVER.append(self.VIGIA_FRAME)
@@ -734,24 +862,33 @@ class GUI_MAIN:
             bootstyle="secondary",
             font=("Segoe UI", 10),
         ).pack(anchor="w", pady=(6, 0))
+        if not any(self.permisos_usuario.values()):
+            ttk.Label(
+                self.frame_seccion_inicio,
+                text="Acceso pendiente de autorización. Un administrador debe habilitar tus módulos.",
+                bootstyle="warning",
+                font=("Segoe UI", 10, "bold"),
+            ).pack(anchor="w", pady=(10, 0))
 
     def seccion_productos(self):
         logger.debug("Creando widgets de secciÃ³n PRODUCTOS.")
 
-        self.frame_seccion_productos = ttk.Frame(self.frame_contenido)
-        self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_productos", self.frame_seccion_productos)
-
-        self.contenido_productos = ContenidoProducto(self.DICT_WIDGETS)
-        logger.debug("ContenidoProducto inicializado correctamente.")
+        if not self._seccion_productos_creada:
+            self.frame_seccion_productos = ttk.Frame(self.frame_contenido)
+            self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_productos", self.frame_seccion_productos)
+            self.contenido_productos = ContenidoProducto(self.DICT_WIDGETS)
+            self._seccion_productos_creada = True
+            logger.debug("ContenidoProducto inicializado correctamente.")
 
     def seccion_publicidad(self):
         logger.debug("Creando widgets de secciÃ³n PUBLICIDAD.")
 
-        self.frame_seccion_publicidad = ttk.Frame(self.frame_contenido)
-        self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_publicidad", self.frame_seccion_publicidad)
-
-        self.contenido_publicidad = ContenidoPublicidad(self.DICT_WIDGETS)
-        logger.debug("ContenidoPublicidad inicializado correctamente.")
+        if not self._seccion_publicidad_creada:
+            self.frame_seccion_publicidad = ttk.Frame(self.frame_contenido)
+            self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_publicidad", self.frame_seccion_publicidad)
+            self.contenido_publicidad = ContenidoPublicidad(self.DICT_WIDGETS)
+            self._seccion_publicidad_creada = True
+            logger.debug("ContenidoPublicidad inicializado correctamente.")
 
     def CONEXIONES_DBA(self):
         ruta_db = os.path.join(os.path.dirname(__file__), "..", "db", "veripre.db")

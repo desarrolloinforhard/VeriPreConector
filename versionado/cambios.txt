@@ -168,3 +168,18 @@ Version 1.16.17
 - Se agregaron protecciones para no dejar perfiles sin módulos y para no quitarse a uno mismo el acceso a Configuración desde la GUI.
 - Blindados accesos secundarios a Configuración y navegación forzada a módulos restringidos.
 - Documentado checklist de validación multiusuario en `INTERNAL_DEV/MULTIUSER_TEST_CHECKLIST.md`.
+
+Version 1.16.18
+- Agregado loader global con mensaje de estado para el arranque de la aplicacion.
+- El inicio ahora se ejecuta por etapas con after(...), mostrando progreso mientras prepara base, variables globales, modulo inicial y bandeja.
+- Se redujo la carga inicial creando primero solo el modulo necesario segun permisos y seccion inicial.
+- La navegacion hacia Productos y Publicidad ahora reutiliza el loader global al abrir modulos por primera vez.
+
+Version 1.16.19
+- Corregido el CTkLoader para sesiones Windows con escalado/DPI que disparaban el error bad screen distance 200.0.
+- El loader ahora crea sus frames con dimensiones enteras explicitas, evitando fallos en usuarios secundarios como BrandLab.
+
+Version 1.16.20
+- Reemplazado el loader basado en CustomTkinter por un overlay robusto con tk/ttk.
+- Esto evita fallos de DPI/escalado en sesiones Windows secundarias donde aparecia bad screen distance al crear el loader.
+- Se mantiene el mensaje de estado durante el arranque y la apertura inicial de modulos.

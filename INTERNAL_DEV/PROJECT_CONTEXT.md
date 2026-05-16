@@ -105,6 +105,7 @@ Mantener compatibilidad con:
 - Envio incremental real de publicidades aun depende de cambios en Android.
 - Multiusuario comparte la misma SQLite: funciona para escenarios controlados, pero puede exponer `database is locked` o demoras si dos sesiones escriben fuerte al mismo tiempo.
 - La seguridad actual es de capa aplicacion/UI; cualquier modulo nuevo debe integrarse explicitamente al sistema de permisos para no abrir bypasses.
+- `CustomTkinter` mostro fragilidad en loaders/overlays bajo ciertas sesiones Windows Server con distinto escalado; para overlays criticos conviene priorizar `tk/ttk` puro.
 
 ## 7. Decisiones vigentes que no deben romperse
 
@@ -114,3 +115,4 @@ Mantener compatibilidad con:
 - La app debe poder correr con GUI o headless sin duplicar logica de negocio.
 - El usuario `pantalla` debe poder operar solo `Publicidad` sin acceder a `Productos` ni `Configuracion`.
 - La instancia unica debe ser por usuario Windows para no bloquear sesiones distintas en la misma PC/Windows Server.
+- El arranque debe mostrar feedback visible de carga y evitar congelar la primera pantalla; la shell de GUI debe pintar antes del bootstrap pesado.

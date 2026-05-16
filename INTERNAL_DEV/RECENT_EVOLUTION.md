@@ -48,6 +48,10 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 
 - Corregido problema de `CTkLoader` con escalado/DPI entre usuarios de Windows.
 - Varias ventanas de progreso y estado se movieron hacia un flujo mas seguro con `after(...)`.
+- El arranque principal ahora muestra un loader por etapas antes de abrir completamente la pantalla inicial.
+- `GUI_MAIN.py` ya no inicializa todo sincronicamente: primero pinta shell minima y luego bootstrapea base, variables globales, modulo inicial y bandeja.
+- Se abandono el loader basado en `CustomTkinter` para el overlay de arranque; ahora usa `tk/ttk` por robustez entre sesiones Windows con distinto DPI/escalado.
+- La apertura inicial de `Productos` y `Publicidad` ahora puede disparar carga lazy del modulo con loader reutilizable.
 
 ## Multiusuario / Permisos / Bandeja
 

@@ -1,5 +1,6 @@
 ﻿import os
 import sys
+import subprocess
 import threading
 import time
 from tkinter import BooleanVar, StringVar, filedialog, messagebox, simpledialog
@@ -497,7 +498,7 @@ class GUI_CONFIG:
         )
         frame_perfiles.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        columnas = ("usuario", "productos", "publicidad", "configuracion")
+        columnas = ("usuario", "estado", "productos", "publicidad", "configuracion")
         self.tree_perfiles_usuario = ttk.Treeview(
             frame_perfiles,
             columns=columnas,
@@ -506,10 +507,12 @@ class GUI_CONFIG:
             bootstyle="primary",
         )
         self.tree_perfiles_usuario.heading("usuario", text="Usuario / Perfil")
+        self.tree_perfiles_usuario.heading("estado", text="Estado")
         self.tree_perfiles_usuario.heading("productos", text="Productos")
         self.tree_perfiles_usuario.heading("publicidad", text="Publicidad")
         self.tree_perfiles_usuario.heading("configuracion", text="Configuración")
-        self.tree_perfiles_usuario.column("usuario", width=220, anchor="w")
+        self.tree_perfiles_usuario.column("usuario", width=190, anchor="w")
+        self.tree_perfiles_usuario.column("estado", width=140, anchor="center")
         self.tree_perfiles_usuario.column("productos", width=110, anchor="center")
         self.tree_perfiles_usuario.column("publicidad", width=110, anchor="center")
         self.tree_perfiles_usuario.column("configuracion", width=130, anchor="center")
@@ -588,6 +591,8 @@ class GUI_CONFIG:
         usuario_actual = self.DICT_WIDGETS.get_widget("CONFIG", "usuario_windows") or "-"
         permisos_actuales = self.DICT_WIDGETS.get_widget("CONFIG", "permisos_usuario") or {}
         perfiles = config.get("perfiles_usuario", {})
+        usuarios_windows = self._obtener_usuarios_windows_locales()
+        nombres_unificados = sorted(set(perfiles.keys()) | set(usuarios_windows))
 
         self.label_usuario_windows_actual.config(text=f"Usuario Windows: {usuario_actual}")
         self.label_permisos_efectivos.config(
@@ -602,20 +607,39 @@ class GUI_CONFIG:
         for item in self.tree_perfiles_usuario.get_children():
             self.tree_perfiles_usuario.delete(item)
 
-        for nombre_perfil in sorted(perfiles.keys()):
-            modulos = perfiles.get(nombre_perfil, {}).get("modulos", {})
+        for nombre_perfil in nombres_unificados:
+            perfil_data = perfiles.get(nombre_perfil, {})
+            modulos = perfil_data.get("modulos", {})
+            perfil_existe = bool(perfil_data)
+            if not perfil_existe:
+                estado = "Detectado sin perfil"
+            else:
+                estado_guardado = str(perfil_data.get("estado", "") or "").strip().lower()
+                if estado_guardado == "pendiente":
+                    estado = "Pendiente"
+                elif any(
+                    (
+                        bool(modulos.get("productos", False)),
+                        bool(modulos.get("publicidad", False)),
+                        bool(modulos.get("configuracion", False)),
+                    )
+                ):
+                    estado = "Activo"
+                else:
+                    estado = "Pendiente"
             self.tree_perfiles_usuario.insert(
                 "",
                 "end",
                 values=(
                     nombre_perfil,
-                    "Sí" if modulos.get("productos", True) else "No",
-                    "Sí" if modulos.get("publicidad", True) else "No",
-                    "Sí" if modulos.get("configuracion", True) else "No",
+                    estado,
+                    "Sí" if modulos.get("productos", False if not perfil_existe else True) else "No",
+                    "Sí" if modulos.get("publicidad", False if not perfil_existe else True) else "No",
+                    "Sí" if modulos.get("configuracion", False if not perfil_existe else True) else "No",
                 ),
             )
 
-        nombres = sorted(perfiles.keys())
+        nombres = nombres_unificados
         self.combobox_perfiles_permiso.configure(values=nombres)
         perfil_actual = self.perfil_permiso_var.get().strip()
         if perfil_actual and perfil_actual in nombres:
@@ -629,14 +653,56 @@ class GUI_CONFIG:
             self.perm_publicidad_var.set(False)
             self.perm_configuracion_var.set(False)
 
+    def _obtener_usuarios_windows_locales(self):
+        comando = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_UserAccount -Filter \"LocalAccount=True\" | Select-Object -ExpandProperty Name",
+        ]
+        try:
+            resultado = subprocess.run(
+                comando,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            return []
+
+        if resultado.returncode != 0:
+            return []
+
+        ignorar = {
+            "defaultaccount",
+            "guest",
+            "wdagutilityaccount",
+            "defaultuser0",
+        }
+
+        usuarios = []
+        for linea in resultado.stdout.splitlines():
+            nombre = linea.strip()
+            if not nombre:
+                continue
+            nombre_lower = nombre.lower()
+            if nombre_lower in ignorar:
+                continue
+            usuarios.append(nombre_lower)
+
+        return sorted(set(usuarios))
+
     def _cargar_editor_perfil(self, nombre_perfil):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
         perfiles = config.get("perfiles_usuario", {})
-        modulos = perfiles.get(nombre_perfil, {}).get("modulos", {})
+        perfil_data = perfiles.get(nombre_perfil, {})
+        modulos = perfil_data.get("modulos", {})
+        perfil_existe = bool(perfil_data)
         self.perfil_permiso_var.set(nombre_perfil)
-        self.perm_productos_var.set(bool(modulos.get("productos", True)))
-        self.perm_publicidad_var.set(bool(modulos.get("publicidad", True)))
-        self.perm_configuracion_var.set(bool(modulos.get("configuracion", True)))
+        self.perm_productos_var.set(bool(modulos.get("productos", False if not perfil_existe else True)))
+        self.perm_publicidad_var.set(bool(modulos.get("publicidad", False if not perfil_existe else True)))
+        self.perm_configuracion_var.set(bool(modulos.get("configuracion", False if not perfil_existe else True)))
 
     def _seleccionar_perfil_permiso(self, event=None):
         nombre_perfil = self.perfil_permiso_var.get().strip()
@@ -714,6 +780,7 @@ class GUI_CONFIG:
             "publicidad": publicidad,
             "configuracion": configuracion,
         }
+        perfil["estado"] = "activo" if any((productos, publicidad, configuracion)) else "pendiente"
         guardar_config(config)
         self.refrescar_tab_usuarios_permisos()
         messagebox.showinfo(
