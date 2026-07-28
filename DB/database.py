@@ -30,6 +30,7 @@ class SQLiteDB:
             self.conectar()
             self.crear_tabla_VERIPRE_EQUIPOS()
             self.crear_tabla_VERIPRE_productos()
+            self.crear_tabla_VERIPRE_producto_precios()
             self.crear_tabla_VERIPRE_ad_medias()
             self.crear_tabla_VERIPRE_CONEXION()
             self.crear_tabla_API_KEY()
@@ -160,6 +161,28 @@ class SQLiteDB:
             )
         """
         logger.debug("Creando/verificando tabla SQLite: productos")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_producto_precios(self):
+        """Crea la tabla de precios y packs adicionales por producto."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS producto_precios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                CREF TEXT,
+                codigo TEXT NOT NULL,
+                tipo_precio TEXT NOT NULL,
+                categoria TEXT NOT NULL,
+                origen TEXT NOT NULL,
+                orden INTEGER NOT NULL,
+                cantidad INTEGER,
+                titulo TEXT NOT NULL,
+                detalle TEXT,
+                precio REAL NOT NULL,
+                nroprecio TEXT,
+                dFechaU TEXT
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: producto_precios")
         self.ejecutar_consulta(consulta)
 
     def crear_tabla_VERIPRE_EQUIPOS(self):
