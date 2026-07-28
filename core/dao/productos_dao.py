@@ -68,6 +68,20 @@ class ProductosSQLiteDAO:
         """
         return self.db.ejecutar_consulta(sql, (codigo,)) or []
 
+    def listar_precios_adicionales_por_codigos(self, codigos):
+        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
+        if not codigos:
+            return []
+
+        placeholders = ",".join("?" for _ in codigos)
+        sql = f"""
+        SELECT codigo, tipo_precio, categoria, origen, orden, cantidad, titulo, detalle, precio, nroprecio, dFechaU
+        FROM producto_precios
+        WHERE codigo IN ({placeholders})
+        ORDER BY codigo ASC, orden ASC, cantidad ASC, titulo ASC
+        """
+        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
+
     def _insertar_precios_adicionales(self, precios):
         if not precios:
             return True

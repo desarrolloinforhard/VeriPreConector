@@ -4,6 +4,7 @@ import requests
 
 from FUNC.config_json import cargar_config
 from core.network.api_client import DispositivoAPIClient
+from core.dao.productos_dao import ProductosSQLiteDAO
 
 
 class DispositivosEnvioService:
@@ -15,6 +16,7 @@ class DispositivosEnvioService:
     def __init__(self, conexion_dba, batch_size=1000):
         self.conexion_dba = conexion_dba
         self.batch_size = batch_size
+        self.productos_sqlite_dao = ProductosSQLiteDAO(conexion_dba)
 
     def enviar_productos(self, url, datos, modo="completo", estado_callback=None):
         actualizar = estado_callback or (lambda msg: None)
@@ -24,16 +26,21 @@ class DispositivosEnvioService:
         if not datos:
             raise RuntimeError("no hay productos con codigo para enviar")
 
+        precios_adicionales_map = self._cargar_precios_adicionales_map(datos)
+        total_con_packs = sum(1 for precios in precios_adicionales_map.values() if precios)
+
         client = DispositivoAPIClient(url, estado_callback=actualizar)
         self.enviar_config_imagenes(url, actualizar)
         actualizar(f"Enviando ({modo})...")
+        if total_con_packs:
+            actualizar(f"Se adjuntaran precios adicionales en {total_con_packs} productos")
 
         if modo == "novedades":
-            self._enviar_novedades(client, datos, actualizar)
+            self._enviar_novedades(client, datos, actualizar, precios_adicionales_map)
         elif modo == "rango_fecha":
-            self._enviar_rango_fecha(client, datos, actualizar)
+            self._enviar_rango_fecha(client, datos, actualizar, precios_adicionales_map)
         else:
-            self._enviar_completo(client, datos, actualizar)
+            self._enviar_completo(client, datos, actualizar, precios_adicionales_map)
 
         actualizar("FINAL_OK: Enviado correctamente")
 
@@ -332,29 +339,31 @@ class DispositivosEnvioService:
         except Exception as e:
             return False, f"Error: {e}"
 
-    def _enviar_novedades(self, client, datos, actualizar):
+    def _enviar_novedades(self, client, datos, actualizar, precios_adicionales_map=None):
         for art in datos:
             try:
                 actualizar(f"Enviando: {art[0]} - {art[1]}")
-                response = client.enviar_post_json([self._producto_payload(art)])
+                response = client.enviar_post_json([self._producto_payload(art, precios_adicionales_map)])
                 if response is None:
                     raise RuntimeError("sin respuesta OK del dispositivo")
                 self._informar_resumen_productos(client, response, actualizar)
             except Exception as e:
                 raise RuntimeError(f"Error con {art[0]} - {art[1]}: {e}") from e
 
-    def _enviar_rango_fecha(self, client, datos, actualizar):
+    def _enviar_rango_fecha(self, client, datos, actualizar, precios_adicionales_map=None):
         for i in range(0, len(datos), self.batch_size):
             batch = datos[i:i + self.batch_size]
             if batch:
                 actualizar(f"Enviando producto de fecha: {batch[0][0]} - {batch[0][1]}")
-            response = client.enviar_post_json([self._producto_payload(art) for art in batch])
+            response = client.enviar_post_json(
+                [self._producto_payload(art, precios_adicionales_map) for art in batch]
+            )
             if response is None:
                 raise RuntimeError("sin respuesta OK del dispositivo")
             self._informar_resumen_productos(client, response, actualizar)
         actualizar("Rango de fecha enviado correctamente")
 
-    def _enviar_completo(self, client, datos, actualizar):
+    def _enviar_completo(self, client, datos, actualizar, precios_adicionales_map=None):
         response = client.enviar_delete()
         if response is None:
             raise RuntimeError("no se pudo limpiar productos en el dispositivo")
@@ -376,6 +385,7 @@ class DispositivosEnvioService:
             total,
             "sin imagen",
             actualizar,
+            precios_adicionales_map,
         )
         enviados = self._enviar_batches(
             client,
@@ -385,6 +395,7 @@ class DispositivosEnvioService:
             total,
             "con imagen",
             actualizar,
+            precios_adicionales_map,
         )
         self._informar_status_dispositivo(client, esperado_productos=enviados, actualizar=actualizar)
 
@@ -401,7 +412,17 @@ class DispositivosEnvioService:
     def _tiene_imagen(self, producto):
         return len(producto) > 3 and bool(producto[3])
 
-    def _enviar_batches(self, client, productos, batch_size, enviados, total, etiqueta, actualizar):
+    def _enviar_batches(
+        self,
+        client,
+        productos,
+        batch_size,
+        enviados,
+        total,
+        etiqueta,
+        actualizar,
+        precios_adicionales_map=None,
+    ):
         if not productos:
             return enviados
 
@@ -414,7 +435,7 @@ class DispositivosEnvioService:
             )
             timeout = 120 if etiqueta == "con imagen" else 60
             response = client.enviar_post_json(
-                [self._producto_payload(art) for art in batch],
+                [self._producto_payload(art, precios_adicionales_map) for art in batch],
                 timeout=timeout,
             )
             if response is None:
@@ -503,15 +524,44 @@ class DispositivosEnvioService:
 
         return validos, omitidos
 
-    def _producto_payload(self, art):
+    def _cargar_precios_adicionales_map(self, datos):
+        codigos = [str(producto[0]).strip() for producto in datos if producto and producto[0] is not None]
+        filas = self.productos_sqlite_dao.listar_precios_adicionales_por_codigos(codigos)
+        precios_map = {}
+
+        for fila in filas:
+            codigo, tipo_precio, categoria, origen, orden, cantidad, titulo, detalle, precio, nroprecio, dfechau = fila
+            precios_map.setdefault(str(codigo).strip(), []).append(
+                {
+                    "tipo_precio": tipo_precio,
+                    "categoria": categoria,
+                    "origen": origen,
+                    "orden": orden,
+                    "cantidad": cantidad,
+                    "titulo": titulo,
+                    "detalle": detalle,
+                    "precio": format(round(float(precio or 0), 2), ".2f"),
+                    "nroprecio": nroprecio,
+                    "dfechau": dfechau,
+                }
+            )
+
+        return precios_map
+
+    def _producto_payload(self, art, precios_adicionales_map=None):
         codigo = str(art[0]).strip() if art[0] is not None else ""
-        return {
+        payload = {
             "codigo": codigo,
             "descripcion": art[1],
             "precio": art[2],
             "img_base64": art[3],
             "formato_imagen": art[4],
         }
+        precios_adicionales = (precios_adicionales_map or {}).get(codigo) or []
+        if precios_adicionales:
+            payload["precios_adicionales"] = precios_adicionales
+        return payload
+
     def _soporta_multimonitor_publicidades(self, url, actualizar):
         try:
             client = DispositivoAPIClient(url, estado_callback=actualizar)

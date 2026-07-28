@@ -17,6 +17,7 @@ from core.network.dispositivo_sender import DispositivoSender
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
 from core.services.dispositivos_envio_service import DispositivosEnvioService
 from ttkbootstrap.widgets import DateEntry
+from core.dao.productos_dao import ProductosSQLiteDAO
 from core.services.image_resolver import ProductImageResolver
 from core.services.productos_sync_service import ProductosSyncService
 from FUNC.config_json import guardar_config
@@ -89,6 +90,9 @@ class ContenidoProducto:
     def _crear_productos_sync_service(self):
         return ProductosSyncService(self.CONEXIONDBA, self.CONEXIONDBA_SYBASE)
 
+    def _crear_productos_sqlite_dao(self, conexion=None):
+        return ProductosSQLiteDAO(conexion or self.CONEXIONDBA)
+
     def _crear_image_resolver(self, estado_callback=None):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or self.config
         return ProductImageResolver(
@@ -150,6 +154,14 @@ class ContenidoProducto:
         )
 
         self.label_img_producto.place(relx=0.5, rely=0.5, anchor="center")
+        self.label_precios_extra_estado = ttk.Label(
+            self.frame_img_producto,
+            text="Precios adicionales: -",
+            anchor="center",
+            justify="center",
+            font=("Segoe UI", 10, "bold"),
+        )
+        self.label_precios_extra_estado.pack(side="bottom", fill="x", padx=8, pady=(0, 8))
         self._fijar_layout_productos()
 
     def _fijar_layout_productos(self):
@@ -988,6 +1000,7 @@ class ContenidoProducto:
 
         item = self.dt.view.item(seleccion)  # Obtener datos de la fila seleccionada
         codigo_producto = item["values"][1]  # Obtener el código del producto
+        self._actualizar_estado_precios_adicionales(codigo_producto)
 
         try:
             img_base64, _ = self._obtener_imagen_producto(codigo_producto)
@@ -1020,6 +1033,45 @@ class ContenidoProducto:
             )
         return img_base64, tipo_imagen
 
+    def _obtener_precios_adicionales_producto(self, codigo_producto, conexion=None):
+        try:
+            filas = self._crear_productos_sqlite_dao(conexion).listar_precios_adicionales_por_codigo(codigo_producto)
+        except Exception as e:
+            print(f"Error al obtener precios adicionales desde SQLite: {e}")
+            return []
+
+        return [
+            {
+                "codigo": fila[0],
+                "tipo_precio": fila[1],
+                "categoria": fila[2],
+                "origen": fila[3],
+                "orden": fila[4],
+                "cantidad": fila[5],
+                "titulo": fila[6],
+                "detalle": fila[7],
+                "precio": float(fila[8] or 0),
+                "nroprecio": fila[9],
+                "dfechau": fila[10],
+            }
+            for fila in filas
+        ]
+
+    def _actualizar_estado_precios_adicionales(self, codigo_producto):
+        try:
+            precios_adicionales = self._obtener_precios_adicionales_producto(codigo_producto)
+            cantidad = len(precios_adicionales)
+            if cantidad:
+                texto = f"Precios adicionales: SI ({cantidad})"
+                estilo = "success"
+            else:
+                texto = "Precios adicionales: NO"
+                estilo = "secondary"
+            self.label_precios_extra_estado.config(text=texto, bootstyle=estilo)
+        except Exception as e:
+            print(f"Error actualizando estado de precios adicionales: {e}")
+            self.label_precios_extra_estado.config(text="Precios adicionales: error", bootstyle="danger")
+
 
             
     def abrir_detalle_producto(self, event):
@@ -1043,12 +1095,12 @@ class ContenidoProducto:
         top.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         self.top_level_abierto = top  # Guardar referencia al Toplevel
         top.title(f"Detalle del producto {codigo_producto}")
-        top.geometry("650x280")
+        top.geometry("760x470")
         top.resizable(False, False)
         top.place_window_center()
 
         # Frame para organizar elementos
-        frame_info = ttk.Frame(top, width=630, height=250)
+        frame_info = ttk.Frame(top, width=730, height=430)
         frame_info.pack(fill="both", padx=10, pady=10, expand=True)
         frame_info.pack_propagate(False)
         frame_info.grid_propagate(False)
@@ -1150,6 +1202,43 @@ class ContenidoProducto:
         cargar_imagen_desde_db()
 
         # Función para seleccionar y guardar nueva imagen en la BD
+        ttk.Label(
+            frame_info,
+            text="Precios adicionales (SQLite local)",
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=4, column=0, columnspan=3, sticky="w", padx=5, pady=(18, 6))
+
+        frame_precios = ttk.Frame(frame_info)
+        frame_precios.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=5, pady=(0, 8))
+        frame_precios.columnconfigure(0, weight=1)
+
+        columnas = ("titulo", "cantidad", "categoria", "precio")
+        tree_precios = ttk.Treeview(frame_precios, columns=columnas, show="headings", height=6)
+        tree_precios.heading("titulo", text="Titulo")
+        tree_precios.heading("cantidad", text="Cantidad")
+        tree_precios.heading("categoria", text="Categoria")
+        tree_precios.heading("precio", text="Precio")
+        tree_precios.column("titulo", width=310, anchor="w")
+        tree_precios.column("cantidad", width=90, anchor="center")
+        tree_precios.column("categoria", width=120, anchor="center")
+        tree_precios.column("precio", width=120, anchor="e")
+
+        scroll_precios = ttk.Scrollbar(frame_precios, orient="vertical", command=tree_precios.yview)
+        tree_precios.configure(yscrollcommand=scroll_precios.set)
+        tree_precios.grid(row=0, column=0, sticky="nsew")
+        scroll_precios.grid(row=0, column=1, sticky="ns")
+
+        precios_adicionales = self._obtener_precios_adicionales_producto(codigo_producto)
+        if precios_adicionales:
+            for precio_extra in precios_adicionales:
+                titulo = precio_extra.get("titulo") or precio_extra.get("detalle") or precio_extra.get("tipo_precio")
+                cantidad = precio_extra.get("cantidad") or "-"
+                categoria = str(precio_extra.get("categoria") or "-").capitalize()
+                precio_txt = f"${float(precio_extra.get('precio') or 0):,.2f}"
+                tree_precios.insert("", "end", values=(titulo, cantidad, categoria, precio_txt))
+        else:
+            tree_precios.insert("", "end", values=("Sin precios adicionales sincronizados", "-", "-", "-"))
+
         def seleccionar_imagen():
             archivo = filedialog.askopenfilename(
                 title="Seleccionar imagen",
