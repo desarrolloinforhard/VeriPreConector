@@ -5,6 +5,9 @@ path_script = os.path.dirname(os.path.abspath(__file__))
 def ICON():
     return os.path.join(path_script, 'Ico_VeriPre.png')
 
+def ICON_ico():
+    return os.path.join(path_script, 'Ico_VeriPre.ico')
+
 def Logo_info():
     return os.path.join(path_script, 'Logo_cuadrado_W.png')
 
@@ -37,6 +40,14 @@ def PNG_Info():
 
 def PNG_No_Foto():
     return os.path.join(path_script, 'producto_.png')
+
+def PNG_Check():
+    return os.path.join(path_script, 'check.png')
+def PNG_LOGO_PRINCIPAL():
+    return os.path.join(path_script, '!!!LOGO_PRINCIPAL!!!.png')
+
+def PNG_LOGO_SECUNDARIO():
+    return os.path.join(path_script, 'INFORHARD_HORIZONTAL.png')
 
 def READ_IMG(path, widht, height):
     image_logo = Image.open(path)

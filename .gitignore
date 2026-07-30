@@ -3,3 +3,31 @@
 
 # Ignorar carpeta ctk_components
 /FUNC/ctk_components/
+
+# Python
+__pycache__/
+*.pyc
+
+# Entornos
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Output / build
+OUTPUT/
+dist/
+build/*
+!build/
+!build/*.json
+!build/*.txt
+releases/
+
+# Base de datos local
+*.db
+
+# Sistema
+.DS_Store
+Thumbs.db

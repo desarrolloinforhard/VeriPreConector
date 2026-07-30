@@ -1,0 +1,31 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 16, 23, 0),
+    prodvers=(1, 16, 23, 0),
+    mask=0x3F,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          "040904B0",
+          [
+            StringStruct("CompanyName", "Inforhard Servicios S.R.L"),
+            StringStruct("FileDescription", "SmartPrice - VeriPre Connector desktop application"),
+            StringStruct("FileVersion", "1.16.23"),
+            StringStruct("InternalName", "SmartPrice"),
+            StringStruct("OriginalFilename", "SmartPrice.exe"),
+            StringStruct("ProductName", "SmartPrice"),
+            StringStruct("ProductVersion", "1.16.23")
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct("Translation", [1033, 1200])])
+  ]
+)

@@ -7,9 +7,13 @@ class VentanaManager:
         if nombre in cls.ventanas_abiertas and cls.ventanas_abiertas[nombre].winfo_exists():
             cls.ventanas_abiertas[nombre].focus_set()
         else:
-            ventana = constructor(*args, **kwargs)  # Aquí se instancia la clase correctamente
+            try:
+                ventana = constructor(*args, **kwargs)  # Aquí se instancia la clase correctamente
+            except PermissionError:
+                return None
             cls.ventanas_abiertas[nombre] = ventana.top_level_configuracion  # Guarda la referencia de la ventana
             ventana.top_level_configuracion.protocol("WM_DELETE_WINDOW", lambda: cls.cerrar_ventana(nombre))
+            return ventana
 
 
     @classmethod

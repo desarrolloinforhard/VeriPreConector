@@ -1,0 +1,50 @@
+{
+    "C:/Users/Op_1111/Desktop/BG_ADS/LOGO_BG.png": {
+        "fila": 0,
+        "columna": 0,
+        "posicion": 1
+    },
+    "C:/Users/Op_1111/Desktop/BG_ADS/ad1.mp4": {
+        "fila": 0,
+        "columna": 1,
+        "posicion": 2
+    },
+    "C:/Users/Op_1111/Desktop/BG_ADS/ad2.jpg": {
+        "fila": 0,
+        "columna": 2,
+        "posicion": 3
+    },
+    "C:/Users/Op_1111/Desktop/BG_ADS/ad7.jpg": {
+        "fila": 0,
+        "columna": 3,
+        "posicion": 4
+    },
+    "C:/Users/Op_1111/Desktop/BG_ADS/ad8.jpg": {
+        "fila": 1,
+        "columna": 0,
+        "posicion": 5
+    },
+    "C:/Users/Op_1111/Desktop/BG_ADS/ad12.jpg": {
+        "fila": 1,
+        "columna": 1,
+        "posicion": 6
+    },
+    "C:/Users/Op_1111/Desktop/BG_ADS/ad18.mp4": {
+        "fila": 1,
+        "columna": 2,
+        "posicion": 7
+    },
+    "ubicaciones": {
+        "OUTPUT/ofertas\\OF_ofcanasta_1_OFERTA_VINO_SELECCIONADOS_2x1_20260411_122951_01.png": {
+            "fila": 0,
+            "columna": 0,
+            "posicion": 1
+        },
+        "OUTPUT/ofertas\\OF_ofplu_8_20_EN_VINOS_SELECCIONADOS_20260411_123236_01.png": {
+            "fila": 0,
+            "columna": 1,
+            "posicion": 2
+        }
+    },
+    "sincronizacion_automatica": true
+}
