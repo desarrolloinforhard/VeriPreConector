@@ -1,6 +1,6 @@
 [Setup]
 AppName=SmartPrice
-AppVersion=1.16.20
+AppVersion=1.16.22
 DefaultDirName={pf}\SmartPrice
 DefaultGroupName=SmartPrice
 OutputBaseFilename=Instalador_SmartPrice
@@ -20,6 +20,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
 Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
 Name: "autostart"; Description: "Iniciar SmartPrice automáticamente al iniciar Windows"; GroupDescription: "Inicio automático:"
 
+[Dirs]
+Name: "{commonappdata}\SmartPrice"; Permissions: users-modify
 
 [Files]
 Source: "C:\Users\Op_1111\output\SmartPrice\SmartPrice.exe"; DestDir: "{app}"; Flags: ignoreversion
