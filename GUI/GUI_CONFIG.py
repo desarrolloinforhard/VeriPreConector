@@ -16,12 +16,14 @@ from FUNC.config_json import guardar_config
 from core.dao.api_key_dao import ApiKeyDAO
 from core.dao.conexion_dao import ConexionDAO
 from core.dao.dispositivos_dao import DispositivosDAO
+from core.services.device_discovery_service import DeviceDiscoveryService
 from core.services.productos_sync_service import ProductosSyncService
 
 
 class GUI_CONFIG:
     def __init__(self, DICT_WIDGETS):
         self.DICT_WIDGETS = DICT_WIDGETS
+        self.DICT_WIDGETS.register("GUI_CONFIG", "instance", self)
         self.permisos_usuario = self.DICT_WIDGETS.get_widget("CONFIG", "permisos_usuario") or {}
         if not bool(self.permisos_usuario.get("configuracion", False)):
             messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Configuración.")
@@ -40,6 +42,11 @@ class GUI_CONFIG:
         self.top_level_configuracion.geometry("1120x760")
         self.top_level_configuracion.minsize(1020, 680)
         self.top_level_configuracion.place_window_center()
+        self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind(
+            "<<DispositivosActualizados>>",
+            self._refrescar_dispositivos_desde_evento,
+            add="+",
+        )
         
         self.notebook_widget_configuracion = ttk.Notebook(self.top_level_configuracion, bootstyle="primary")
         self.DICT_WIDGETS.register("GUI_CONFIG","notebook_widget_configuracion", self.notebook_widget_configuracion)
@@ -56,6 +63,21 @@ class GUI_CONFIG:
         self.notebook_widget_configuracion.add(self.frame_notebook_go_upc, text="Conexión GO-UPC", padding=10)
         
         self.notebook_widget_configuracion.pack(side="top", expand=True, fill="both")
+
+    def _refrescar_dispositivos_desde_evento(self, _event=None):
+        try:
+            nombre_actual = self.combobox_dispositivos.get() if hasattr(self, "combobox_dispositivos") else ""
+            self.datos_dispositivos = self.dispositivos_dao.listar_dict()
+            nombres = list(self.datos_dispositivos.keys())
+            if hasattr(self, "combobox_dispositivos"):
+                self.combobox_dispositivos.config(values=nombres)
+                if nombre_actual in self.datos_dispositivos:
+                    self.combobox_dispositivos.set(nombre_actual)
+                elif not nombres:
+                    self.combobox_dispositivos.set("")
+            self.top_level_configuracion.update_idletasks()
+        except Exception:
+            pass
         
         
 #///////////////////////////////////////////////////// NOTEBOOK DISPOSITIVOS /////////////////////////////////////////////////////
@@ -131,6 +153,15 @@ class GUI_CONFIG:
         )
         ToolTip(self.button_player, text="Configurar pantalla y parametros del player")
         self.DICT_WIDGETS.register("GUI_CONFIG", "button_player", self.button_player)
+        self.button_buscar_red = ttk.Button(
+            self.frame_contenedor_botones,
+            text="Buscar red",
+            command=self.command_button_buscar_dispositivos_red,
+            bootstyle="info-outline",
+            width=12,
+        )
+        ToolTip(self.button_buscar_red, text="Detectar verificadores e InforTV en la red local")
+        self.DICT_WIDGETS.register("GUI_CONFIG", "button_buscar_red", self.button_buscar_red)
 
         # Posicionamiento con grid (alineados al centro)
         self.frame_contenedor_botones.columnconfigure(0, weight=1)
@@ -139,6 +170,7 @@ class GUI_CONFIG:
         self.frame_contenedor_botones.columnconfigure(3, weight=1)
         self.frame_contenedor_botones.columnconfigure(4, weight=1)
         self.frame_contenedor_botones.columnconfigure(5, weight=1)
+        self.frame_contenedor_botones.columnconfigure(6, weight=1)
 
         self.button_agregar.grid(row=0, column=0, padx=3)
         self.button_editar.grid(row=0, column=1, padx=3)
@@ -146,6 +178,7 @@ class GUI_CONFIG:
         self.button_guardar.grid(row=0, column=3, padx=3)
         self.button_estado.grid(row=0, column=4, padx=(10, 3))
         self.button_player.grid(row=0, column=5, padx=(3, 1))
+        self.button_buscar_red.grid(row=0, column=6, padx=(8, 0))
         
     def creacion_contenido_frame_contenedor_combobox_dispositivos(self):
         self.frame_label_combobox_dispositivos = ttk.Label(
@@ -1242,6 +1275,240 @@ class GUI_CONFIG:
 
         except Exception as e:
             print(f"Error al actualizar el dispositivo: {e}")
+
+    def command_button_buscar_dispositivos_red(self):
+        tipos_var = ttk.StringVar(value="ambos")
+
+        selector = ttk.Toplevel(self.top_level_configuracion)
+        selector.title("Buscar en red")
+        selector.geometry("420x170")
+        selector.place_window_center()
+        selector.transient(self.top_level_configuracion)
+        selector.grab_set()
+        selector.resizable(False, False)
+
+        ttk.Label(
+            selector,
+            text="Seleccione qué tipo de dispositivos desea detectar:",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", padx=18, pady=(18, 10))
+
+        combo = ttk.Combobox(
+            selector,
+            state="readonly",
+            values=["Ambos", "Verificadores", "InforTV"],
+            width=26,
+        )
+        combo.pack(anchor="w", padx=18)
+        combo.set("Ambos")
+
+        usar_cache = ttk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            selector,
+            text="Usar cache reciente si existe",
+            variable=usar_cache,
+        ).pack(anchor="w", padx=18, pady=(10, 0))
+
+        def resolver_tipos():
+            valor = combo.get().strip().lower()
+            if valor == "verificadores":
+                return ("verificador",)
+            if valor == "infortv":
+                return ("infotv",)
+            return ("verificador", "infotv")
+
+        def iniciar_busqueda():
+            selector.destroy()
+            self._ejecutar_busqueda_dispositivos_red(
+                tipos=resolver_tipos(),
+                use_cache=bool(usar_cache.get()),
+            )
+
+        acciones = ttk.Frame(selector)
+        acciones.pack(fill="x", padx=18, pady=(18, 0))
+        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info").pack(side="left")
+        ttk.Button(acciones, text="Cancelar", command=selector.destroy).pack(side="right")
+
+    def _ejecutar_busqueda_dispositivos_red(self, tipos=("verificador", "infotv"), use_cache=True):
+        top = ttk.Toplevel(self.top_level_configuracion)
+        top.title("Buscar dispositivos en red")
+        top.geometry("460x180")
+        top.place_window_center()
+        top.transient(self.top_level_configuracion)
+        top.grab_set()
+        top.resizable(False, False)
+
+        ttk.Label(
+            top,
+            text="Buscando verificadores (8080) e InforTV (2727) en la red local...",
+            font=("Segoe UI", 11, "bold"),
+            wraplength=410,
+            justify="left",
+        ).pack(anchor="w", padx=20, pady=(18, 10))
+
+        progress = ttk.Progressbar(top, mode="indeterminate", bootstyle="info-striped")
+        progress.pack(fill="x", padx=20, pady=(0, 12))
+        progress.start(12)
+
+        estado_var = ttk.StringVar(value="Iniciando descubrimiento...")
+        ttk.Label(top, textvariable=estado_var, bootstyle="secondary").pack(anchor="w", padx=20)
+
+        acciones = ttk.Frame(top)
+        acciones.pack(fill="x", padx=20, pady=(18, 0))
+        btn_cerrar = ttk.Button(acciones, text="Cerrar", command=top.destroy, state="disabled")
+        btn_cerrar.pack(side="right")
+
+        def update_estado(msg):
+            self.top_level_configuracion.after(0, lambda: estado_var.set(msg))
+
+        def finalizar(resultados=None, error=None):
+            progress.stop()
+            btn_cerrar.config(state="normal", text="Cerrar")
+            if error:
+                estado_var.set(f"Error buscando dispositivos: {error}")
+                return
+            resultados = resultados or []
+            estado_var.set(f"Dispositivos detectados: {len(resultados)}")
+            if top.winfo_exists():
+                top.destroy()
+            self._mostrar_resultados_dispositivos_detectados(resultados)
+
+        def worker():
+            try:
+                service = DeviceDiscoveryService()
+                resultados = service.discover(
+                    progress_callback=update_estado,
+                    tipos=tipos,
+                    use_cache=use_cache,
+                )
+                self.top_level_configuracion.after(0, lambda: finalizar(resultados=resultados))
+            except Exception as e:
+                self.top_level_configuracion.after(0, lambda: finalizar(error=e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _mostrar_resultados_dispositivos_detectados(self, dispositivos):
+        top = ttk.Toplevel(self.top_level_configuracion)
+        top.title("Dispositivos detectados")
+        top.geometry("860x460")
+        top.place_window_center()
+        top.transient(self.top_level_configuracion)
+
+        ttk.Label(
+            top,
+            text="Seleccione los dispositivos detectados que desea agregar a la configuración local.",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", padx=14, pady=(14, 8))
+
+        frame_tree = ttk.Frame(top)
+        frame_tree.pack(fill="both", expand=True, padx=14, pady=(0, 10))
+
+        columns = ("nombre", "tipo", "ip", "puerto", "estado")
+        tree = ttk.Treeview(frame_tree, columns=columns, show="headings", height=12, selectmode="extended")
+        headings = {
+            "nombre": ("Nombre", 240),
+            "tipo": ("Tipo", 110),
+            "ip": ("IP", 170),
+            "puerto": ("Puerto", 90),
+            "estado": ("Estado", 160),
+        }
+        for key, (text, width) in headings.items():
+            tree.heading(key, text=text)
+            tree.column(key, width=width, anchor="w")
+
+        scroll_y = ttk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll_y.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scroll_y.pack(side="right", fill="y")
+
+        dispositivos_indexados = {}
+        existentes = {
+            (str(data.get("direccion_ip", "")).strip(), int(data.get("puerto", 0) or 0)): nombre
+            for nombre, data in self.datos_dispositivos.items()
+        }
+
+        for idx, dispositivo in enumerate(dispositivos, start=1):
+            ip = str(dispositivo.get("ip", "")).strip()
+            puerto = int(dispositivo.get("puerto", 0) or 0)
+            ya_existe = (ip, puerto) in existentes
+            estado = "Ya registrado" if ya_existe else "Nuevo"
+            iid = f"det_{idx}"
+            dispositivos_indexados[iid] = dispositivo
+            tree.insert(
+                "",
+                "end",
+                iid=iid,
+                values=(
+                    dispositivo.get("nombre") or f"Dispositivo {ip}",
+                    dispositivo.get("tipo", "-"),
+                    ip,
+                    puerto,
+                    estado,
+                ),
+            )
+
+        if dispositivos:
+            tree.selection_set(tree.get_children())
+
+        info_var = ttk.StringVar(
+            value="No se encontraron dispositivos." if not dispositivos else f"Dispositivos encontrados: {len(dispositivos)}"
+        )
+        ttk.Label(top, textvariable=info_var, bootstyle="secondary").pack(anchor="w", padx=14, pady=(0, 8))
+
+        acciones = ttk.Frame(top)
+        acciones.pack(fill="x", padx=14, pady=(0, 14))
+
+        def agregar_seleccionados():
+            seleccion = tree.selection()
+            if not seleccion:
+                messagebox.showwarning("Buscar en red", "Seleccione al menos un dispositivo detectado.")
+                return
+
+            agregados = 0
+            omitidos = 0
+            for iid in seleccion:
+                dispositivo = dispositivos_indexados.get(iid)
+                if not dispositivo:
+                    continue
+
+                ip = str(dispositivo.get("ip", "")).strip()
+                puerto = int(dispositivo.get("puerto", 0) or 0)
+                if (ip, puerto) in existentes:
+                    omitidos += 1
+                    continue
+
+                nombre = self._generar_nombre_dispositivo_unico(dispositivo)
+                comentario = dispositivo.get("comentario") or "Detectado automaticamente en red"
+                tipo = dispositivo.get("tipo")
+                if tipo:
+                    comentario = f"{comentario} | Tipo: {tipo}"
+
+                self.dispositivos_dao.crear(nombre, ip, str(puerto), comentario)
+                existentes[(ip, puerto)] = nombre
+                agregados += 1
+
+            self.combobox_dispositivos.config(values=self.actualizar_datos_combobox())
+            messagebox.showinfo(
+                "Buscar en red",
+                f"Dispositivos agregados: {agregados}\nOmitidos por ya existir: {omitidos}"
+            )
+            top.destroy()
+
+        ttk.Button(acciones, text="Agregar seleccionados", command=agregar_seleccionados, bootstyle="success").pack(side="left")
+        ttk.Button(acciones, text="Cerrar", command=top.destroy).pack(side="right")
+
+    def _generar_nombre_dispositivo_unico(self, dispositivo):
+        base = (dispositivo.get("nombre") or f"Dispositivo {dispositivo.get('ip', '')}").strip()
+        if not base:
+            base = "Dispositivo detectado"
+
+        nombre = base
+        sufijo = 2
+        existentes = set(self.datos_dispositivos.keys())
+        while nombre in existentes:
+            nombre = f"{base} ({sufijo})"
+            sufijo += 1
+        return nombre
             
     def command_button_agregar_datos_de_conexion(self):
         try:
@@ -1594,6 +1861,10 @@ class GUI_CONFIG:
     def cierre_top_level_configuracion(self):
         """Cierra la ventana y la elimina del gestor de ventanas"""
         VentanaManager.cerrar_ventana("configuracion")  # Llamamos al mÃ©todo de cierre
+        try:
+            self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").unbind("<<DispositivosActualizados>>")
+        except Exception:
+            pass
         self.top_level_configuracion.destroy()
         
     def obtener_datos_conexion_odbc(self):

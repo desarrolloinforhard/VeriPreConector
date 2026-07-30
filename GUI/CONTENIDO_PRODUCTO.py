@@ -16,6 +16,7 @@ from ttkbootstrap.constants import *
 from core.network.dispositivo_sender import DispositivoSender
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
 from core.services.dispositivos_envio_service import DispositivosEnvioService
+from core.services.device_discovery_service import DeviceDiscoveryService
 from ttkbootstrap.widgets import DateEntry
 from core.dao.productos_dao import ProductosSQLiteDAO
 from core.services.image_resolver import ProductImageResolver
@@ -362,7 +363,11 @@ class ContenidoProducto:
         if total_registros == 0:
             print("No hay datos para enviar.")
             return
-        sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        sender = DispositivoSender(
+            self.CONEXIONDBA,
+            self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"),
+            tipos_descubrir=("verificador",),
+        )
         urls = sender.seleccionar_dispositivos()
         if urls:
             top_preparacion, barra_preparacion, label_preparacion = self._crear_ventana_preparacion_envio(total_registros)
@@ -402,7 +407,11 @@ class ContenidoProducto:
 
         
     def command_transmitir_novedades(self):
-        sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+        sender = DispositivoSender(
+            self.CONEXIONDBA,
+            self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"),
+            tipos_descubrir=("verificador",),
+        )
         urls = sender.seleccionar_dispositivos()
         print(self.productos_modificados)
         if urls:
@@ -483,6 +492,26 @@ class ContenidoProducto:
                     print(f"[auto-envio] Offline: {dispositivo['nombre']}")
             except Exception:
                 print(f"[auto-envio] Offline: {dispositivo['nombre']}")
+
+        if online:
+            return online
+
+        print("[auto-envio] No hay dispositivos registrados online. Intentando deteccion automatica en red...")
+        try:
+            discovery = DeviceDiscoveryService()
+            detectados = discovery.discover(progress_callback=lambda msg: print(f"[auto-envio][discovery] {msg}"))
+            for disp in detectados:
+                if disp.get("tipo") != "verificador":
+                    continue
+                online.append(
+                    {
+                        "nombre": disp["nombre"],
+                        "url": f"http://{disp['ip']}:{disp['puerto']}/api/veri/batch_productos",
+                    }
+                )
+                print(f"[auto-envio] Detectado: {disp['nombre']} -> {disp['ip']}:{disp['puerto']}")
+        except Exception as e:
+            print(f"[auto-envio] Error en deteccion automatica: {e}")
 
         return online
 
@@ -625,7 +654,11 @@ class ContenidoProducto:
                 return
 
             print(f"📦 Productos a transmitir por fecha: {len(productos)}")
-            sender = DispositivoSender(self.CONEXIONDBA, self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
+            sender = DispositivoSender(
+                self.CONEXIONDBA,
+                self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"),
+                tipos_descubrir=("verificador",),
+            )
             urls = sender.seleccionar_dispositivos()
             if urls:
                 sender.enviar_datos(urls, productos, modo="rango_fecha")

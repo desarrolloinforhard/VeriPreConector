@@ -7,6 +7,8 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - Corregido loop de sincronizacion automatica que repetia mensajes y recargas.
 - Ajustado refresco de precios y novedades para que tome cambios de costo/precio.
 - Mejorado estado visual durante envio de novedades.
+- Agregada deteccion automatica de verificadores en red local para selector manual, autoenvio y modo headless.
+- Si no hay verificadores online registrados, el envio de productos puede intentar descubrirlos por red antes de abortar.
 - Agregado modo headless con parametros:
   - `--transmitir-completo`
   - `--transmitir-novedades`
@@ -28,6 +30,7 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - Se reorganizo la UI de Publicidades con panel de opciones colapsable.
 - Se agrego opcion de mantener audio en videos como modo prueba.
 - Se aumentaron timeouts para envio de videos pesados.
+- El selector de envio de publicidades ahora puede descubrir automaticamente dispositivos InforTV en red local.
 - Desde `1.16.5`:
   - las publicidades se copian a storage interno,
   - se migran publicidades antiguas,
@@ -43,6 +46,7 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - Guardado de config convertido a flujo atomico.
 - Se ajusto el instalador para no pisar la base `veripre.db` en updates.
 - Se actualizo el instalador para reflejar `1.16.17`.
+- `Configuracion > Dispositivos` ahora incluye busqueda manual en red con filtro por tipo, cache corta y alta en lote de equipos detectados.
 
 ## Robustez UI
 
@@ -52,6 +56,8 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - `GUI_MAIN.py` ya no inicializa todo sincronicamente: primero pinta shell minima y luego bootstrapea base, variables globales, modulo inicial y bandeja.
 - Se abandono el loader basado en `CustomTkinter` para el overlay de arranque; ahora usa `tk/ttk` por robustez entre sesiones Windows con distinto DPI/escalado.
 - La apertura inicial de `Productos` y `Publicidad` ahora puede disparar carga lazy del modulo con loader reutilizable.
+- `config.json` ahora usa lock de archivo y reintentos para mejorar el guardado compartido entre sesiones/usuarios.
+- `Publicidad` ahora refresca la configuracion compartida desde disco antes de leer y guardar, para que distintas sesiones vean los mismos grupos e items.
 
 ## Multiusuario / Permisos / Bandeja
 
@@ -88,3 +94,15 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
   - cleanup al salir de `mainloop`,
   - salida controlada desde el menu del tray,
   - ocultado explicito antes de `stop()` para reducir iconos fantasma en Windows.
+
+## Linea futura UI / Bootstack
+
+- Se abrio fase `VPC-F2` para evaluar migracion de UI hacia `Bootstack`.
+- La migracion queda marcada por ahora como `piloto`, no como implementacion directa.
+- Se crearon tareas ClickUp asignadas a Nicolas para:
+  - viabilidad,
+  - matriz de widgets,
+  - POC de `AppShell`,
+  - analisis de pantallas de datos,
+  - roadmap incremental.
+- Se agrega `INTERNAL_DEV/BOOTSTACK_MIGRATION_BASE.md` como documento base de arranque.

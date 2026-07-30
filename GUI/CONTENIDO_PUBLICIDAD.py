@@ -19,7 +19,7 @@ from core.network.api_client import DispositivoAPIClient
 from core.network.dispositivo_sender import DispositivoSender
 from GUI.OFERTAS_GENERADOR import GeneradorOfertasToplevel
 from core.logging.logger import get_logger
-from FUNC.config_json import guardar_config, obtener_data_dir
+from FUNC.config_json import cargar_config, guardar_config, obtener_data_dir
 
 # from core.network.selector_envio_dispositivos import EnvioDispositivos
 
@@ -215,9 +215,10 @@ class ContenidoPublicidad:
 
     def inicializar_grupos_publicidad(self):
         try:
+            self.refrescar_config_compartida()
             self.asegurar_config_publicidades()
             self.migrar_publicidades_a_storage()
-            self.refrescar_biblioteca_metadata()
+            self.refrescar_biblioteca_metadata(persistir=False)
             self.actualizar_combo_grupos()
             self.canvas.update_idletasks()
             self.cargar_ubicaciones()
@@ -256,6 +257,13 @@ class ContenidoPublicidad:
             logger.info("Publicidad copiada a storage interno | origen=%s | destino=%s", ruta_origen, destino)
 
         return str(destino.resolve())
+
+    def refrescar_config_compartida(self):
+        config = cargar_config()
+        if not isinstance(config, dict):
+            config = {}
+        self.widgets.register("CONFIG", "config_json", config)
+        return config
 
     def _iterar_todas_las_rutas_config(self, publicidades):
         for grupo in publicidades.get("grupos", {}).values():
@@ -318,7 +326,10 @@ class ContenidoPublicidad:
             logger.exception("Error migrando publicidades a storage interno.")
 
     def obtener_config(self):
-        return self.widgets.get_widget("CONFIG", "config_json")
+        config = self.widgets.get_widget("CONFIG", "config_json")
+        if isinstance(config, dict):
+            return config
+        return self.refrescar_config_compartida()
 
     def asegurar_config_publicidades(self):
         config = self.obtener_config()
@@ -360,7 +371,22 @@ class ContenidoPublicidad:
         return publicidades
 
     def guardar_config_publicidades(self):
-        guardar_config(self.obtener_config())
+        config_actual = self.obtener_config()
+        config_disco = self.refrescar_config_compartida()
+        config_disco["publicidades"] = config_actual.get("publicidades", {})
+        if "ubicaciones" in config_actual:
+            config_disco["ubicaciones"] = config_actual.get("ubicaciones", {})
+        guardar_config(config_disco)
+        self.widgets.register("CONFIG", "config_json", config_disco)
+
+    def sincronizar_publicidades_compartidas(self):
+        self.refrescar_config_compartida()
+        self.asegurar_config_publicidades()
+        self.limpiar_items_canvas()
+        self.actualizar_combo_grupos()
+        self.cargar_ubicaciones()
+        self.redimensionar_celdas()
+        self.actualizar_resumen_grupo()
 
     def _tipo_archivo_publicidad(self, ruta):
         return "video" if str(ruta).lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".webm")) else "imagen"
@@ -464,7 +490,7 @@ class ContenidoPublicidad:
             "cambios_pendientes": cambios_pendientes or not ultimo_hash,
         }
 
-    def refrescar_biblioteca_metadata(self, persistir=True):
+    def refrescar_biblioteca_metadata(self, persistir=False):
         publicidades = self.asegurar_config_publicidades()
         biblioteca = publicidades.setdefault("biblioteca", {})
         rutas = list(dict.fromkeys(self._iterar_todas_las_rutas_config(publicidades)))
@@ -556,7 +582,7 @@ class ContenidoPublicidad:
 
     def validar_publicidades(self):
         try:
-            self.refrescar_biblioteca_metadata()
+            self.refrescar_biblioteca_metadata(persistir=False)
             items_envio = self.obtener_items_para_envio()
             if not items_envio:
                 messagebox.showinfo("Validacion", "No hay publicidades para validar.")
@@ -746,6 +772,7 @@ class ContenidoPublicidad:
             self.cambiar_grupo(group_id)
 
     def cambiar_grupo(self, group_id):
+        self.refrescar_config_compartida()
         publicidades = self.asegurar_config_publicidades()
         if group_id not in publicidades["grupos"]:
             return
@@ -769,6 +796,7 @@ class ContenidoPublicidad:
         if not nombre:
             return
 
+        self.refrescar_config_compartida()
         publicidades = self.asegurar_config_publicidades()
         group_id = self.normalizar_id_grupo(nombre)
         publicidades["grupos"][group_id] = {
@@ -786,6 +814,7 @@ class ContenidoPublicidad:
         self.actualizar_resumen_grupo()
 
     def renombrar_grupo(self):
+        self.refrescar_config_compartida()
         publicidades = self.asegurar_config_publicidades()
         grupo = publicidades["grupos"].get(self.grupo_activo_id)
         if not grupo:
@@ -805,6 +834,7 @@ class ContenidoPublicidad:
         self.refrescar_biblioteca_metadata()
 
     def eliminar_grupo(self):
+        self.refrescar_config_compartida()
         publicidades = self.asegurar_config_publicidades()
         grupos = publicidades["grupos"]
         if len(grupos) <= 1:
@@ -840,6 +870,7 @@ class ContenidoPublicidad:
 
     def abrir_globales(self):
         try:
+            self.refrescar_config_compartida()
             top = ttk.Toplevel(self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad"))
             top.title("Publicidades Globales")
             top.geometry("680x360")
@@ -1434,7 +1465,7 @@ class ContenidoPublicidad:
             )
             grupo["items"] = dict(self.items_dict)
             config["ubicaciones"] = dict(self.items_dict)
-            guardar_config(config)
+            self.guardar_config_publicidades()
             self.refrescar_biblioteca_metadata()
 
         except Exception:
@@ -1442,6 +1473,7 @@ class ContenidoPublicidad:
 
     def cargar_ubicaciones(self):
         try:
+            self.refrescar_config_compartida()
             publicidades = self.asegurar_config_publicidades()
             grupo = publicidades["grupos"].get(self.grupo_activo_id, {})
             data = grupo.get("items", {})
@@ -1469,7 +1501,7 @@ class ContenidoPublicidad:
                 for idx, item in enumerate(self.items) if item.get("filepath")
             }
             self.guardar_ubicaciones()
-            self.refrescar_biblioteca_metadata()
+            self.refrescar_biblioteca_metadata(persistir=False)
             self.actualizar_resumen_grupo()
 
         except Exception:
@@ -1523,7 +1555,8 @@ class ContenidoPublicidad:
 
             sender = DispositivoSender(
                 self.widgets.get_widget("DATABASE", "CONEXIONDBA"),
-                self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja")
+                self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja"),
+                tipos_descubrir=("infotv",),
             )
             urls = sender.seleccionar_dispositivos()
 
@@ -2502,10 +2535,12 @@ class ContenidoPublicidad:
 
     def enviar_multimedia(self):
         try:
-            self.refrescar_biblioteca_metadata()
+            self.refrescar_config_compartida()
+            self.refrescar_biblioteca_metadata(persistir=False)
             sender = DispositivoSender(
                 self.widgets.get_widget("DATABASE", "CONEXIONDBA"),
-                self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja")
+                self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja"),
+                tipos_descubrir=("infotv",),
             )
             urls = sender.seleccionar_dispositivos()
 

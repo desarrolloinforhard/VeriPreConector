@@ -4,30 +4,48 @@ import requests
 import ttkbootstrap as ttk
 from ttkbootstrap.scrolled import ScrolledFrame
 
+from core.dao.dispositivos_dao import DispositivosDAO
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
+from core.services.device_discovery_service import DeviceDiscoveryService
 from core.services.dispositivos_envio_service import DispositivosEnvioService
 
 
 class DispositivoSender:
-    def __init__(self, conexion_dba, parent_tk, batch_size=1000):
+    def __init__(self, conexion_dba, parent_tk, batch_size=1000, tipos_descubrir=("verificador", "infotv")):
         self.conexion_dba = conexion_dba
         self.parent_tk = parent_tk
         self.batch_size = batch_size
+        self.tipos_descubrir = tuple(tipos_descubrir or ("verificador", "infotv"))
+        self.dispositivos_dao = DispositivosDAO(conexion_dba)
         self.envio_service = DispositivosEnvioService(conexion_dba, batch_size=batch_size)
         self.url_a_nombre = {}
 
-    def seleccionar_dispositivos(self):
+    def _descripcion_tipos(self):
+        tipos = set(self.tipos_descubrir)
+        if tipos == {"verificador"}:
+            return "verificadores"
+        if tipos == {"infotv"}:
+            return "InforTV"
+        return "dispositivos"
+
+    def seleccionar_dispositivos(self, endpoint="/api/veri/batch_productos"):
         builder = VeriPreDispositivosURLBuilder(self.conexion_dba)
-        dispositivos = builder.obtener_urls_api("/api/veri/batch_productos")
+        dispositivos = builder.obtener_urls_api(endpoint)
 
         resultado = []
         top = ttk.Toplevel(self.parent_tk)
         top.title("Seleccionar Dispositivos")
-        top.geometry("500x500")
+        top.geometry("560x560")
         top.place_window_center()
         top.grab_set()
 
-        ttk.Label(top, text="Selecciona los dispositivos para enviar:", font=("Segoe UI", 11)).pack(pady=(10, 5))
+        ttk.Label(
+            top,
+            text=f"Selecciona los {self._descripcion_tipos()} para enviar:",
+            font=("Segoe UI", 11),
+        ).pack(pady=(10, 5))
+        estado_var = ttk.StringVar(value="Cargando dispositivos registrados...")
+        ttk.Label(top, textvariable=estado_var, bootstyle="secondary").pack(pady=(0, 6))
 
         frame_scroll = ttk.Frame(top)
         frame_scroll.pack(fill="both", expand=True)
@@ -42,6 +60,8 @@ class DispositivoSender:
 
         vars_check = []
         check_widgets = []
+        dispositivos_indexados = {}
+        detectados_nuevos = {}
         var_todos = ttk.BooleanVar(value=False)
 
         def toggle_all():
@@ -56,6 +76,13 @@ class DispositivoSender:
             command=toggle_all,
         ).pack(anchor="w", padx=10, pady=(5, 10))
 
+        def set_estado(msg):
+            try:
+                if top.winfo_exists():
+                    estado_var.set(msg)
+            except Exception:
+                pass
+
         def aplicar_estado_dispositivo(chk, estado, texto):
             try:
                 if top.winfo_exists() and chk.winfo_exists():
@@ -64,6 +91,9 @@ class DispositivoSender:
                 pass
 
         def verificar_dispositivo(dispositivo, chk):
+            origen = dispositivo.get("origen", "registrado")
+            tipo = dispositivo.get("tipo", "-")
+            prefijo = "[Detectado]" if origen == "detectado" else "[Registrado]"
             try:
                 base_url = dispositivo["url"].split("/api")[0]
                 respuesta = requests.get(f"{base_url}{ENDPOINT_STATUS}", timeout=2)
@@ -73,7 +103,7 @@ class DispositivoSender:
                         aplicar_estado_dispositivo,
                         chk,
                         "normal",
-                        f"Online - {dispositivo['nombre']}",
+                        f"{prefijo} {dispositivo['nombre']} ({tipo}) - Online",
                     )
                     return
             except Exception:
@@ -88,7 +118,7 @@ class DispositivoSender:
                         aplicar_estado_dispositivo,
                         chk,
                         "normal",
-                        f"Online - {dispositivo['nombre']}",
+                        f"{prefijo} {dispositivo['nombre']} ({tipo}) - Online",
                     )
                     return
             except Exception:
@@ -99,16 +129,76 @@ class DispositivoSender:
                 aplicar_estado_dispositivo,
                 chk,
                 "disabled",
-                f"Offline - {dispositivo['nombre']}",
+                f"{prefijo} {dispositivo['nombre']} ({tipo}) - Offline",
             )
 
-        for disp in dispositivos:
+        def agregar_dispositivo_ui(dispositivo, detectado=False):
+            key = dispositivo["url"]
+            if key in dispositivos_indexados:
+                return
+
+            dispositivo = dict(dispositivo)
+            dispositivo["origen"] = "detectado" if detectado else "registrado"
+            dispositivos_indexados[key] = dispositivo
             var = ttk.BooleanVar(value=False)
-            chk = ttk.Checkbutton(scroll_frame, text="Comprobando...", variable=var, state="disabled")
+            sufijo = " [detectado]" if detectado else ""
+            chk = ttk.Checkbutton(scroll_frame, text=f"Comprobando...{sufijo}", variable=var, state="disabled")
             chk.pack(anchor="w", padx=20, pady=2)
-            check_widgets.append((disp, var, chk))
+            check_widgets.append((dispositivo, var, chk))
             vars_check.append((var, chk))
-            threading.Thread(target=verificar_dispositivo, args=(disp, chk), daemon=True).start()
+            self.url_a_nombre[dispositivo["url"]] = dispositivo["nombre"]
+            if detectado:
+                detectados_nuevos[key] = dispositivo
+            threading.Thread(target=verificar_dispositivo, args=(dispositivo, chk), daemon=True).start()
+
+        for disp in dispositivos:
+            agregar_dispositivo_ui(
+                {
+                    "nombre": disp["nombre"],
+                    "url": disp["url"],
+                    "tipo": self._inferir_tipo_por_endpoint_y_puerto(disp["url"], endpoint),
+                },
+                detectado=False,
+            )
+
+        def descubrir_en_red():
+            set_estado(f"Buscando {self._descripcion_tipos()} automaticamente en la red...")
+            try:
+                service = DeviceDiscoveryService()
+                encontrados = service.discover(
+                    progress_callback=set_estado,
+                    tipos=self.tipos_descubrir,
+                    use_cache=True,
+                )
+            except Exception as e:
+                self.parent_tk.after(0, lambda: set_estado(f"Error buscando en red: {e}"))
+                return
+
+            def aplicar_descubiertos():
+                nuevos = 0
+                for disp in encontrados:
+                    url = f"http://{disp['ip']}:{disp['puerto']}{endpoint}"
+                    dispositivo = {
+                        "nombre": disp["nombre"],
+                        "url": url,
+                        "tipo": disp.get("tipo", "-"),
+                        "ip": disp.get("ip"),
+                        "puerto": disp.get("puerto"),
+                        "comentario": disp.get("comentario") or "Detectado automaticamente en red",
+                    }
+                    if url not in dispositivos_indexados:
+                        agregar_dispositivo_ui(dispositivo, detectado=True)
+                        nuevos += 1
+
+                total = len(dispositivos_indexados)
+                if nuevos:
+                    set_estado(f"Busqueda completa. Nuevos detectados: {nuevos}. Total listados: {total}")
+                else:
+                    set_estado(f"Busqueda completa. No se detectaron nuevos dispositivos. Total listados: {total}")
+
+            self.parent_tk.after(0, aplicar_descubiertos)
+
+        threading.Thread(target=descubrir_en_red, daemon=True).start()
 
         def confirmar():
             for disp, var, chk in check_widgets:
@@ -119,10 +209,72 @@ class DispositivoSender:
                     pass
             top.destroy()
 
-        ttk.Button(top, text="Enviar", command=confirmar).pack(pady=10)
+        def guardar_detectados():
+            guardados = 0
+            omitidos = 0
+            existentes = {
+                (str(data.get("direccion_ip", "")).strip(), int(data.get("puerto", 0) or 0)): nombre
+                for nombre, data in self.dispositivos_dao.listar_dict().items()
+            }
+            for dispositivo in list(detectados_nuevos.values()):
+                ip = str(dispositivo.get("ip") or "").strip()
+                puerto = int(dispositivo.get("puerto", 0) or 0)
+                if not ip or not puerto:
+                    omitidos += 1
+                    continue
+                if (ip, puerto) in existentes:
+                    omitidos += 1
+                    continue
+                nombre = self._generar_nombre_dispositivo_unico(dispositivo, set(self.dispositivos_dao.listar_dict().keys()))
+                comentario = dispositivo.get("comentario") or "Detectado automaticamente en red"
+                tipo = dispositivo.get("tipo")
+                if tipo:
+                    comentario = f"{comentario} | Tipo: {tipo}"
+                self.dispositivos_dao.crear(nombre, ip, str(puerto), comentario)
+                existentes[(ip, puerto)] = nombre
+                guardados += 1
+
+            if guardados or omitidos:
+                set_estado(f"Detectados guardados: {guardados} | omitidos: {omitidos}")
+            else:
+                set_estado("No habia detectados nuevos para guardar.")
+            if guardados:
+                try:
+                    self.parent_tk.event_generate("<<DispositivosActualizados>>", when="tail")
+                except Exception:
+                    pass
+
+        acciones = ttk.Frame(top)
+        acciones.pack(fill="x", padx=12, pady=10)
+        ttk.Button(acciones, text="Guardar detectados", command=guardar_detectados, bootstyle="success-outline").pack(side="left")
+        ttk.Button(acciones, text="Enviar", command=confirmar, bootstyle="primary").pack(side="right")
         self.parent_tk.wait_window(top)
         self.url_a_nombre = {disp["url"]: disp["nombre"] for disp, _var, _chk in check_widgets}
         return resultado
+
+    def _inferir_tipo_por_endpoint_y_puerto(self, url, endpoint):
+        try:
+            base = url.split("/api")[0]
+            puerto = int(base.rsplit(":", 1)[1])
+        except Exception:
+            puerto = 0
+        if puerto == 2727:
+            return "infotv"
+        if puerto == 8080:
+            return "verificador"
+        if endpoint == "/api/veri/ad_medias_images":
+            return "infotv"
+        return "verificador"
+
+    def _generar_nombre_dispositivo_unico(self, dispositivo, existentes=None):
+        existentes = set(existentes or ())
+        base = (dispositivo.get("nombre") or "Dispositivo detectado").strip()
+        nombre = base
+        sufijo = 2
+        while nombre in existentes:
+            nombre = f"{base} ({sufijo})"
+            sufijo += 1
+        return nombre
 
     def _ventana_estado_envio(self, urls, url_a_nombre):
         top = ttk.Toplevel(self.parent_tk)

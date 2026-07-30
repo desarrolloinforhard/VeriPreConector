@@ -1,6 +1,6 @@
 # Project Context
 
-Version actual: `1.16.17`
+Version actual: `1.16.22`
 
 ## 1. Objetivo del sistema
 
@@ -41,6 +41,7 @@ Modos:
   - `dispositivo_sender.py`: selector de dispositivos y ventana de estado por dispositivo.
   - `urls_dispositivos.py`: rutas base hacia endpoints del verificador.
 - `core/services/`
+  - `device_discovery_service.py`: descubrimiento de verificadores e InforTV en red local con cache corta.
   - `dispositivos_envio_service.py`: logica de envio de productos/publicidades/logo/config.
   - `headless_envio_service.py`: modo CLI sin GUI.
   - `headless_progress_window.py`: ventana de progreso en modo headless.
@@ -59,20 +60,23 @@ Modos:
 2. `CONTENIDO_PRODUCTO` consulta SQLite para mostrar busqueda/lista.
 3. `productos_sync_service.py` sincroniza desde Sybase hacia SQLite.
 4. `dispositivos_envio_service.py` envia productos al Android por lotes.
-5. Antes de enviar, tambien puede empujar GO-UPC key y URL de API propia de imagenes.
+5. El selector manual y el autoenvio pueden descubrir verificadores por red local si no hay equipos online registrados.
+6. Antes de enviar, tambien puede empujar GO-UPC key y URL de API propia de imagenes.
 
 ### Publicidades
 1. `CONTENIDO_PUBLICIDAD` mantiene grupos y globales en config.
 2. Desde `1.16.5` las publicidades se copian a storage interno administrado por SmartPrice.
 3. El envio usa `dispositivo_sender.py` -> `dispositivos_envio_service.py`.
-4. Android recibe imagenes/videos en endpoints separados.
-5. Se reinicia launcher al finalizar.
+4. El selector de envio puede descubrir automaticamente InforTV por puerto/API antes de elegir destino.
+5. Android recibe imagenes/videos en endpoints separados.
+6. Se reinicia launcher al finalizar.
 
 ### Configuracion
 1. `GUI_CONFIG.py` edita DSN, API key, toggles y opciones de envio.
 2. `GUI_CONFIG.py` tambien expone pestaña `Usuarios y Permisos` para ver/editar perfiles por usuario Windows.
-3. `FUNC/config_json.py` guarda configuracion persistente.
-4. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
+3. `GUI_CONFIG.py` ahora permite buscar dispositivos por red local desde la pestaña `Dispositivos`.
+4. `FUNC/config_json.py` guarda configuracion persistente.
+5. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
 
 ### Multiusuario
 1. `GUI_MAIN.py` calcula una instancia unica por usuario Windows, no global a toda la maquina.
@@ -86,6 +90,7 @@ Mantener compatibilidad con:
 - `POST /api/veri/batch_productos`
 - `DELETE /api/veri/batch_productos`
 - `GET /api/veri/status`
+- `GET /api/veri/configuracion_player`
 - `DELETE /api/veri/vaciar_ad_medias`
 - `POST /api/veri/ad_medias_images`
 - `POST /api/veri/ad_medias_videos`
@@ -103,9 +108,12 @@ Mantener compatibilidad con:
 - SQLite usa `check_same_thread=False`; no asumir seguridad total por eso.
 - `CONTENIDO_PRODUCTO.py` y `CONTENIDO_PUBLICIDAD.py` siguen siendo modulos grandes.
 - Envio incremental real de publicidades aun depende de cambios en Android.
+- El descubrimiento en red actual recorre subredes privadas tipo `/24`; en redes grandes o segmentadas puede requerir optimizacion futura.
 - Multiusuario comparte la misma SQLite: funciona para escenarios controlados, pero puede exponer `database is locked` o demoras si dos sesiones escriben fuerte al mismo tiempo.
 - La seguridad actual es de capa aplicacion/UI; cualquier modulo nuevo debe integrarse explicitamente al sistema de permisos para no abrir bypasses.
 - `CustomTkinter` mostro fragilidad en loaders/overlays bajo ciertas sesiones Windows Server con distinto escalado; para overlays criticos conviene priorizar `tk/ttk` puro.
+- La rama `publicidades` del config es compartida entre usuarios; las vistas de Publicidad deben refrescar desde disco antes de operar para no trabajar con copias stale en memoria.
+- La deteccion por red diferencia por tipo de dispositivo (`verificador` vs `infotv`) y esa separacion no debe perderse en futuros flujos de envio.
 
 ## 7. Decisiones vigentes que no deben romperse
 
@@ -116,3 +124,4 @@ Mantener compatibilidad con:
 - El usuario `pantalla` debe poder operar solo `Publicidad` sin acceder a `Productos` ni `Configuracion`.
 - La instancia unica debe ser por usuario Windows para no bloquear sesiones distintas en la misma PC/Windows Server.
 - El arranque debe mostrar feedback visible de carga y evitar congelar la primera pantalla; la shell de GUI debe pintar antes del bootstrap pesado.
+- Productos y Publicidad no deben mezclar destinos: descubrimiento y selector deben filtrar verificadores para catalogo y dispositivos InforTV para multimedia.

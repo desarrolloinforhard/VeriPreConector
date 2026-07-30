@@ -6,6 +6,7 @@ import requests
 from DB.database import SQLiteDB
 from DB.database_sybase import ConexionSybase
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
+from core.services.device_discovery_service import DeviceDiscoveryService
 from core.services.dispositivos_envio_service import DispositivosEnvioService
 from core.services.image_resolver import ProductImageResolver
 from core.services.productos_sync_service import ProductosSyncService
@@ -155,6 +156,25 @@ class HeadlessEnvioService:
                 self._emitir(f"Online: {dispositivo['nombre']} -> {dispositivo['url']}")
             else:
                 self._emitir(f"Offline: {dispositivo['nombre']} -> {dispositivo['url']}")
+
+        if online:
+            return online
+
+        self._emitir("No hay dispositivos registrados online. Intentando deteccion automatica en red...")
+        try:
+            discovery = DeviceDiscoveryService()
+            detectados = discovery.discover(progress_callback=lambda msg: self._emitir(f"[discovery] {msg}"))
+            for disp in detectados:
+                if disp.get("tipo") != "verificador":
+                    continue
+                dispositivo = {
+                    "nombre": disp["nombre"],
+                    "url": f"http://{disp['ip']}:{disp['puerto']}/api/veri/batch_productos",
+                }
+                online.append(dispositivo)
+                self._emitir(f"Detectado: {dispositivo['nombre']} -> {dispositivo['url']}")
+        except Exception as e:
+            self._emitir(f"Error en deteccion automatica: {e}")
 
         return online
 

@@ -30,6 +30,13 @@ Si un cambio cruza ambas lineas, se define contrato primero y luego cada uno imp
 3. Revisar seguridad de threads + SQLite.
 4. Consolidar config persistente y mover datos sensibles fuera de flujo visual.
 5. Preparar refactor de `CONTENIDO_PRODUCTO.py` por servicios.
+6. Cerrar linea pendiente de multiprecios y `PACKS_MINI`:
+   - `VPC-F1-006` sync local SQLite de multiprecios y packs (`86e2hfxp6`)
+   - `VPC-F1-007` envio en datos completos y novedades (`86e2hfxrv`)
+   - `VPC-F1-008` visualizacion en UI de Productos (`86e2hfxvn`)
+   - `VPC-F1-009` cierre de integracion Python-Android (`86e2hfxz2`)
+7. Consolidar descubrimiento de dispositivos en red:
+   - `VPC-F1-010` deteccion automatica de dispositivos y alta desde GUI (`86e2jhakm`)
 
 ## Nico - Ownership principal
 
@@ -62,3 +69,17 @@ Si un cambio cruza ambas lineas, se define contrato primero y luego cada uno imp
 - Config persistente no vuelve a rutas relativas fragiles.
 - No volver a buscar imagenes remotas en Python para preview de productos.
 - Publicidades siempre desde storage interno de SmartPrice.
+
+## Anexo fase VPC-F2
+
+Responsable acordado: `Nicolas Gomez`
+
+Tareas ClickUp activadas para esta linea:
+- `VPC-F2-001` viabilidad general Bootstack (`86e2hfey7`)
+- `VPC-F2-002` matriz de reemplazo de widgets (`86e2hff25`)
+- `VPC-F2-003` POC de shell con `AppShell` (`86e2hff8k`)
+- `VPC-F2-004` analisis de pantallas de datos (`86e2hffd1`)
+- `VPC-F2-005` estrategia incremental (`86e2hffgr`)
+
+Documento base obligatorio para esta fase:
+- `INTERNAL_DEV/BOOTSTACK_MIGRATION_BASE.md`

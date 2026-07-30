@@ -1,3 +1,10 @@
+Version 1.16.22
+- Se agrego deteccion automatica de dispositivos en red local desde Configuracion > Dispositivos.
+- SmartPrice ahora puede descubrir verificadores por puerto 8080 e InforTV por puerto 2727 usando chequeos reales de API.
+- El selector de envio mezcla dispositivos registrados con detectados, muestra el tipo y permite guardar detectados en lote.
+- Los envios de Productos solo descubren verificadores, y los de Publicidad solo dispositivos InforTV.
+- Si no hay verificadores online registrados, los envios automaticos y headless intentan descubrir equipos en la red antes de abortar.
+
 Version 1.16.13
 - El envio de publicidades ahora adapta la lista al dispositivo real seleccionado.
 - Si el dispositivo soporta multi-monitor y no hay pantallas configuradas por grupo, duplica el grupo activo en todas las pantallas detectadas.
@@ -183,3 +190,8 @@ Version 1.16.20
 - Reemplazado el loader basado en CustomTkinter por un overlay robusto con tk/ttk.
 - Esto evita fallos de DPI/escalado en sesiones Windows secundarias donde aparecia bad screen distance al crear el loader.
 - Se mantiene el mensaje de estado durante el arranque y la apertura inicial de modulos.
+
+Version 1.16.21
+- Mejorado el guardado de config compartida con lock de archivo y reintentos para escenarios multiusuario.
+- Publicidad ahora refresca la configuracion compartida desde ProgramData antes de leer, enviar o editar grupos/globales.
+- Al abrir el modulo Publicidad desde otro usuario se sincronizan los mismos grupos e items cargados por el usuario principal.
