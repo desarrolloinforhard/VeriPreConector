@@ -23,3 +23,7 @@ Uso obligatorio:
 2. Tomar lock si se toca un modulo compartido.
 3. Registrar cambios relevantes en `RECENT_EVOLUTION.md`.
 4. Mantener el ownership de `TASKS_MISA_NICO.md` salvo coordinacion explicita.
+
+## Anexo reciente
+
+- Se agrega `BOOTSTACK_MIGRATION_BASE.md` como base de trabajo para la fase `VPC-F2` de evaluacion/migracion UI hacia Bootstack.
