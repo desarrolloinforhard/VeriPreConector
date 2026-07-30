@@ -7,6 +7,7 @@ import sys
 import getpass
 import hashlib
 import atexit
+import ctypes
 
 import ttkbootstrap as ttk
 import tkinter as tk
@@ -28,6 +29,7 @@ from DB.database_sybase import ConexionSybase
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
+ERROR_ALREADY_EXISTS = 183
 
 
 def _obtener_scope_instancia():
@@ -47,34 +49,112 @@ def _obtener_puerto_instancia(base=55665):
     return base + offset, scope
 
 
+def _obtener_nombre_mutex_instancia():
+    scope = _obtener_scope_instancia()
+    digest = hashlib.blake2b(scope.encode("utf-8"), digest_size=8).hexdigest()
+    return f"Local\\SmartPrice_{digest}"
+
+
+def _adquirir_mutex_instancia():
+    if os.name != "nt":
+        return None, False
+
+    nombre_mutex = _obtener_nombre_mutex_instancia()
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.CreateMutexW(None, False, nombre_mutex)
+    if not handle:
+        logger.warning("No se pudo crear/abrir mutex de instancia | nombre=%s", nombre_mutex)
+        return None, False
+
+    already_exists = kernel32.GetLastError() == ERROR_ALREADY_EXISTS
+    logger.debug(
+        "Mutex de instancia resuelto | nombre=%s | already_exists=%s",
+        nombre_mutex,
+        already_exists,
+    )
+    return handle, already_exists
+
+
+def _liberar_mutex_instancia(handle):
+    if os.name != "nt" or not handle:
+        return
+
+    try:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        logger.info("Mutex de instancia liberado correctamente.")
+    except Exception:
+        logger.exception("Error al liberar el mutex de instancia.")
+
+
+def _notificar_instancia_existente(puerto, scope):
+    try:
+        with socket.create_connection(("127.0.0.1", puerto), timeout=1.5) as cliente:
+            cliente.sendall(b"SHOW\n")
+        logger.info(
+            "Se notificó a la instancia existente para mostrar la ventana | puerto=%s | scope_usuario=%s",
+            puerto,
+            scope,
+        )
+        return True
+    except OSError:
+        logger.warning(
+            "No se pudo notificar a la instancia existente | puerto=%s | scope_usuario=%s",
+            puerto,
+            scope,
+        )
+        return False
+
+
 def comprobar_instancia_unica(puerto_base=55665):
     puerto, scope = _obtener_puerto_instancia(puerto_base)
+    mutex_handle, already_exists = _adquirir_mutex_instancia()
     logger.debug(
         "Verificando instancia única de la aplicación | puerto=%s | scope_usuario=%s",
         puerto,
         scope,
     )
 
+    if already_exists:
+        logger.warning(
+            "Se detectó otra instancia en ejecución para el mismo usuario por mutex | puerto=%s | scope_usuario=%s",
+            puerto,
+            scope,
+        )
+        _notificar_instancia_existente(puerto, scope)
+        messagebox.showinfo(
+            "Aplicación ya en ejecución",
+            "La aplicación ya está abierta para este usuario.\n"
+            "Si estaba minimizada, se intentó mostrarla automáticamente."
+        )
+        sys.exit(0)
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.bind(("127.0.0.1", puerto))
+        sock.listen(5)
         logger.info(
             "Instancia única confirmada. Socket de bloqueo adquirido | puerto=%s | scope_usuario=%s",
             puerto,
             scope,
         )
-        return sock  # mantiene el socket abierto
+        return {
+            "socket": sock,
+            "puerto": puerto,
+            "scope": scope,
+            "mutex": mutex_handle,
+        }
     except OSError:
         logger.warning(
-            "Se detectó otra instancia en ejecución para el mismo usuario | puerto=%s | scope_usuario=%s",
+            "No se pudo abrir el socket de control de instancia | puerto=%s | scope_usuario=%s",
             puerto,
             scope,
         )
-        messagebox.showinfo(
-            "Aplicación ya en ejecución",
-            "La aplicación ya está abierta para este usuario.\nRevisá la bandeja del sistema (icono cerca del reloj)."
-        )
-        sys.exit(0)
+        return {
+            "socket": None,
+            "puerto": puerto,
+            "scope": scope,
+            "mutex": mutex_handle,
+        }
 
 
 class GUI_MAIN:
@@ -83,6 +163,12 @@ class GUI_MAIN:
         self.version = version
 
         self.socket_lock = comprobar_instancia_unica()
+        self.socket_lock_server = self.socket_lock["socket"]
+        self.socket_lock_port = self.socket_lock["puerto"]
+        self.socket_lock_scope = self.socket_lock["scope"]
+        self.instance_mutex = self.socket_lock.get("mutex")
+        self.socket_listener_thread = None
+        self._socket_listener_running = False
         self.DICT_WIDGETS = WidgetRegistry()
         self.VIGIA_FRAME = "INICIO"
         self.VIGIA_VOLVER = [self.VIGIA_FRAME]
@@ -141,6 +227,7 @@ class GUI_MAIN:
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "stop", self.ctk_loader.stop_loader)
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "message", self.ctk_loader.set_message)
         self.mostrar_loader_global("Iniciando SmartPrice...")
+        self._iniciar_listener_instancia()
         self.ventana_creacion_caja.after(80, self._iniciar_bootstrap)
 
         atexit.register(self._cleanup_tray_icon)
@@ -168,7 +255,44 @@ class GUI_MAIN:
         self.sidebar_muted = "#4f6478"
         self.sidebar_border = "#e6edf4"
         self.sidebar_brand = "#149455"
+        self.sidebar_expanded_width = 176
         self.sidebar_item_width = 158
+
+    def _iniciar_listener_instancia(self):
+        if self._socket_listener_running or self.socket_lock_server is None:
+            return
+
+        self._socket_listener_running = True
+
+        def escuchar():
+            logger.debug(
+                "Listener de instancia única iniciado | puerto=%s | scope_usuario=%s",
+                self.socket_lock_port,
+                self.socket_lock_scope,
+            )
+            while self._socket_listener_running:
+                try:
+                    cliente, _addr = self.socket_lock_server.accept()
+                except OSError:
+                    break
+
+                with cliente:
+                    try:
+                        mensaje = cliente.recv(64).decode("utf-8", errors="ignore").strip().upper()
+                    except OSError:
+                        continue
+
+                if mensaje == "SHOW":
+                    logger.info("Se recibió solicitud SHOW desde otra instancia.")
+                    try:
+                        self.ventana_creacion_caja.after(0, self.mostrar_desde_bandeja)
+                    except Exception:
+                        logger.exception("No se pudo mostrar la ventana desde el listener de instancia.")
+
+            logger.debug("Listener de instancia única detenido.")
+
+        self.socket_listener_thread = threading.Thread(target=escuchar, daemon=True)
+        self.socket_listener_thread.start()
 
     def mostrar_loader_global(self, mensaje="Cargando..."):
         try:
@@ -423,6 +547,7 @@ class GUI_MAIN:
         self.tray_icon = None
 
         if icon is None:
+            self._cleanup_socket_lock()
             return
 
         try:
@@ -435,6 +560,26 @@ class GUI_MAIN:
             logger.info("Icono de bandeja detenido correctamente.")
         except Exception:
             logger.exception("Error al detener el icono de bandeja.")
+
+        self._cleanup_socket_lock()
+
+    def _cleanup_socket_lock(self):
+        self._socket_listener_running = False
+
+        try:
+            if self.socket_lock_server:
+                self.socket_lock_server.close()
+                logger.info(
+                    "Socket de bloqueo liberado | puerto=%s | scope_usuario=%s",
+                    self.socket_lock_port,
+                    self.socket_lock_scope,
+                )
+        except Exception:
+            logger.exception("Error al cerrar el socket de bloqueo.")
+        finally:
+            self.socket_lock_server = None
+            _liberar_mutex_instancia(self.instance_mutex)
+            self.instance_mutex = None
 
     def cerrar_aplicacion(self):
         logger.info("Cerrando aplicación de forma controlada.")
@@ -450,7 +595,7 @@ class GUI_MAIN:
         self.frame_menu = ttk.Frame(
             self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"),
             bootstyle="light",
-            width=176,
+            width=self.sidebar_expanded_width,
         )
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_menu", self.frame_menu)
         self.frame_menu.grid(row=0, column=0, sticky="NSEW")
@@ -588,6 +733,9 @@ class GUI_MAIN:
             widget.bind("<Enter>", lambda _e: self._hover_footer_action(self.boton_info, self.boton_info_icon, self.boton_info_texto, True))
             widget.bind("<Leave>", lambda _e: self._hover_footer_action(self.boton_info, self.boton_info_icon, self.boton_info_texto, False))
 
+        self._render_footer_action(self.boton_info, self.boton_info_icon, self.boton_info_texto, False)
+        if self.boton_setting:
+            self._render_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, False)
         logger.debug("frameMenu construido correctamente.")
 
     def _cargar_logo_sidebar(self, path, max_width, max_height):
@@ -655,6 +803,7 @@ class GUI_MAIN:
             "shape": bg_shape,
             "icon_id": icon_id,
             "text_id": text_id,
+            "label": text,
             "active": False,
         }
         self._aplicar_estado_tarjeta_menu(key, active=False, hover=False)
@@ -688,6 +837,21 @@ class GUI_MAIN:
         frame.configure(bg=bg)
         icon.configure(bg=bg)
         label.configure(bg=bg, fg=fg)
+
+    def _render_footer_action(self, frame, icon, label, collapsed):
+        if collapsed:
+            label.pack_forget()
+            icon.pack_forget()
+            icon.pack(anchor="center", pady=4)
+            frame.pack_propagate(False)
+            frame.configure(height=34)
+        else:
+            icon.pack_forget()
+            icon.pack(side="left")
+            if not label.winfo_manager():
+                label.pack(side="left", padx=(10, 0))
+            frame.configure(height=1)
+            frame.pack_propagate(True)
 
     def _rounded_rect_points(self, x1, y1, x2, y2, radius):
         return [
@@ -754,7 +918,11 @@ class GUI_MAIN:
             messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Publicidad.")
             return
         logger.info("NavegaciÃ³n solicitada a secciÃ³n PUBLICIDAD.")
-        self._abrir_modulo_con_loader("publicidad", "Cargando módulo Publicidad...")
+        self._abrir_modulo_con_loader(
+            "publicidad",
+            "Cargando módulo Publicidad...",
+            callback_despues=lambda: self.contenido_publicidad.sincronizar_publicidades_compartidas(),
+        )
 
     def command_button_configuracion(self):
         if not self._tiene_permiso("configuracion"):
