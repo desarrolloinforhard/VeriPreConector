@@ -3,7 +3,7 @@ import sys
 import subprocess
 import threading
 import time
-from tkinter import BooleanVar, StringVar, filedialog, messagebox, simpledialog
+from tkinter import BooleanVar, StringVar, filedialog, messagebox
 import ttkbootstrap as ttk
 from FUNC.windows_manager import VentanaManager 
 from DB.database_sybase import ConexionSybase, dsn_configurados
@@ -1313,15 +1313,17 @@ class GUI_CONFIG:
             valor = combo.get().strip().lower()
             if valor == "verificadores":
                 return ("verificador",)
-            if valor == "infortv":
+            if valor == "infotv":
                 return ("infotv",)
             return ("verificador", "infotv")
 
         def iniciar_busqueda():
+            tipos = resolver_tipos()
+            cache_habilitado = bool(usar_cache.get())
             selector.destroy()
             self._ejecutar_busqueda_dispositivos_red(
-                tipos=resolver_tipos(),
-                use_cache=bool(usar_cache.get()),
+                tipos=tipos,
+                use_cache=cache_habilitado,
             )
 
         acciones = ttk.Frame(selector)
@@ -1390,7 +1392,7 @@ class GUI_CONFIG:
     def _mostrar_resultados_dispositivos_detectados(self, dispositivos):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Dispositivos detectados")
-        top.geometry("860x460")
+        top.geometry("1040x500")
         top.place_window_center()
         top.transient(self.top_level_configuracion)
 
@@ -1400,8 +1402,28 @@ class GUI_CONFIG:
             font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w", padx=14, pady=(14, 8))
 
-        frame_tree = ttk.Frame(top)
-        frame_tree.pack(fill="both", expand=True, padx=14, pady=(0, 10))
+        frame_contenido = ttk.Frame(top)
+        frame_contenido.pack(fill="both", expand=True, padx=14, pady=(0, 10))
+        frame_contenido.columnconfigure(0, weight=4)
+        frame_contenido.columnconfigure(1, weight=2)
+        frame_contenido.rowconfigure(0, weight=1)
+
+        frame_tree = ttk.Frame(frame_contenido)
+        frame_tree.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+
+        frame_filtros = ttk.Frame(frame_tree)
+        frame_filtros.pack(fill="x", pady=(0, 8))
+        ttk.Label(frame_filtros, text="Mostrar:").pack(side="left", padx=(0, 8))
+        filtro_var = ttk.StringVar(value="nuevos")
+        combo_filtro = ttk.Combobox(
+            frame_filtros,
+            state="readonly",
+            values=["Solo nuevos", "Solo registrados", "Todos"],
+            width=18,
+            textvariable=filtro_var,
+        )
+        combo_filtro.pack(side="left")
+        combo_filtro.set("Solo nuevos")
 
         columns = ("nombre", "tipo", "ip", "puerto", "estado")
         tree = ttk.Treeview(frame_tree, columns=columns, show="headings", height=12, selectmode="extended")
@@ -1415,13 +1437,22 @@ class GUI_CONFIG:
         for key, (text, width) in headings.items():
             tree.heading(key, text=text)
             tree.column(key, width=width, anchor="w")
+        tree.tag_configure("nuevo", background="#e9f8ef", foreground="#146c43")
+        tree.tag_configure("registrado", background="#f3f6f9", foreground="#52606d")
 
         scroll_y = ttk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scroll_y.set)
         tree.pack(side="left", fill="both", expand=True)
         scroll_y.pack(side="right", fill="y")
 
+        frame_editor = ttk.LabelFrame(frame_contenido, text="Edición rápida", padding=14)
+        frame_editor.grid(row=0, column=1, sticky="nsew")
+        frame_editor.columnconfigure(1, weight=1)
+
         dispositivos_indexados = {}
+        nombres_editados = {}
+        nuevos_iids = []
+        registrados_iids = []
         existentes = {
             (str(data.get("direccion_ip", "")).strip(), int(data.get("puerto", 0) or 0)): nombre
             for nombre, data in self.datos_dispositivos.items()
@@ -1433,22 +1464,190 @@ class GUI_CONFIG:
             ya_existe = (ip, puerto) in existentes
             estado = "Ya registrado" if ya_existe else "Nuevo"
             iid = f"det_{idx}"
-            dispositivos_indexados[iid] = dispositivo
-            tree.insert(
-                "",
-                "end",
-                iid=iid,
-                values=(
-                    dispositivo.get("nombre") or f"Dispositivo {ip}",
-                    dispositivo.get("tipo", "-"),
-                    ip,
-                    puerto,
-                    estado,
-                ),
-            )
+            nombre_sugerido = dispositivo.get("nombre") or f"Dispositivo {ip}"
+            dispositivos_indexados[iid] = {
+                "data": dispositivo,
+                "ip": ip,
+                "puerto": puerto,
+                "ya_existe": ya_existe,
+                "estado": estado,
+                "tipo": dispositivo.get("tipo", "-"),
+            }
+            nombres_editados[iid] = nombre_sugerido
+            if not ya_existe:
+                nuevos_iids.append(iid)
+            else:
+                registrados_iids.append(iid)
+
+        editor_iid = ttk.StringVar(value="")
+        nombre_var = ttk.StringVar(value="")
+        tipo_var = ttk.StringVar(value="-")
+        ip_var = ttk.StringVar(value="-")
+        puerto_var = ttk.StringVar(value="-")
+        estado_var_editor = ttk.StringVar(value="-")
+
+        def obtener_iids_filtrados():
+            valor = combo_filtro.get().strip().lower()
+            if valor == "solo nuevos":
+                return list(nuevos_iids)
+            if valor == "solo registrados":
+                return list(registrados_iids)
+            return list(dispositivos_indexados.keys())
+
+        def repoblar_tree(preservar_iid=None):
+            visibles = obtener_iids_filtrados()
+            tree.delete(*tree.get_children())
+            for iid in visibles:
+                item = dispositivos_indexados[iid]
+                tree.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=(
+                        nombres_editados.get(iid, ""),
+                        item.get("tipo", "-"),
+                        item.get("ip", ""),
+                        item.get("puerto", ""),
+                        item.get("estado", "-"),
+                    ),
+                    tags=("registrado" if item.get("ya_existe") else "nuevo",),
+                )
+
+            if not visibles:
+                editor_iid.set("")
+                nombre_var.set("")
+                tipo_var.set("-")
+                ip_var.set("-")
+                puerto_var.set("-")
+                estado_var_editor.set("-")
+                ayuda_var.set("No hay dispositivos para el filtro seleccionado.")
+                return
+
+            destino = preservar_iid if preservar_iid in visibles else visibles[0]
+            tree.selection_set((destino,))
+            tree.see(destino)
+            cargar_editor(destino)
+
+        ttk.Label(frame_editor, text="Nombre:").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        entry_nombre = ttk.Entry(frame_editor, textvariable=nombre_var, width=28)
+        entry_nombre.grid(row=0, column=1, sticky="ew", pady=(0, 8))
+
+        ttk.Label(frame_editor, text="Tipo:").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=tipo_var).grid(row=1, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="IP:").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=ip_var).grid(row=2, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="Puerto:").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=puerto_var).grid(row=3, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="Estado:").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=estado_var_editor).grid(row=4, column=1, sticky="w", pady=4)
+
+        ayuda_var = ttk.StringVar(value="Seleccione un dispositivo para editar su nombre antes de guardar.")
+        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", wraplength=240, justify="left").grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(14, 10)
+        )
+
+        def cargar_editor(iid):
+            item = dispositivos_indexados.get(iid)
+            if not item:
+                return
+            dispositivo = item.get("data") or {}
+            valores = tree.item(iid, "values")
+            editor_iid.set(iid)
+            nombre_var.set(nombres_editados.get(iid, valores[0] if valores else ""))
+            tipo_var.set(item.get("tipo", "-"))
+            ip_var.set(str(item.get("ip", "")).strip() or "-")
+            puerto_var.set(str(item.get("puerto", "")).strip() or "-")
+            estado_var_editor.set(valores[4] if len(valores) >= 5 else "-")
+            ayuda_var.set("Puede cambiar el nombre y luego aplicar el cambio a la fila seleccionada.")
+
+        def aplicar_nombre_editado(_event=None):
+            iid = editor_iid.get()
+            if not iid or iid not in dispositivos_indexados:
+                return
+
+            dispositivo = dispositivos_indexados[iid]["data"]
+            nombre_base = (nombre_var.get() or "").strip()
+            if not nombre_base:
+                nombre_base = self._generar_nombre_dispositivo_unico(dispositivo)
+
+            nombre_final = self._resolver_nombre_unico_editado(nombre_base, nombres_editados, excluir_iid=iid)
+
+            nombres_editados[iid] = nombre_final
+            nombre_var.set(nombre_final)
+            valores = list(tree.item(iid, "values"))
+            if valores:
+                valores[0] = nombre_final
+                tree.item(iid, values=valores)
+
+        def aplicar_nombre_a_seleccion():
+            seleccion = tree.selection()
+            if not seleccion:
+                messagebox.showwarning("Buscar en red", "Seleccione uno o más dispositivos para aplicar el nombre.")
+                return
+
+            nombre_base = (nombre_var.get() or "").strip()
+            if not nombre_base:
+                messagebox.showwarning("Buscar en red", "Ingrese un nombre base para aplicar a la selección.")
+                entry_nombre.focus_set()
+                return
+
+            multiples = len(seleccion) > 1
+            for indice, iid in enumerate(seleccion, start=1):
+                base_actual = f"{nombre_base} {indice}" if multiples else nombre_base
+                nombre_final = self._resolver_nombre_unico_editado(base_actual, nombres_editados, excluir_iid=iid)
+                nombres_editados[iid] = nombre_final
+                valores = list(tree.item(iid, "values"))
+                if valores:
+                    valores[0] = nombre_final
+                    tree.item(iid, values=valores)
+
+            cargar_editor(seleccion[0])
+            ayuda_var.set("Nombre aplicado a la selección actual.")
+
+        def seleccionar_item(_event=None):
+            seleccion = tree.selection()
+            if not seleccion:
+                return
+            cargar_editor(seleccion[0])
+
+        def aplicar_filtro(_event=None):
+            repoblar_tree(editor_iid.get() or None)
+
+        def seleccionar_solo_nuevos():
+            if not nuevos_iids:
+                messagebox.showinfo("Buscar en red", "No hay dispositivos nuevos en esta búsqueda.")
+                return
+            combo_filtro.set("Solo nuevos")
+            repoblar_tree(nuevos_iids[0])
+            tree.selection_set(tuple(iid for iid in nuevos_iids if iid in tree.get_children()))
+            ayuda_var.set("Se seleccionaron solo los dispositivos nuevos.")
+
+        ttk.Button(frame_editor, text="Aplicar nombre", command=aplicar_nombre_editado, bootstyle="info-outline").grid(
+            row=6, column=0, columnspan=2, sticky="ew", pady=(0, 8)
+        )
+        ttk.Button(
+            frame_editor,
+            text="Aplicar a selección",
+            command=aplicar_nombre_a_seleccion,
+            bootstyle="secondary-outline",
+        ).grid(row=7, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        ttk.Button(
+            frame_editor,
+            text="Seleccionar solo nuevos",
+            command=seleccionar_solo_nuevos,
+            bootstyle="success-outline",
+        ).grid(row=8, column=0, columnspan=2, sticky="ew")
+        entry_nombre.bind("<Return>", aplicar_nombre_editado)
+        tree.bind("<<TreeviewSelect>>", seleccionar_item)
+        combo_filtro.bind("<<ComboboxSelected>>", aplicar_filtro)
 
         if dispositivos:
-            tree.selection_set(tree.get_children())
+            seleccion_inicial = nuevos_iids or list(dispositivos_indexados.keys())
+            if seleccion_inicial:
+                repoblar_tree(seleccion_inicial[0])
+                visibles = [iid for iid in seleccion_inicial if iid in tree.get_children()]
+                if visibles:
+                    tree.selection_set(tuple(visibles))
 
         info_var = ttk.StringVar(
             value="No se encontraron dispositivos." if not dispositivos else f"Dispositivos encontrados: {len(dispositivos)}"
@@ -1467,17 +1666,23 @@ class GUI_CONFIG:
             agregados = 0
             omitidos = 0
             for iid in seleccion:
-                dispositivo = dispositivos_indexados.get(iid)
+                item = dispositivos_indexados.get(iid)
+                dispositivo = item.get("data") if item else None
                 if not dispositivo:
                     continue
 
-                ip = str(dispositivo.get("ip", "")).strip()
-                puerto = int(dispositivo.get("puerto", 0) or 0)
+                ip = str(item.get("ip", "")).strip()
+                puerto = int(item.get("puerto", 0) or 0)
                 if (ip, puerto) in existentes:
                     omitidos += 1
                     continue
 
-                nombre = self._generar_nombre_dispositivo_unico(dispositivo)
+                nombre = (nombres_editados.get(iid) or "").strip() or self._generar_nombre_dispositivo_unico(dispositivo)
+
+                existentes_nombres = set(self.datos_dispositivos.keys()) | set(existentes.values())
+                if nombre in existentes_nombres:
+                    nombre = self._generar_nombre_dispositivo_unico({"nombre": nombre})
+
                 comentario = dispositivo.get("comentario") or "Detectado automaticamente en red"
                 tipo = dispositivo.get("tipo")
                 if tipo:
@@ -1485,6 +1690,11 @@ class GUI_CONFIG:
 
                 self.dispositivos_dao.crear(nombre, ip, str(puerto), comentario)
                 existentes[(ip, puerto)] = nombre
+                self.datos_dispositivos[nombre] = {
+                    "direccion_ip": ip,
+                    "puerto": str(puerto),
+                    "comentario": comentario,
+                }
                 agregados += 1
 
             self.combobox_dispositivos.config(values=self.actualizar_datos_combobox())
@@ -1509,6 +1719,21 @@ class GUI_CONFIG:
             nombre = f"{base} ({sufijo})"
             sufijo += 1
         return nombre
+
+    def _resolver_nombre_unico_editado(self, nombre_base, nombres_editados, excluir_iid=None):
+        nombres_reservados = set(self.datos_dispositivos.keys())
+        for otro_iid, otro_nombre in nombres_editados.items():
+            if otro_iid != excluir_iid:
+                nombre = (otro_nombre or "").strip()
+                if nombre:
+                    nombres_reservados.add(nombre)
+
+        nombre_final = nombre_base
+        sufijo = 2
+        while nombre_final in nombres_reservados:
+            nombre_final = f"{nombre_base} ({sufijo})"
+            sufijo += 1
+        return nombre_final
             
     def command_button_agregar_datos_de_conexion(self):
         try:
