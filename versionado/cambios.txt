@@ -1,3 +1,11 @@
+Version 1.16.23
+- Se mejoro la ventana de dispositivos detectados con panel lateral para editar nombres antes de guardar.
+- Ahora se puede aplicar un nombre individual o masivo a la seleccion, con resolucion automatica de nombres duplicados.
+- La grilla de deteccion incorpora filtros `Solo nuevos`, `Solo registrados` y `Todos`, con colores visuales por estado.
+- Se robustecio el guardado compartido de `config.json` con lock de archivo y reintentos.
+- La instancia unica por usuario ahora puede reactivar la ventana existente mediante mutex + socket local.
+- El instalador prepara `C:\ProgramData\SmartPrice` con permisos para usuarios y queda alineado con la version actual.
+
 Version 1.16.22
 - Se agrego deteccion automatica de dispositivos en red local desde Configuracion > Dispositivos.
 - SmartPrice ahora puede descubrir verificadores por puerto 8080 e InforTV por puerto 2727 usando chequeos reales de API.

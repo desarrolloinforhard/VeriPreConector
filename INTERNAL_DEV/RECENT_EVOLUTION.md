@@ -44,9 +44,15 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - `config.json` ahora usa ruta persistente mas estable en compilado:
   - `C:\ProgramData\SmartPrice\config.json`
 - Guardado de config convertido a flujo atomico.
+- Guardado de config reforzado con lock de archivo y reintentos para escenarios multiusuario.
 - Se ajusto el instalador para no pisar la base `veripre.db` en updates.
-- Se actualizo el instalador para reflejar `1.16.17`.
+- El instalador ahora prepara `C:\ProgramData\SmartPrice` con permisos de escritura para usuarios.
 - `Configuracion > Dispositivos` ahora incluye busqueda manual en red con filtro por tipo, cache corta y alta en lote de equipos detectados.
+- La ventana de deteccion ahora permite:
+  - editar nombres en panel lateral,
+  - aplicar nombres masivos a la seleccion,
+  - filtrar `Solo nuevos` / `Solo registrados` / `Todos`,
+  - distinguir visualmente `Nuevo` vs `Ya registrado`.
 
 ## Robustez UI
 
@@ -63,6 +69,7 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 
 - La instancia unica ya no es global a toda la maquina: ahora se resuelve por usuario Windows.
 - Cada sesion de Windows puede abrir su propia instancia y mantener su propia bandeja.
+- Si el usuario relanza la app y ya existe una instancia propia, SmartPrice intenta reactivar la ventana existente.
 - Se agrego modelo de permisos por usuario Windows en `config.json`:
   - `administrador`: acceso completo
   - `pantalla`: solo `Publicidad`

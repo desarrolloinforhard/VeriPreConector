@@ -1,6 +1,6 @@
-# Project Context
+﻿# Project Context
 
-Version actual: `1.16.22`
+Version actual: `1.16.23`
 
 ## 1. Objetivo del sistema
 
@@ -73,16 +73,17 @@ Modos:
 
 ### Configuracion
 1. `GUI_CONFIG.py` edita DSN, API key, toggles y opciones de envio.
-2. `GUI_CONFIG.py` tambien expone pestaña `Usuarios y Permisos` para ver/editar perfiles por usuario Windows.
-3. `GUI_CONFIG.py` ahora permite buscar dispositivos por red local desde la pestaña `Dispositivos`.
-4. `FUNC/config_json.py` guarda configuracion persistente.
+2. `GUI_CONFIG.py` tambien expone pestaÃ±a `Usuarios y Permisos` para ver/editar perfiles por usuario Windows.
+3. `GUI_CONFIG.py` ahora permite buscar dispositivos por red local desde la pestaÃ±a `Dispositivos`, con filtro visual y edicion previa del nombre detectado.
+4. `FUNC/config_json.py` guarda configuracion persistente con lock de archivo para reducir colisiones entre sesiones/usuarios.
 5. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
 
 ### Multiusuario
 1. `GUI_MAIN.py` calcula una instancia unica por usuario Windows, no global a toda la maquina.
 2. Cada usuario obtiene su propia instancia, su propia bandeja y sus permisos efectivos.
-3. Los permisos actuales son por nombre de usuario Windows y viven en `config.json -> perfiles_usuario`.
-4. La base SQLite sigue siendo compartida por instalacion, por lo que los usuarios comparten datos aunque no compartan permisos de UI.
+3. Si una segunda ejecucion del mismo usuario detecta la instancia existente, intenta mostrar la ventana ya abierta via socket local.
+4. Los permisos actuales son por nombre de usuario Windows y viven en `config.json -> perfiles_usuario`.
+5. La base SQLite sigue siendo compartida por instalacion, por lo que los usuarios comparten datos aunque no compartan permisos de UI.
 
 ## 5. Contratos vigentes con Android
 
@@ -110,6 +111,7 @@ Mantener compatibilidad con:
 - Envio incremental real de publicidades aun depende de cambios en Android.
 - El descubrimiento en red actual recorre subredes privadas tipo `/24`; en redes grandes o segmentadas puede requerir optimizacion futura.
 - Multiusuario comparte la misma SQLite: funciona para escenarios controlados, pero puede exponer `database is locked` o demoras si dos sesiones escriben fuerte al mismo tiempo.
+- Aunque `config.json` ya usa lock y reintentos, sigue siendo un archivo compartido: hay que seguir evitando cambios innecesarios y escrituras redundantes.
 - La seguridad actual es de capa aplicacion/UI; cualquier modulo nuevo debe integrarse explicitamente al sistema de permisos para no abrir bypasses.
 - `CustomTkinter` mostro fragilidad en loaders/overlays bajo ciertas sesiones Windows Server con distinto escalado; para overlays criticos conviene priorizar `tk/ttk` puro.
 - La rama `publicidades` del config es compartida entre usuarios; las vistas de Publicidad deben refrescar desde disco antes de operar para no trabajar con copias stale en memoria.
