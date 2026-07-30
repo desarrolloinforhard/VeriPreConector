@@ -1059,7 +1059,7 @@ class GUI_MAIN:
             logger.debug("ContenidoPublicidad inicializado correctamente.")
 
     def CONEXIONES_DBA(self):
-        ruta_db = os.path.join(os.path.dirname(__file__), "..", "db", "veripre.db")
+        ruta_db = str(obtener_sqlite_path())
         logger.info("Inicializando conexiones de base de datos | sqlite_path=%s", ruta_db)
 
         self.DICT_WIDGETS.register("DATABASE", "CONEXIONDBA", SQLiteDB(ruta_db))

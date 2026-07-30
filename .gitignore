@@ -19,7 +19,11 @@ logs/
 # Output / build
 OUTPUT/
 dist/
-build/
+build/*
+!build/
+!build/*.json
+!build/*.txt
+releases/
 
 # Base de datos local
 *.db

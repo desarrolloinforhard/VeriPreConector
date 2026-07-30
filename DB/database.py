@@ -1,4 +1,6 @@
 import sqlite3
+from pathlib import Path
+
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -17,11 +19,15 @@ class SQLiteDB:
     def conectar(self):
         """Establece la conexión con la base de datos."""
         try:
+            Path(self.db_name).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(self.db_name, check_same_thread=False)
             self.cursor = self.connection.cursor()
             logger.debug("Conexión SQLite abierta | db_name=%s", self.db_name)
         except sqlite3.Error:
+            self.connection = None
+            self.cursor = None
             logger.exception("Error al conectar con la base de datos SQLite | db_name=%s", self.db_name)
+            raise
 
     def crear_tablas(self):
         """Crea las tablas necesarias en la base de datos."""
@@ -37,6 +43,7 @@ class SQLiteDB:
             logger.info("Proceso de creación/verificación de tablas finalizado correctamente.")
         except sqlite3.Error:
             logger.exception("Error al crear las tablas en SQLite.")
+            raise
         finally:
             self.cerrar_conexion()
 

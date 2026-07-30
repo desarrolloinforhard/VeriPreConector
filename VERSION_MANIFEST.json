@@ -1,0 +1,32 @@
+{
+  "app": {
+    "name": "SmartPrice",
+    "display_name": "VeriPre Connector",
+    "version": "1.16.23",
+    "build_mode": "folder",
+    "entrypoint": "main.py",
+    "description": "SmartPrice - VeriPre Connector desktop application",
+    "organization": "Inforhard Servicios S.R.L",
+    "company": "Inforhard Servicios S.R.L",
+    "original_filename": "SmartPrice.exe",
+    "console": true
+  },
+  "build": {
+    "tool": "auto-py-to-exe / pyinstaller",
+    "console": true,
+    "onefile": false,
+    "version_file": "build/windows_version_info.txt",
+    "config_file": "build/auto_py_to_exe.refactor.json",
+    "release_dir": "releases"
+  },
+  "runtime": {
+    "venv_hint": "..\\venv_VeriPre_Connector\\Scripts\\python.exe",
+    "resource_dirs": [
+      "ASSETS",
+      "API_GO-UPC",
+      "versionado",
+      "FUNC/ctk_components/src",
+      "DB/veripre.db"
+    ]
+  }
+}

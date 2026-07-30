@@ -5,6 +5,7 @@ import requests
 
 from DB.database import SQLiteDB
 from DB.database_sybase import ConexionSybase
+from FUNC.config_json import obtener_sqlite_path
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
 from core.services.device_discovery_service import DeviceDiscoveryService
 from core.services.dispositivos_envio_service import DispositivosEnvioService
@@ -15,7 +16,7 @@ from core.services.productos_sync_service import ProductosSyncService
 class HeadlessEnvioService:
     def __init__(self, db_path=None, max_workers=4, progress_callback=None):
         root_dir = Path(__file__).resolve().parents[2]
-        self.db_path = str(db_path or root_dir / "DB" / "veripre.db")
+        self.db_path = str(db_path or obtener_sqlite_path() or root_dir / "DB" / "veripre.db")
         self.max_workers = max_workers
         self.progress_callback = progress_callback
         self.sqlite_db = SQLiteDB(self.db_path)

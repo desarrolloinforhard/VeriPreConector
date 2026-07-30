@@ -12,6 +12,7 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 CONFIG_FILENAME = "config.json"
+DB_FILENAME = "veripre.db"
 APP_DIRNAME = "SmartPrice"
 ENV_CONFIG_DIR = "SMARTPRICE_CONFIG_DIR"
 CONFIG_LOCK_FILENAME = "config.lock"
@@ -62,6 +63,81 @@ def obtener_data_dir() -> Path:
     data_dir = _default_config_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
+
+
+def _legacy_db_candidates() -> list[Path]:
+    project_root = _project_root()
+    candidates = [
+        project_root / "DB" / DB_FILENAME,
+        project_root / "db" / DB_FILENAME,
+        Path.cwd() / "DB" / DB_FILENAME,
+        Path.cwd() / "db" / DB_FILENAME,
+        Path.cwd() / DB_FILENAME,
+    ]
+
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        candidates.extend(
+            [
+                exe_dir / "_internal" / "DB" / DB_FILENAME,
+                exe_dir / "_internal" / "db" / DB_FILENAME,
+                exe_dir / "DB" / DB_FILENAME,
+                exe_dir / "db" / DB_FILENAME,
+                exe_dir / DB_FILENAME,
+            ]
+        )
+
+    unique = []
+    seen = set()
+    for path in candidates:
+        key = str(path).lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def obtener_sqlite_path() -> Path:
+    if not getattr(sys, "frozen", False):
+        return _project_root() / "DB" / DB_FILENAME
+
+    data_dir = obtener_data_dir()
+    db_path = data_dir / DB_FILENAME
+    fallback_path = None
+
+    if not db_path.exists():
+        for legacy_path in _legacy_db_candidates():
+            if not legacy_path.exists():
+                continue
+            if fallback_path is None:
+                fallback_path = legacy_path
+            try:
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_path, db_path)
+                logger.info(
+                    "SQLite migrado a ruta persistente | origen=%s | destino=%s",
+                    legacy_path,
+                    db_path,
+                )
+                break
+            except OSError:
+                logger.exception(
+                    "No se pudo migrar SQLite legado | origen=%s | destino=%s",
+                    legacy_path,
+                    db_path,
+                )
+
+    if db_path.exists():
+        return db_path
+
+    if fallback_path is not None:
+        logger.warning(
+            "Usando SQLite legado por no poder migrarlo a la ruta persistente | path=%s",
+            fallback_path,
+        )
+        return fallback_path
+
+    return db_path
 
 
 def obtener_config_path() -> Path:
