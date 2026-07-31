@@ -2,8 +2,10 @@ import base64
 import os
 from pathlib import Path
 from urllib.parse import quote
+from io import BytesIO
 
 import requests
+from PIL import Image
 
 
 class ProductImageResolver:
@@ -46,12 +48,14 @@ class ProductImageResolver:
 
         imagen = self._buscar_en_carpetas(codigo)
         if imagen:
+            imagen = self._normalizar_imagen_producto(imagen["bytes"], imagen["formato"], codigo)
             self._guardar_en_sqlite(codigo, imagen["bytes"], imagen["formato"])
             return self._a_base64(imagen["bytes"]), imagen["formato"]
 
         if self.incluir_api_propia:
             imagen = self._buscar_en_api_propia(codigo)
             if imagen:
+                imagen = self._normalizar_imagen_producto(imagen["bytes"], imagen["formato"], codigo)
                 self._guardar_en_sqlite(codigo, imagen["bytes"], imagen["formato"])
                 self._guardar_en_carpeta(codigo, imagen["bytes"], imagen["formato"])
                 return self._a_base64(imagen["bytes"]), imagen["formato"]
@@ -59,6 +63,7 @@ class ProductImageResolver:
         if self.incluir_go_upc:
             imagen = self._buscar_en_go_upc(codigo)
             if imagen:
+                imagen = self._normalizar_imagen_producto(imagen["bytes"], imagen["formato"], codigo)
                 self._guardar_en_sqlite(codigo, imagen["bytes"], imagen["formato"])
                 ruta = self._guardar_en_carpeta(codigo, imagen["bytes"], imagen["formato"])
                 self._subir_a_api_propia(codigo, imagen["bytes"], imagen["formato"], ruta)
@@ -243,6 +248,49 @@ class ProductImageResolver:
         if "/" in codigo or "\\" in codigo or "\x00" in codigo:
             return ""
         return codigo
+
+    def _normalizar_imagen_producto(self, imagen_bytes, formato, codigo=None):
+        try:
+            img = Image.open(BytesIO(imagen_bytes))
+
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA")
+
+            if img.mode == "RGBA":
+                fondo = Image.new("RGB", img.size, (255, 255, 255))
+                fondo.paste(img, mask=img.split()[3])
+                img = fondo
+            else:
+                img = img.convert("RGB")
+
+            maximo = (1400, 1400)
+            objetivo = (1000, 1000)
+
+            if img.width > maximo[0] or img.height > maximo[1]:
+                img.thumbnail(maximo, Image.Resampling.LANCZOS)
+
+            img.thumbnail(objetivo, Image.Resampling.LANCZOS)
+
+            calidad = 88
+            buffer = BytesIO()
+            img.save(buffer, format="JPEG", quality=calidad, optimize=True)
+            contenido = buffer.getvalue()
+
+            while len(contenido) > 700 * 1024 and calidad > 65:
+                calidad -= 5
+                buffer = BytesIO()
+                img.save(buffer, format="JPEG", quality=calidad, optimize=True)
+                contenido = buffer.getvalue()
+
+            if codigo:
+                self.estado_callback(
+                    f"[imagenes] Normalizada {codigo}: {img.width}x{img.height}px | {len(contenido) / 1024:.0f} KB"
+                )
+
+            return {"bytes": contenido, "formato": "jpg"}
+        except Exception as e:
+            self.estado_callback(f"[imagenes] No se pudo normalizar {codigo or '-'}: {e}")
+            return {"bytes": imagen_bytes, "formato": "jpg" if formato == "jpeg" else formato}
 
     def _a_base64(self, imagen_bytes):
         return base64.b64encode(imagen_bytes).decode("utf-8")

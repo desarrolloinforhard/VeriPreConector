@@ -147,6 +147,70 @@ function Add-TclTkDataArgs {
     }
 }
 
+function Resolve-VlcRuntimePath {
+    $candidates = @(
+        $env:VLC_DIR,
+        "C:\Program Files\VideoLAN\VLC",
+        "C:\Program Files (x86)\VideoLAN\VLC"
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    foreach ($candidate in $candidates) {
+        if ((Test-Path $candidate) -and (Test-Path (Join-Path $candidate "libvlc.dll"))) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    return $null
+}
+
+function Add-VlcRuntimeArgs {
+    param([System.Collections.Generic.List[string]]$ArgsList)
+
+    $vlcRoot = Resolve-VlcRuntimePath
+    if ([string]::IsNullOrWhiteSpace($vlcRoot)) {
+        Write-Warning @"
+No se encontro runtime local de VLC para adjuntar al build.
+Se buscó en:
+- VLC_DIR
+- C:\Program Files\VideoLAN\VLC
+- C:\Program Files (x86)\VideoLAN\VLC
+
+La app compilada puede fallar en maquinas donde VLC no este instalado.
+"@
+        return
+    }
+
+    Write-Host "VLC runtime detectado: $vlcRoot"
+
+    $binaryFiles = @(
+        "libvlc.dll",
+        "libvlccore.dll"
+    )
+
+    foreach ($binaryFile in $binaryFiles) {
+        $fullPath = Join-Path $vlcRoot $binaryFile
+        if (Test-Path $fullPath) {
+            $ArgsList.Add("--add-binary")
+            $ArgsList.Add("$fullPath;.")
+        }
+    }
+
+    $dataDirs = @(
+        "plugins",
+        "lua",
+        "locale",
+        "hrtfs"
+    )
+
+    foreach ($dataDir in $dataDirs) {
+        $fullPath = Join-Path $vlcRoot $dataDir
+        if (Test-Path $fullPath) {
+            $ArgsList.Add("--add-data")
+            $ArgsList.Add("$fullPath;$dataDir")
+        }
+    }
+}
+
 function Test-BuildPython {
     param([string]$PythonExe)
 
@@ -430,6 +494,7 @@ if (-not [string]::IsNullOrWhiteSpace($manualArgs)) {
 }
 
 Add-TclTkDataArgs -ArgsList $argsList
+Add-VlcRuntimeArgs -ArgsList $argsList
 Add-ValueArg $argsList "--additional-hooks-dir" $hooksPath
 Add-ValueArg $argsList "--version-file" $versionFilePath
 Add-ValueArg $argsList "--distpath" $distPath

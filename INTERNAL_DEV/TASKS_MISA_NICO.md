@@ -37,6 +37,16 @@ Si un cambio cruza ambas lineas, se define contrato primero y luego cada uno imp
    - `VPC-F1-009` cierre de integracion Python-Android (`86e2hfxz2`)
 7. Consolidar descubrimiento de dispositivos en red:
    - `VPC-F1-010` deteccion automatica de dispositivos y alta desde GUI (`86e2jhakm`)
+8. Abrir linea de ofertas por precio desde `ATIPICAS`:
+   - `VPC-F3-001` esquema SQLite y snapshot local de ofertas activas (`86e2k22vh`) [completado]
+   - `VPC-F3-002` sync Sybase -> SQLite usando `ATIPICAS` (`86e2k22vu`) [completado]
+   - `VPC-F3-003` envio Android en `batch_productos` con `tiene_oferta` y `precio_oferta` (`86e2k22wb`) [completado]
+   - `VPC-F3-004` visualizacion y validacion en UI / verificador (`86e2k22wr`) [en curso]
+9. Abrir linea de normalizacion de codigos legados sin digito verificador:
+   - `VPC-F4-001` estrategia EAN/UPC y helper de normalizacion (`86e2k4289`)
+   - `VPC-F4-002` persistencia local de codigo original vs normalizado (`86e2k428k`)
+   - `VPC-F4-003` sync y busqueda local con fallback por codigo legacy (`86e2k4295`)
+   - `VPC-F4-004` envio Android con codigo normalizado y compatibilidad (`86e2k429k`)
 
 ## Nico - Ownership principal
 
@@ -83,3 +93,53 @@ Tareas ClickUp activadas para esta linea:
 
 Documento base obligatorio para esta fase:
 - `INTERNAL_DEV/BOOTSTACK_MIGRATION_BASE.md`
+
+## Anexo fase VPC-F3
+
+Responsable acordado: `Misael Ramirez`
+
+Objetivo tecnico inicial:
+- No mezclar canastas ni packs con precio oferta.
+- Primera implementacion usando solo `DBA.ATIPICAS`.
+- Regla activa: `CCLAVEC = 'O'` + `DFECINI/DFECFIN` vigentes.
+- `NPRECIO` se considera `precio_oferta`.
+- `NPVP1` se mantiene como precio principal normal.
+
+Contrato candidato para Android / Verificador:
+- reutilizar `POST /api/veri/batch_productos`
+- agregar campos opcionales:
+  - `tiene_oferta`
+  - `precio_oferta`
+  - `oferta_desde`
+  - `oferta_hasta`
+  - `oferta_origen`
+  - `oferta_ccoddiv`
+  - `oferta_dto`
+
+Notas:
+- Esta fase debe dejar trazabilidad suficiente para pasarse al chat del verificador de precio.
+- No se incorpora todavia `OFCANASTA`, `OFERTAP` ni `MIX_CANAS` al payload operativo principal.
+
+## Anexo fase VPC-F4
+
+Responsable acordado: `Misael Ramirez`
+
+Objetivo tecnico inicial:
+- Resolver clientes que guardan `CCODEBAR` en formato legacy de `12` digitos sin check digit.
+- No asumir que todo valor de `12` digitos es UPC-A valido; la fase inicial se enfoca en fallback `EAN-13` para clientes legacy relevados.
+- No romper productos que ya tienen `13` digitos correctos.
+
+Hipotesis operativa actual:
+- Hoy SmartPrice guarda y envia el codigo exactamente como viene desde Sybase.
+- Para clientes legacy eso provoca que el verificador reciba `12` digitos y no el `EAN-13` completo.
+
+Alcance propuesto:
+- agregar helper de calculo de digito verificador `EAN-13`
+- conservar `codigo_original`
+- derivar `codigo_normalizado`
+- usar fallback de busqueda y envio sobre el codigo normalizado
+
+Fuera de alcance inicial:
+- deteccion completa de todos los formatos GS1
+- reescritura de historicos fuera de la sync controlada
+- reglas especiales por proveedor salvo que se documenten luego

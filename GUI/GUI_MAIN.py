@@ -8,6 +8,7 @@ import getpass
 import hashlib
 import atexit
 import ctypes
+import subprocess
 
 import ttkbootstrap as ttk
 import tkinter as tk
@@ -185,10 +186,12 @@ class GUI_MAIN:
         logger.debug("Cargando configuraciÃ³n JSON.")
         self.config_data = cargar_config()
         self.usuario_windows = _obtener_scope_instancia()
+        self.usuario_windows_es_admin = self._es_usuario_windows_admin()
         self._asegurar_perfiles_usuario_config()
         self.permisos_usuario = self._resolver_permisos_usuario()
         self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
         self.DICT_WIDGETS.register("CONFIG", "usuario_windows", self.usuario_windows)
+        self.DICT_WIDGETS.register("CONFIG", "usuario_windows_es_admin", self.usuario_windows_es_admin)
         self.DICT_WIDGETS.register("CONFIG", "permisos_usuario", self.permisos_usuario)
 
         try:
@@ -404,6 +407,41 @@ class GUI_MAIN:
 
         self.ventana_creacion_caja.after(40, tarea)
 
+    def _es_usuario_windows_admin(self):
+        if os.name != "nt":
+            return False
+
+        try:
+            resultado = subprocess.run(
+                ["whoami", "/groups"],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+        except Exception:
+            logger.exception(
+                "No se pudo consultar el rol Windows del usuario actual | usuario=%s",
+                self.usuario_windows,
+            )
+            return False
+
+        if resultado.returncode != 0:
+            logger.warning(
+                "whoami /groups devolvió error al consultar rol administrador | usuario=%s | returncode=%s",
+                self.usuario_windows,
+                resultado.returncode,
+            )
+            return False
+
+        es_admin = "S-1-5-32-544" in (resultado.stdout or "")
+        logger.info(
+            "Rol Windows resuelto para usuario actual | usuario=%s | es_admin=%s",
+            self.usuario_windows,
+            es_admin,
+        )
+        return es_admin
+
     def _asegurar_perfiles_usuario_config(self):
         perfiles = self.config_data.setdefault("perfiles_usuario", {})
         changed = False
@@ -434,7 +472,7 @@ class GUI_MAIN:
 
         for perfil, perfil_default in defaults.items():
             if perfil not in perfiles:
-                perfiles[perfil] = perfil_default
+                perfiles[perfil] = dict(perfil_default)
                 changed = True
                 continue
 
@@ -444,20 +482,47 @@ class GUI_MAIN:
                     modulos[modulo] = valor
                     changed = True
 
-        if self.usuario_windows not in perfiles:
-            perfiles[self.usuario_windows] = {
-                "modulos": {
-                    "productos": False,
-                    "publicidad": False,
-                    "configuracion": False,
-                },
-                "estado": "pendiente",
-            }
+        perfil_usuario = perfiles.get(self.usuario_windows)
+
+        if perfil_usuario is None:
+            if self.usuario_windows_es_admin:
+                perfiles[self.usuario_windows] = {
+                    "modulos": dict(defaults["administrador"]["modulos"]),
+                    "estado": "activo",
+                }
+                logger.info(
+                    "Usuario Windows nuevo detectado con rol administrador. Se crea perfil con acceso completo | usuario=%s",
+                    self.usuario_windows,
+                )
+            else:
+                perfiles[self.usuario_windows] = {
+                    "modulos": {
+                        "productos": False,
+                        "publicidad": False,
+                        "configuracion": False,
+                    },
+                    "estado": "pendiente",
+                }
+                logger.info(
+                    "Usuario Windows nuevo detectado. Se crea perfil pendiente sin accesos | usuario=%s",
+                    self.usuario_windows,
+                )
             changed = True
-            logger.info(
-                "Usuario Windows nuevo detectado. Se crea perfil pendiente sin accesos | usuario=%s",
-                self.usuario_windows,
+        else:
+            modulos_usuario = perfil_usuario.setdefault("modulos", {})
+            estado_usuario = str(perfil_usuario.get("estado", "") or "").strip().lower()
+            tiene_algun_modulo = any(
+                bool(modulos_usuario.get(modulo, False))
+                for modulo in ("productos", "publicidad", "configuracion")
             )
+            if self.usuario_windows_es_admin and (estado_usuario == "pendiente" or not tiene_algun_modulo):
+                perfil_usuario["modulos"] = dict(defaults["administrador"]["modulos"])
+                perfil_usuario["estado"] = "activo"
+                changed = True
+                logger.info(
+                    "Usuario Windows con rol administrador promovido automáticamente a acceso completo | usuario=%s",
+                    self.usuario_windows,
+                )
 
         if changed:
             guardar_config(self.config_data)

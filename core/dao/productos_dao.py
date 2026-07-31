@@ -3,7 +3,25 @@ class ProductosSQLiteDAO:
         self.db = db
 
     def listar_todos(self):
-        sql = "SELECT * FROM productos ORDER BY descripcion"
+        sql = """
+        SELECT
+            CREF,
+            codigo,
+            descripcion,
+            precio,
+            dFechaU,
+            TIENE_OFERTA,
+            PRECIO_OFERTA,
+            OFERTA_DESDE,
+            OFERTA_HASTA,
+            OFERTA_ORIGEN,
+            OFERTA_CCODDIV,
+            OFERTA_DTO,
+            CODIGO_ORIGINAL,
+            CODIGO_NORMALIZADO
+        FROM productos
+        ORDER BY descripcion
+        """
         return self.db.ejecutar_consulta(sql) or []
 
     def obtener_ultima_fecha_actualizacion(self):
@@ -20,20 +38,39 @@ class ProductosSQLiteDAO:
     def reemplazar_todos(self, productos):
         self.eliminar_todos()
         sql = """
-        INSERT OR REPLACE INTO productos (CREF, codigo, descripcion, precio, dfechau)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO productos (
+            CREF, codigo, descripcion, precio, dfechau,
+            TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
+            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
     def upsert_many(self, productos):
         sql = """
-        INSERT INTO productos (CREF, codigo, descripcion, precio, dfechau)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO productos (
+            CREF, codigo, descripcion, precio, dfechau,
+            TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
+            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(codigo) DO UPDATE SET
             CREF = excluded.CREF,
             descripcion = excluded.descripcion,
             precio = excluded.precio,
-            dfechau = excluded.dfechau
+            dfechau = excluded.dfechau,
+            TIENE_OFERTA = excluded.TIENE_OFERTA,
+            PRECIO_OFERTA = excluded.PRECIO_OFERTA,
+            OFERTA_DESDE = excluded.OFERTA_DESDE,
+            OFERTA_HASTA = excluded.OFERTA_HASTA,
+            OFERTA_ORIGEN = excluded.OFERTA_ORIGEN,
+            OFERTA_CCODDIV = excluded.OFERTA_CCODDIV,
+            OFERTA_DTO = excluded.OFERTA_DTO,
+            CODIGO_ORIGINAL = excluded.CODIGO_ORIGINAL,
+            CODIGO_NORMALIZADO = excluded.CODIGO_NORMALIZADO
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -82,6 +119,83 @@ class ProductosSQLiteDAO:
         """
         return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
+    def listar_codigos_normalizados_por_codigos(self, codigos):
+        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
+        if not codigos:
+            return []
+
+        placeholders = ",".join("?" for _ in codigos)
+        sql = f"""
+        SELECT codigo, CODIGO_NORMALIZADO
+        FROM productos
+        WHERE codigo IN ({placeholders})
+        """
+        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
+
+    def obtener_oferta_por_codigo(self, codigo):
+        sql = """
+        SELECT
+            codigo,
+            TIENE_OFERTA,
+            PRECIO_OFERTA,
+            OFERTA_DESDE,
+            OFERTA_HASTA,
+            OFERTA_ORIGEN,
+            OFERTA_CCODDIV,
+            OFERTA_DTO
+        FROM productos
+        WHERE codigo = ?
+        """
+        resultado = self.db.ejecutar_consulta(sql, (codigo,)) or []
+        return resultado[0] if resultado else None
+
+    def limpiar_snapshot_ofertas(self):
+        sql = """
+        UPDATE productos
+        SET
+            TIENE_OFERTA = 0,
+            PRECIO_OFERTA = NULL,
+            OFERTA_DESDE = NULL,
+            OFERTA_HASTA = NULL,
+            OFERTA_ORIGEN = NULL,
+            OFERTA_CCODDIV = NULL,
+            OFERTA_DTO = NULL
+        """
+        return self.db.ejecutar_consulta(sql)
+
+    def aplicar_snapshot_ofertas_por_cref(self, ofertas):
+        if not ofertas:
+            return True
+
+        sql = """
+        UPDATE productos
+        SET
+            TIENE_OFERTA = 1,
+            PRECIO_OFERTA = ?,
+            OFERTA_DESDE = ?,
+            OFERTA_HASTA = ?,
+            OFERTA_ORIGEN = ?,
+            OFERTA_CCODDIV = ?,
+            OFERTA_DTO = ?
+        WHERE CREF = ?
+        """
+        parametros = [
+            (
+                oferta.get("precio_oferta"),
+                oferta.get("oferta_desde"),
+                oferta.get("oferta_hasta"),
+                oferta.get("oferta_origen"),
+                oferta.get("oferta_ccoddiv"),
+                oferta.get("oferta_dto"),
+                oferta.get("cref"),
+            )
+            for oferta in ofertas
+            if oferta.get("cref")
+        ]
+        if not parametros:
+            return True
+        return self.db.ejecutar_consultamany(sql, parametros)
+
     def _insertar_precios_adicionales(self, precios):
         if not precios:
             return True
@@ -96,7 +210,49 @@ class ProductosSQLiteDAO:
         return self.db.ejecutar_consultamany(sql, self._parametros_precios_adicionales(precios))
 
     def _parametros(self, productos):
-        return [(p[0], p[2], p[1], p[3], p[4]) for p in productos]
+        parametros = []
+
+        for producto in productos:
+            if isinstance(producto, dict):
+                parametros.append(
+                    (
+                        producto.get("cref"),
+                        producto.get("codigo"),
+                        producto.get("descripcion"),
+                        producto.get("precio"),
+                        producto.get("dfechau"),
+                        1 if producto.get("tiene_oferta") else 0,
+                        producto.get("precio_oferta"),
+                        producto.get("oferta_desde"),
+                        producto.get("oferta_hasta"),
+                        producto.get("oferta_origen"),
+                        producto.get("oferta_ccoddiv"),
+                        producto.get("oferta_dto"),
+                        producto.get("codigo_original"),
+                        producto.get("codigo_normalizado"),
+                    )
+                )
+            else:
+                parametros.append(
+                    (
+                        producto[0],
+                        producto[2],
+                        producto[1],
+                        producto[3],
+                        producto[4],
+                        0,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        producto[2],
+                        producto[2],
+                    )
+                )
+
+        return parametros
 
     def _parametros_precios_adicionales(self, precios):
         return [
@@ -243,6 +399,24 @@ class ProductosSybaseDAO:
             resultados.extend(self.db.ejecutar_consulta(sql) or [])
 
         return resultados
+
+    def listar_ofertas_atipicas_activas(self):
+        sql = """
+        SELECT
+            a.CREF,
+            a.NPRECIO,
+            a.NDTO,
+            CONVERT(VARCHAR, a.DFECINI, 120) AS OFERTA_DESDE,
+            CONVERT(VARCHAR, a.DFECFIN, 120) AS OFERTA_HASTA,
+            a.CCODDIV,
+            a.CCLAVEC
+        FROM DBA.ATIPICAS a
+        WHERE a.CCLAVEC = 'O'
+          AND DATE(a.DFECINI) <= CURRENT DATE
+          AND (a.DFECFIN IS NULL OR DATE(a.DFECFIN) >= CURRENT DATE)
+        ORDER BY a.CREF ASC, a.DFECINI DESC, a.DFECFIN DESC, a.NPRECIO ASC
+        """
+        return self.db.ejecutar_consulta(sql) or []
 
     def listar_ivas(self):
         return self.db.ejecutar_consulta("SELECT * FROM IVAS") or []

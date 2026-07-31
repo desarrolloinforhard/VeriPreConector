@@ -1,3 +1,21 @@
+Version 1.16.26
+- Se agrego normalizacion de codigos legacy de 12 digitos sin digito verificador usando fallback EAN-13 durante la sincronizacion.
+- SQLite ahora guarda `CODIGO_ORIGINAL` y `CODIGO_NORMALIZADO` para mantener trazabilidad del dato fuente y del codigo operativo.
+- Los envios de productos al verificador ya priorizan el codigo normalizado en el payload sin alterar el valor original en Sybase.
+- Se valido la migracion de esquema y una sincronizacion completa real sobre la base instalada `C:\ProgramData\SmartPrice\veripre.db`.
+
+Version 1.16.25
+- Se agrego una guia visible de especificaciones de imagen en Configuracion de Datos para productos y logo segun los limites del verificador Android.
+- La seleccion de logo ahora lo normaliza automaticamente a PNG 4:1 con margen interno y valida resolucion, peso y proporcion antes del envio.
+- La carga manual de imagen de producto ahora optimiza la imagen antes de guardarla en SQLite: conversion a JPEG, maximo 1400x1400, objetivo 1000x1000 y compresion orientada a quedar debajo de 700 KB.
+- `core/services/image_resolver.py` ahora aplica la misma normalizacion automatica a imagenes obtenidas desde carpetas locales, API propia y GO-UPC antes de persistirlas.
+
+Version 1.16.24
+- Se agrego una guia visible de especificaciones de imagen en Configuracion de Datos para productos y logo segun los limites del verificador Android.
+- La seleccion de logo ahora lo normaliza automaticamente a PNG 4:1 con margen interno y valida resolucion, peso y proporcion antes del envio.
+- La carga manual de imagen de producto ahora optimiza la imagen antes de guardarla en SQLite: conversion a JPEG, maximo 1400x1400, objetivo 1000x1000 y compresion orientada a quedar debajo de 700 KB.
+- `core/services/image_resolver.py` ahora aplica la misma normalizacion automatica a imagenes obtenidas desde carpetas locales, API propia y GO-UPC antes de persistirlas.
+
 Version 1.16.23
 - Se mejoro la ventana de dispositivos detectados con panel lateral para editar nombres antes de guardar.
 - Ahora se puede aplicar un nombre individual o masivo a la seleccion, con resolucion automatica de nombres duplicados.
@@ -203,3 +221,9 @@ Version 1.16.21
 - Mejorado el guardado de config compartida con lock de archivo y reintentos para escenarios multiusuario.
 - Publicidad ahora refresca la configuracion compartida desde ProgramData antes de leer, enviar o editar grupos/globales.
 - Al abrir el modulo Publicidad desde otro usuario se sincronizan los mismos grupos e items cargados por el usuario principal.
+
+Version 1.16.24
+- Si el usuario Windows actual pertenece al grupo Administradores local, SmartPrice ahora lo promueve automaticamente a acceso completo.
+- Se evita que un administrador local quede en estado pendiente por falta de perfil previo en config.json.
+- En Configuracion > Usuarios y Permisos ahora se muestra el rol Windows del usuario actual.
+- Agregada columna `Admin Windows` para identificar que usuarios locales pertenecen al grupo Administradores.

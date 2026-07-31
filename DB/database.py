@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from core.logging.logger import get_logger
+from core.services.barcode_normalizer import limpiar_codigo, normalizar_codigo_para_envio
 
 logger = get_logger(__name__)
 
@@ -164,11 +165,21 @@ class SQLiteDB:
                 precio REAL,
                 img_base64 TEXT,
                 formato_imagen TEXT,
-                dFechaU TEXT
+                dFechaU TEXT,
+                TIENE_OFERTA INTEGER DEFAULT 0,
+                PRECIO_OFERTA REAL,
+                OFERTA_DESDE TEXT,
+                OFERTA_HASTA TEXT,
+                OFERTA_ORIGEN TEXT,
+                OFERTA_CCODDIV TEXT,
+                OFERTA_DTO REAL,
+                CODIGO_ORIGINAL TEXT,
+                CODIGO_NORMALIZADO TEXT
             )
         """
         logger.debug("Creando/verificando tabla SQLite: productos")
         self.ejecutar_consulta(consulta)
+        self._asegurar_columnas_productos()
 
     def crear_tabla_VERIPRE_producto_precios(self):
         """Crea la tabla de precios y packs adicionales por producto."""
@@ -262,3 +273,64 @@ class SQLiteDB:
             logger.debug("No existe conexión SQLite activa. Se crea una nueva.")
             self.conectar()
         return self.connection
+
+    def _asegurar_columnas_productos(self):
+        columnas_requeridas = {
+            "TIENE_OFERTA": "INTEGER DEFAULT 0",
+            "PRECIO_OFERTA": "REAL",
+            "OFERTA_DESDE": "TEXT",
+            "OFERTA_HASTA": "TEXT",
+            "OFERTA_ORIGEN": "TEXT",
+            "OFERTA_CCODDIV": "TEXT",
+            "OFERTA_DTO": "REAL",
+            "CODIGO_ORIGINAL": "TEXT",
+            "CODIGO_NORMALIZADO": "TEXT",
+        }
+
+        columnas_actuales = {col.upper() for col in self.obtener_columnas("productos")}
+        if not columnas_actuales:
+            return
+
+        for nombre, definicion in columnas_requeridas.items():
+            if nombre in columnas_actuales:
+                continue
+
+            sql = f"ALTER TABLE productos ADD COLUMN {nombre} {definicion}"
+            logger.info("Agregando columna faltante en productos | columna=%s", nombre)
+            self.ejecutar_consulta(sql)
+
+        self._backfill_codigos_productos()
+
+    def _backfill_codigos_productos(self):
+        sql = """
+        SELECT rowid, codigo, CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+        FROM productos
+        """
+        filas = self.ejecutar_consulta(sql) or []
+        if not filas:
+            return
+
+        parametros = []
+        for rowid, codigo, codigo_original, codigo_normalizado in filas:
+            codigo_base = limpiar_codigo(codigo)
+            original_resuelto = limpiar_codigo(codigo_original) or codigo_base
+            normalizado_resuelto = limpiar_codigo(codigo_normalizado) or normalizar_codigo_para_envio(original_resuelto)
+
+            if codigo_original == original_resuelto and codigo_normalizado == normalizado_resuelto:
+                continue
+
+            parametros.append((original_resuelto, normalizado_resuelto, rowid))
+
+        if not parametros:
+            logger.debug("Backfill de codigos no necesario en productos.")
+            return
+
+        logger.info("Backfill de codigos en productos | registros=%s", len(parametros))
+        self.ejecutar_consultamany(
+            """
+            UPDATE productos
+            SET CODIGO_ORIGINAL = ?, CODIGO_NORMALIZADO = ?
+            WHERE rowid = ?
+            """,
+            parametros,
+        )

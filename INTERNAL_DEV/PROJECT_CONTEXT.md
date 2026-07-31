@@ -1,6 +1,6 @@
 ﻿# Project Context
 
-Version actual: `1.16.23`
+Version actual: `1.16.26`
 
 ## 1. Objetivo del sistema
 
@@ -45,9 +45,10 @@ Modos:
   - `dispositivos_envio_service.py`: logica de envio de productos/publicidades/logo/config.
   - `headless_envio_service.py`: modo CLI sin GUI.
   - `headless_progress_window.py`: ventana de progreso en modo headless.
-  - `image_resolver.py`: resolucion/caching de imagenes del lado Python.
+  - `image_resolver.py`: resolucion/caching de imagenes del lado Python, con normalizacion automatica de imagenes de producto antes de persistirlas.
   - `productos_sync_service.py`: sync de productos y deteccion de cambios.
   - `ofertas_service.py`: soporte a generacion de ofertas.
+  - linea pendiente VPC-F3: snapshot local de ofertas activas desde `ATIPICAS` para integracion futura con verificador.
 - `tools/`
   - utilidades auxiliares como `fetch_product_image.py`.
 - `versionado/`
@@ -62,6 +63,8 @@ Modos:
 4. `dispositivos_envio_service.py` envia productos al Android por lotes.
 5. El selector manual y el autoenvio pueden descubrir verificadores por red local si no hay equipos online registrados.
 6. Antes de enviar, tambien puede empujar GO-UPC key y URL de API propia de imagenes.
+7. La siguiente fase prevista agrega columnas locales de oferta por producto (`TIENE_OFERTA`, `PRECIO_OFERTA`, vigencias y origen) para que la SQLite refleje promociones activas provenientes de `DBA.ATIPICAS`.
+8. La siguiente linea abierta `VPC-F4` debe resolver clientes legacy que guardan `CCODEBAR` con `12` digitos sin check digit, conservando codigo original y codigo normalizado antes del envio al verificador.
 
 ### Publicidades
 1. `CONTENIDO_PUBLICIDAD` mantiene grupos y globales en config.
@@ -75,8 +78,19 @@ Modos:
 1. `GUI_CONFIG.py` edita DSN, API key, toggles y opciones de envio.
 2. `GUI_CONFIG.py` tambien expone pestaÃ±a `Usuarios y Permisos` para ver/editar perfiles por usuario Windows.
 3. `GUI_CONFIG.py` ahora permite buscar dispositivos por red local desde la pestaÃ±a `Dispositivos`, con filtro visual y edicion previa del nombre detectado.
-4. `FUNC/config_json.py` guarda configuracion persistente con lock de archivo para reducir colisiones entre sesiones/usuarios.
-5. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
+4. `GUI_CONFIG.py` ahora muestra una guia visible de especificaciones de imagen para Android y valida tecnicamente el logo seleccionado.
+5. `FUNC/config_json.py` guarda configuracion persistente con lock de archivo para reducir colisiones entre sesiones/usuarios.
+6. En modo compilado, la config se mueve a `C:\ProgramData\SmartPrice\config.json`.
+
+### Imagenes
+1. La imagen de producto puede ingresar por carga manual, carpeta local, API propia o GO-UPC.
+2. Toda imagen nueva que no provenga ya de SQLite se normaliza antes de persistirse:
+   - maximo `1400x1400`,
+   - objetivo `1000x1000`,
+   - salida `JPEG`,
+   - compresion orientada a quedar debajo de `700 KB`.
+3. El logo principal se normaliza a PNG con proporcion `4:1` y margen interno para evitar recortes en Android.
+4. Esta normalizacion se aplica para reducir payload base64, consumo de memoria y tiempos de render del verificador.
 
 ### Multiusuario
 1. `GUI_MAIN.py` calcula una instancia unica por usuario Windows, no global a toda la maquina.
@@ -116,10 +130,13 @@ Mantener compatibilidad con:
 - `CustomTkinter` mostro fragilidad en loaders/overlays bajo ciertas sesiones Windows Server con distinto escalado; para overlays criticos conviene priorizar `tk/ttk` puro.
 - La rama `publicidades` del config es compartida entre usuarios; las vistas de Publicidad deben refrescar desde disco antes de operar para no trabajar con copias stale en memoria.
 - La deteccion por red diferencia por tipo de dispositivo (`verificador` vs `infotv`) y esa separacion no debe perderse en futuros flujos de envio.
+- La futura integracion de ofertas no debe mezclar `precio_oferta` con `precios_adicionales` de `PACKS_MINI`; son contratos distintos y deben viajar separados al verificador.
+- La futura normalizacion de codigos no debe asumir que cualquier valor de `12` digitos es automaticamente UPC-A o GS1 valido; la fase inicial se limita a fallback `EAN-13` para clientes legacy documentados.
 
 ## 7. Decisiones vigentes que no deben romperse
 
 - Python ya no busca imagenes remotas para preview de productos; eso queda del lado Android al escanear.
+- Toda imagen nueva incorporada desde Python debe persistirse ya optimizada para Android; no volver a guardar originales pesados en SQLite si el flujo pasa por `image_resolver.py` o por la carga manual de Productos.
 - Publicidades se guardan en storage interno para no depender de rutas del usuario.
 - Config compilada debe quedar fuera de `Program Files` para evitar perdida de datos entre usuarios.
 - La app debe poder correr con GUI o headless sin duplicar logica de negocio.
@@ -127,3 +144,4 @@ Mantener compatibilidad con:
 - La instancia unica debe ser por usuario Windows para no bloquear sesiones distintas en la misma PC/Windows Server.
 - El arranque debe mostrar feedback visible de carga y evitar congelar la primera pantalla; la shell de GUI debe pintar antes del bootstrap pesado.
 - Productos y Publicidad no deben mezclar destinos: descubrimiento y selector deben filtrar verificadores para catalogo y dispositivos InforTV para multimedia.
+- Mientras no cierre `VPC-F4`, SmartPrice sigue guardando y enviando `codigo` tal cual viene de Sybase; no asumir normalizacion implicita.

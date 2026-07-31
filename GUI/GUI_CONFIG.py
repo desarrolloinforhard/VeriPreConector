@@ -39,8 +39,8 @@ class GUI_CONFIG:
         self.top_level_configuracion.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         #self.top_level_configuracion.grab_set()
         self.top_level_configuracion.title("VeriPre_Connector - Configuración")
-        self.top_level_configuracion.geometry("1120x760")
-        self.top_level_configuracion.minsize(1020, 680)
+        self.top_level_configuracion.geometry("1320x860")
+        self.top_level_configuracion.minsize(1180, 760)
         self.top_level_configuracion.place_window_center()
         self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind(
             "<<DispositivosActualizados>>",
@@ -424,9 +424,20 @@ class GUI_CONFIG:
 
         # BotÃ³n izquierda
         ttk.Button(frame_botones_logo, text="Seleccionar Imagen", command=self._seleccionar_logo).pack(side="left", padx=(0, 5))
+        ttk.Button(frame_botones_logo, text="Normalizar Logo", command=self._normalizar_logo_seleccionado).pack(side="left", padx=(0, 5))
 
         # BotÃ³n derecha
         ttk.Button(frame_botones_logo, text="Enviar Logo a Dispositivos", command=self._enviar_logo_a_dispositivos).pack(side="right", padx=(5, 0))
+
+        self.label_validacion_logo = ttk.Label(
+            frame_logo,
+            text="Sin imagen seleccionada.",
+            bootstyle="secondary",
+            justify="left",
+        )
+        self.label_validacion_logo.pack(fill="x", padx=10, pady=(6, 2))
+
+        self._crear_panel_guia_imagenes()
 
 
         
@@ -515,6 +526,14 @@ class GUI_CONFIG:
         )
         self.label_usuario_windows_actual.pack(anchor="w", pady=(0, 6))
 
+        self.label_rol_windows_actual = ttk.Label(
+            frame_superior,
+            text="Rol Windows: -",
+            bootstyle="info",
+            font=("Segoe UI", 10),
+        )
+        self.label_rol_windows_actual.pack(anchor="w", pady=(0, 6))
+
         self.label_permisos_efectivos = ttk.Label(
             frame_superior,
             text="Permisos efectivos: -",
@@ -531,7 +550,7 @@ class GUI_CONFIG:
         )
         frame_perfiles.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        columnas = ("usuario", "estado", "productos", "publicidad", "configuracion")
+        columnas = ("usuario", "admin_windows", "estado", "productos", "publicidad", "configuracion")
         self.tree_perfiles_usuario = ttk.Treeview(
             frame_perfiles,
             columns=columnas,
@@ -540,11 +559,13 @@ class GUI_CONFIG:
             bootstyle="primary",
         )
         self.tree_perfiles_usuario.heading("usuario", text="Usuario / Perfil")
+        self.tree_perfiles_usuario.heading("admin_windows", text="Admin Windows")
         self.tree_perfiles_usuario.heading("estado", text="Estado")
         self.tree_perfiles_usuario.heading("productos", text="Productos")
         self.tree_perfiles_usuario.heading("publicidad", text="Publicidad")
         self.tree_perfiles_usuario.heading("configuracion", text="Configuración")
         self.tree_perfiles_usuario.column("usuario", width=190, anchor="w")
+        self.tree_perfiles_usuario.column("admin_windows", width=110, anchor="center")
         self.tree_perfiles_usuario.column("estado", width=140, anchor="center")
         self.tree_perfiles_usuario.column("productos", width=110, anchor="center")
         self.tree_perfiles_usuario.column("publicidad", width=110, anchor="center")
@@ -622,12 +643,17 @@ class GUI_CONFIG:
     def refrescar_tab_usuarios_permisos(self):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
         usuario_actual = self.DICT_WIDGETS.get_widget("CONFIG", "usuario_windows") or "-"
+        usuario_actual_es_admin = bool(self.DICT_WIDGETS.get_widget("CONFIG", "usuario_windows_es_admin"))
         permisos_actuales = self.DICT_WIDGETS.get_widget("CONFIG", "permisos_usuario") or {}
         perfiles = config.get("perfiles_usuario", {})
         usuarios_windows = self._obtener_usuarios_windows_locales()
+        usuarios_admin_windows = self._obtener_usuarios_admin_windows_locales()
         nombres_unificados = sorted(set(perfiles.keys()) | set(usuarios_windows))
 
         self.label_usuario_windows_actual.config(text=f"Usuario Windows: {usuario_actual}")
+        self.label_rol_windows_actual.config(
+            text=f"Rol Windows: {'Administrador local' if usuario_actual_es_admin else 'Usuario estándar'}"
+        )
         self.label_permisos_efectivos.config(
             text=(
                 "Permisos efectivos: "
@@ -665,6 +691,7 @@ class GUI_CONFIG:
                 "end",
                 values=(
                     nombre_perfil,
+                    "Sí" if nombre_perfil in usuarios_admin_windows else "No",
                     estado,
                     "Sí" if modulos.get("productos", False if not perfil_existe else True) else "No",
                     "Sí" if modulos.get("publicidad", False if not perfil_existe else True) else "No",
@@ -725,6 +752,44 @@ class GUI_CONFIG:
             usuarios.append(nombre_lower)
 
         return sorted(set(usuarios))
+
+    def _obtener_usuarios_admin_windows_locales(self):
+        comando = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            (
+                "$group = Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue; "
+                "if ($null -eq $group) { exit 0 }; "
+                "Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue | "
+                "ForEach-Object { "
+                "  $name = $_.Name; "
+                "  if ($name -match '\\\\') { $name = $name.Split('\\\\')[-1] }; "
+                "  $name "
+                "}"
+            ),
+        ]
+        try:
+            resultado = subprocess.run(
+                comando,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            return set()
+
+        if resultado.returncode != 0:
+            return set()
+
+        usuarios = set()
+        for linea in resultado.stdout.splitlines():
+            nombre = linea.strip()
+            if not nombre:
+                continue
+            usuarios.add(nombre.lower())
+        return usuarios
 
     def _cargar_editor_perfil(self, nombre_perfil):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or {}
@@ -826,6 +891,89 @@ class GUI_CONFIG:
         
         self.button_importar_datos_INFORHARD = ttk.Button(self.frame_config_datos_INFORHARD, text="Sincronizars Datos", command=self.command_importar_datos_INFORHARD)
         self.button_importar_datos_INFORHARD.pack()
+
+    def _crear_panel_guia_imagenes(self):
+        frame_guia = ttk.Labelframe(
+            self.frame_notebook_config_datos,
+            text="Guia de imagenes para Android",
+            bootstyle="info",
+            padding=12,
+        )
+        frame_guia.pack(fill="x", padx=10, pady=(0, 10))
+
+        texto_producto = (
+            "Imagen de producto\n"
+            "- Formatos: jpg, jpeg, png, webp\n"
+            "- Recomendado: jpg | png solo si necesita transparencia\n"
+            "- Relacion ideal: 1:1\n"
+            "- Tamano ideal: 1000 x 1000 px\n"
+            "- Maximo recomendado: 1400 x 1400 px\n"
+            "- Evitar mas de 1600 x 1600 px\n"
+            "- Peso ideal: 150 KB a 400 KB | aceptable hasta 700 KB\n"
+            "- Evitar archivos mayores a 1 MB"
+        )
+        texto_logo = (
+            "Logo inferior / logo de empresa\n"
+            "- Formatos: png, jpg, jpeg, webp\n"
+            "- Recomendado: png\n"
+            "- Relacion recomendada: 4:1\n"
+            "- Tamano ideal: 840 x 216 px o 1200 x 300 px\n"
+            "- Ancho recomendado: 800 a 1400 px\n"
+            "- Mantener margen interno para que no quede cortado"
+        )
+        texto_motivo = (
+            "Motivo tecnico\n"
+            "- Android decodifica la imagen completa sin resize previo\n"
+            "- Base64 aumenta aprox. 33% el tamano enviado\n"
+            "- Imagenes grandes consumen mas memoria y tardan mas en mostrar"
+        )
+
+        ttk.Label(frame_guia, text=texto_producto, justify="left").grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        ttk.Label(frame_guia, text=texto_logo, justify="left").grid(row=0, column=1, sticky="nw", padx=(0, 12))
+        ttk.Label(frame_guia, text=texto_motivo, justify="left", bootstyle="secondary").grid(row=0, column=2, sticky="nw")
+
+        frame_guia.columnconfigure(0, weight=1)
+        frame_guia.columnconfigure(1, weight=1)
+        frame_guia.columnconfigure(2, weight=1)
+
+    def _validar_logo_seleccionado(self, filepath):
+        try:
+            img = Image.open(filepath)
+            width, height = img.size
+            formato = (img.format or os.path.splitext(filepath)[1][1:]).upper()
+            peso_kb = os.path.getsize(filepath) / 1024
+            ratio = round(width / height, 2) if height else 0
+
+            observaciones = []
+            estado = "success"
+
+            if width < 800 or width > 1400:
+                observaciones.append("ancho fuera del rango recomendado (800-1400 px)")
+                estado = "warning"
+            if ratio < 3.6 or ratio > 4.4:
+                observaciones.append("proporcion fuera del objetivo 4:1")
+                estado = "warning"
+            if peso_kb > 700:
+                observaciones.append("peso alto para envio")
+                estado = "warning"
+
+            if not observaciones:
+                resumen = "OK. Logo dentro del rango recomendado para Android."
+            else:
+                resumen = "Revisar: " + "; ".join(observaciones) + "."
+
+            self.label_validacion_logo.config(
+                text=(
+                    f"Archivo: {os.path.basename(filepath)} | Formato: {formato} | "
+                    f"{width}x{height}px | {peso_kb:.0f} KB | Ratio: {ratio}\n{resumen}"
+                ),
+                bootstyle=estado,
+            )
+        except Exception as exc:
+            self.label_validacion_logo.config(
+                text=f"No se pudo validar la imagen seleccionada: {exc}",
+                bootstyle="danger",
+            )
         
     def creacion_toplevel_carga_datos(self):
         # Crear ventana Toplevel
@@ -1281,7 +1429,7 @@ class GUI_CONFIG:
 
         selector = ttk.Toplevel(self.top_level_configuracion)
         selector.title("Buscar en red")
-        selector.geometry("420x170")
+        selector.geometry("520x230")
         selector.place_window_center()
         selector.transient(self.top_level_configuracion)
         selector.grab_set()
@@ -1291,15 +1439,23 @@ class GUI_CONFIG:
             selector,
             text="Seleccione qué tipo de dispositivos desea detectar:",
             font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=18, pady=(18, 10))
+        ).pack(anchor="w", padx=22, pady=(22, 12))
+
+        ttk.Label(
+            selector,
+            text="Puede buscar verificadores de precio, players InforTV o ambos.",
+            bootstyle="secondary",
+            justify="left",
+            wraplength=460,
+        ).pack(anchor="w", padx=22, pady=(0, 10))
 
         combo = ttk.Combobox(
             selector,
             state="readonly",
             values=["Ambos", "Verificadores", "InforTV"],
-            width=26,
+            width=34,
         )
-        combo.pack(anchor="w", padx=18)
+        combo.pack(anchor="w", padx=22)
         combo.set("Ambos")
 
         usar_cache = ttk.BooleanVar(value=True)
@@ -1307,7 +1463,7 @@ class GUI_CONFIG:
             selector,
             text="Usar cache reciente si existe",
             variable=usar_cache,
-        ).pack(anchor="w", padx=18, pady=(10, 0))
+        ).pack(anchor="w", padx=22, pady=(12, 0))
 
         def resolver_tipos():
             valor = combo.get().strip().lower()
@@ -1327,14 +1483,14 @@ class GUI_CONFIG:
             )
 
         acciones = ttk.Frame(selector)
-        acciones.pack(fill="x", padx=18, pady=(18, 0))
-        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info").pack(side="left")
-        ttk.Button(acciones, text="Cancelar", command=selector.destroy).pack(side="right")
+        acciones.pack(fill="x", padx=22, pady=(24, 0))
+        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info", width=14).pack(side="left")
+        ttk.Button(acciones, text="Cancelar", command=selector.destroy, width=14).pack(side="right")
 
     def _ejecutar_busqueda_dispositivos_red(self, tipos=("verificador", "infotv"), use_cache=True):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Buscar dispositivos en red")
-        top.geometry("460x180")
+        top.geometry("580x220")
         top.place_window_center()
         top.transient(self.top_level_configuracion)
         top.grab_set()
@@ -1344,19 +1500,19 @@ class GUI_CONFIG:
             top,
             text="Buscando verificadores (8080) e InforTV (2727) en la red local...",
             font=("Segoe UI", 11, "bold"),
-            wraplength=410,
+            wraplength=520,
             justify="left",
-        ).pack(anchor="w", padx=20, pady=(18, 10))
+        ).pack(anchor="w", padx=24, pady=(22, 12))
 
         progress = ttk.Progressbar(top, mode="indeterminate", bootstyle="info-striped")
-        progress.pack(fill="x", padx=20, pady=(0, 12))
+        progress.pack(fill="x", padx=24, pady=(0, 14))
         progress.start(12)
 
         estado_var = ttk.StringVar(value="Iniciando descubrimiento...")
-        ttk.Label(top, textvariable=estado_var, bootstyle="secondary").pack(anchor="w", padx=20)
+        ttk.Label(top, textvariable=estado_var, bootstyle="secondary", wraplength=520, justify="left").pack(anchor="w", padx=24)
 
         acciones = ttk.Frame(top)
-        acciones.pack(fill="x", padx=20, pady=(18, 0))
+        acciones.pack(fill="x", padx=24, pady=(24, 0))
         btn_cerrar = ttk.Button(acciones, text="Cerrar", command=top.destroy, state="disabled")
         btn_cerrar.pack(side="right")
 
@@ -1392,7 +1548,7 @@ class GUI_CONFIG:
     def _mostrar_resultados_dispositivos_detectados(self, dispositivos):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Dispositivos detectados")
-        top.geometry("1040x500")
+        top.geometry("1240x680")
         top.place_window_center()
         top.transient(self.top_level_configuracion)
 
@@ -1404,8 +1560,8 @@ class GUI_CONFIG:
 
         frame_contenido = ttk.Frame(top)
         frame_contenido.pack(fill="both", expand=True, padx=14, pady=(0, 10))
-        frame_contenido.columnconfigure(0, weight=4)
-        frame_contenido.columnconfigure(1, weight=2)
+        frame_contenido.columnconfigure(0, weight=5)
+        frame_contenido.columnconfigure(1, weight=3)
         frame_contenido.rowconfigure(0, weight=1)
 
         frame_tree = ttk.Frame(frame_contenido)
@@ -1426,13 +1582,13 @@ class GUI_CONFIG:
         combo_filtro.set("Solo nuevos")
 
         columns = ("nombre", "tipo", "ip", "puerto", "estado")
-        tree = ttk.Treeview(frame_tree, columns=columns, show="headings", height=12, selectmode="extended")
+        tree = ttk.Treeview(frame_tree, columns=columns, show="headings", height=18, selectmode="extended")
         headings = {
-            "nombre": ("Nombre", 240),
-            "tipo": ("Tipo", 110),
-            "ip": ("IP", 170),
-            "puerto": ("Puerto", 90),
-            "estado": ("Estado", 160),
+            "nombre": ("Nombre", 300),
+            "tipo": ("Tipo", 130),
+            "ip": ("IP", 210),
+            "puerto": ("Puerto", 100),
+            "estado": ("Estado", 180),
         }
         for key, (text, width) in headings.items():
             tree.heading(key, text=text)
@@ -1542,7 +1698,7 @@ class GUI_CONFIG:
         ttk.Label(frame_editor, textvariable=estado_var_editor).grid(row=4, column=1, sticky="w", pady=4)
 
         ayuda_var = ttk.StringVar(value="Seleccione un dispositivo para editar su nombre antes de guardar.")
-        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", wraplength=240, justify="left").grid(
+        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", wraplength=320, justify="left").grid(
             row=5, column=0, columnspan=2, sticky="w", pady=(14, 10)
         )
 
@@ -2202,7 +2358,64 @@ class GUI_CONFIG:
         if not filepath:
             return
 
-        # Mostrar preview adaptado
+        try:
+            ruta_normalizada = self._guardar_logo_normalizado(filepath)
+            self.ruta_logo_seleccionado = ruta_normalizada
+            self._mostrar_logo_actual_desde_ruta(ruta_normalizada)
+            self._validar_logo_seleccionado(ruta_normalizada)
+            print(f"âœ… Logo guardado normalizado como {ruta_normalizada}")
+        except Exception as e:
+            print(f"âŒ No se pudo guardar el logo en assets/: {e}")
+
+    def _guardar_logo_normalizado(self, filepath):
+        from pathlib import Path
+
+        destino = Path("assets") / "!!!LOGO_PRINCIPAL!!!.png"
+        destino.parent.mkdir(parents=True, exist_ok=True)
+
+        ancho_objetivo = 1200
+        alto_objetivo = 300
+        margen = 24
+
+        img_original = Image.open(filepath).convert("RGBA")
+        area_ancho = ancho_objetivo - (margen * 2)
+        area_alto = alto_objetivo - (margen * 2)
+
+        img_ajustada = img_original.copy()
+        img_ajustada.thumbnail((area_ancho, area_alto), Image.Resampling.LANCZOS)
+
+        lienzo = Image.new("RGBA", (ancho_objetivo, alto_objetivo), (255, 255, 255, 0))
+        offset_x = (ancho_objetivo - img_ajustada.width) // 2
+        offset_y = (alto_objetivo - img_ajustada.height) // 2
+        lienzo.paste(img_ajustada, (offset_x, offset_y), img_ajustada)
+        lienzo.save(destino, format="PNG")
+        return str(destino)
+
+    def _normalizar_logo_seleccionado(self):
+        ruta_logo = getattr(self, "ruta_logo_seleccionado", None)
+        if not ruta_logo:
+            ruta_logo = PNG_LOGO_PRINCIPAL()
+            if not os.path.exists(ruta_logo):
+                messagebox.showwarning("Logo", "Primero seleccione una imagen para normalizar.")
+                return
+
+        try:
+            ruta_normalizada = self._guardar_logo_normalizado(ruta_logo)
+            self.ruta_logo_seleccionado = ruta_normalizada
+            self._mostrar_logo_actual_desde_ruta(ruta_normalizada)
+            self._validar_logo_seleccionado(ruta_normalizada)
+            messagebox.showinfo(
+                "Logo normalizado",
+                "Se genero el logo normalizado en formato PNG 4:1 dentro de assets.",
+            )
+        except Exception as exc:
+            messagebox.showerror("Logo", f"No se pudo normalizar el logo.\n{exc}")
+
+    def _mostrar_logo_actual_desde_ruta(self, ruta_logo):
+        if not os.path.exists(ruta_logo):
+            self.label_logo_preview.config(image="", text="Sin logo")
+            return
+
         self.label_logo_preview.update_idletasks()
         ancho_disp = self.label_logo_preview.winfo_width()
         alto_disp = self.label_logo_preview.winfo_height()
@@ -2210,28 +2423,11 @@ class GUI_CONFIG:
         if ancho_disp <= 1 or alto_disp <= 1:
             ancho_disp, alto_disp = 300, 300
 
-        img = Image.open(filepath)
+        img = Image.open(ruta_logo)
         img.thumbnail((ancho_disp, alto_disp), Image.Resampling.LANCZOS)
 
         self.logo_img_tk = ImageTk.PhotoImage(img)
         self.label_logo_preview.config(image=self.logo_img_tk, text="")
-
-        # Guardar para enviar
-        self.ruta_logo_seleccionado = filepath
-
-        # Guardar copia en carpeta /assets/ con nombre !!!LOGO_PRINCIPAL!!!.png
-        try:
-            from pathlib import Path
-            destino = Path("assets") / "!!!LOGO_PRINCIPAL!!!.png"
-            destino.parent.mkdir(parents=True, exist_ok=True)  # crear carpeta si no existe
-
-            img_original = Image.open(filepath).convert("RGBA")  # asegura transparencia
-            img_original.save(destino, format="PNG")
-
-            print(f"âœ… Logo guardado como {destino}")
-        except Exception as e:
-            print(f"âŒ No se pudo guardar el logo en assets/: {e}")
-
 
 
     def _enviar_logo_a_dispositivos(self):

@@ -23,6 +23,14 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - Se preparo la coordinacion para que Android resuelva imagenes faltantes al escanear.
 - Se agrego soporte para enviar GO-UPC key y URL de API propia de imagenes al verificador Android.
 - Se creo utilidad externa `fetch_product_image.py` / `TraerImagen.exe`.
+- `Configuracion de Datos` ahora muestra una guia tecnica visible para imagen de producto y logo segun restricciones del verificador Android.
+- La seleccion de logo ahora normaliza automaticamente a PNG con proporcion 4:1 y margen interno antes de guardarlo en `assets/!!!LOGO_PRINCIPAL!!!.png`.
+- La GUI de Productos ahora optimiza imagenes cargadas manualmente antes de guardarlas en SQLite:
+  - maximo `1400x1400`,
+  - objetivo `1000x1000`,
+  - conversion a `JPEG`,
+  - compresion para intentar quedar por debajo de `700 KB`.
+- `image_resolver.py` ahora aplica la misma normalizacion automatica a imagenes que entran desde carpetas locales, API propia y GO-UPC antes de persistirlas en SQLite/carpeta.
 
 ## Publicidades
 

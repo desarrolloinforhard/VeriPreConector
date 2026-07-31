@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 import os
@@ -29,10 +29,10 @@ from FUNC.config_json import guardar_config
 
 class ContenidoProducto:
     AUTO_SYNC_INTERVAL_SECONDS = 5
-    TABLE_HEIGHT = 20
-    IMAGE_PANEL_WIDTH = 470
-    IMAGE_PANEL_HEIGHT = 470
-    PREVIEW_IMAGE_SIZE = (450, 450)
+    TABLE_HEIGHT = 24
+    IMAGE_PANEL_WIDTH = 560
+    IMAGE_PANEL_HEIGHT = 620
+    PREVIEW_IMAGE_SIZE = (520, 520)
     DETAIL_IMAGE_SIZE = (200, 200)
 
     def __init__(self, DICT_WIDGETS):
@@ -50,26 +50,47 @@ class ContenidoProducto:
             self.CONEXIONDBA_SYBASE = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA_SYBASE")
         self.variables_globales()
         self.frame_producto = self.DICT_WIDGETS.get_widget("GUI_MAIN", "frame_seccion_productos")
-        
-        self.label_producto = ttk.Label(self.frame_producto, text="SECCION PRODUCTOS")
-        self.label_producto.pack(pady=10)
-        
+
+        self.frame_producto.columnconfigure(0, weight=1)
+        self.frame_producto.rowconfigure(1, weight=1)
+
+        self.frame_header_productos = ttk.Frame(self.frame_producto)
+        self.frame_header_productos.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 8))
+        self.frame_header_productos.columnconfigure(0, weight=1)
+
+        self.label_producto = ttk.Label(
+            self.frame_header_productos,
+            text="Productos",
+            font=("Segoe UI", 18, "bold"),
+        )
+        self.label_producto.grid(row=0, column=0, sticky="w")
+
+        self.label_producto_subtitulo = ttk.Label(
+            self.frame_header_productos,
+            text="Busqueda local, vista previa y envio a verificadores.",
+            bootstyle="secondary",
+            font=("Segoe UI", 10),
+        )
+        self.label_producto_subtitulo.grid(row=1, column=0, sticky="w", pady=(4, 0))
+
         self.crear_interfaz_table_view()
-        
+
         self.frame_buttons_productos = ttk.Frame(self.frame_producto)
-        self.frame_buttons_productos.pack(padx=50, pady=10)
+        self.frame_buttons_productos.grid(row=2, column=0, sticky="ew", padx=18, pady=(8, 16))
+        for column in range(4):
+            self.frame_buttons_productos.columnconfigure(column, weight=1)
         
         self.button_crear_datos = ttk.Button(self.frame_buttons_productos, text="Recargar Productos", command=self.command_crear_datos)
-        self.button_crear_datos.grid(row=0, column=0, padx=10)
+        self.button_crear_datos.grid(row=0, column=0, padx=6, sticky="ew")
         
         self.button_transmitir_novedades = ttk.Button(self.frame_buttons_productos, text="Transmitir Novedades", command=self.command_transmitir_novedades, state=DISABLED)
-        self.button_transmitir_novedades.grid(row=0, column=1, padx=10)
+        self.button_transmitir_novedades.grid(row=0, column=1, padx=6, sticky="ew")
 
         self.button_transmitir_datos_fecha = ttk.Button(self.frame_buttons_productos, text="Transmitir por Fecha", command=self.command_transmitir_por_fecha, state=DISABLED)
-        self.button_transmitir_datos_fecha.grid(row=0, column=2, padx=10)
+        self.button_transmitir_datos_fecha.grid(row=0, column=2, padx=6, sticky="ew")
         
         self.button_transmitir_datos = ttk.Button(self.frame_buttons_productos, text="Transmitir Datos Completos", command=self.command_transmitir_datos, state=DISABLED)
-        self.button_transmitir_datos.grid(row=0, column=3, padx=10)
+        self.button_transmitir_datos.grid(row=0, column=3, padx=6, sticky="ew")
         
         # Agregar el nuevo botón en la columna 3
         #self.button_actualizar_datos = ttk.Button(self.frame_buttons_productos, text="Actualizar Datos", command=self.command_actualizar_datos, state=DISABLED)
@@ -107,20 +128,25 @@ class ContenidoProducto:
         
     def crear_interfaz_table_view(self):
         self.frame_table_view = ttk.Frame(self.frame_producto)
-        self.frame_table_view.pack(fill=BOTH, expand=YES, padx=10, pady=10)
-        self.frame_table_view.pack_propagate(False)
+        self.frame_table_view.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 8))
+        self.frame_table_view.columnconfigure(0, weight=5, minsize=760)
+        self.frame_table_view.columnconfigure(1, weight=4, minsize=420)
+        self.frame_table_view.rowconfigure(0, weight=1)
         colors = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style.colors
         coldata = [
-            {"text": "Producto", "stretch": False},
-            {"text": "Codígo de Barras", "stretch": False},
-            {"text": "Precio", "stretch": False},
+            {"text": "Producto", "stretch": True},
+            {"text": "Código de Barras", "stretch": True},
+            {"text": "Precio", "stretch": True},
         ]
-        
-        
+
+        self.frame_tabla_producto = ttk.Frame(self.frame_table_view, bootstyle="light")
+        self.frame_tabla_producto.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        self.frame_tabla_producto.columnconfigure(0, weight=1)
+        self.frame_tabla_producto.rowconfigure(0, weight=1)
+
         self.dt = Tableview(
-            master=self.frame_table_view,
+            master=self.frame_tabla_producto,
             coldata=coldata,
-            #rowdata=rowdata,
             paginated=True,
             pagesize=100,
             searchable=True,
@@ -132,10 +158,10 @@ class ContenidoProducto:
         self.dt.align_heading_center(cid=0)
         self.dt.align_heading_center(cid=1)
         self.dt.align_heading_center(cid=2)
-        self.dt.align_column_center(cid=0)
+        self.dt.align_column_left(cid=0)
         self.dt.align_column_center(cid=1)
-        self.dt.align_column_center(cid=2)
-        self.dt.pack(side="left", fill=BOTH, expand=False, padx=10, pady=10)
+        self.dt.align_column_right(cid=2)
+        self.dt.pack(fill=BOTH, expand=True, padx=0, pady=0)
         self.dt.view.bind("<<TreeviewSelect>>", self.mostrar_imagen_producto)
         self.dt.view.bind("<Double-1>", self.abrir_detalle_producto)
         
@@ -143,18 +169,18 @@ class ContenidoProducto:
             self.frame_table_view,
             width=self.IMAGE_PANEL_WIDTH,
             height=self.IMAGE_PANEL_HEIGHT,
+            bootstyle="light",
         )
-        self.frame_img_producto.pack(side="right", fill=BOTH, expand=False, padx=10, pady=10)
+        self.frame_img_producto.grid(row=0, column=1, sticky="nsew")
         self.frame_img_producto.pack_propagate(False)
         self.label_img_producto = ttk.Label(
             self.frame_img_producto, 
             text="", 
             image=self.IMG_NO_FOTO,
             anchor="center",  # Asegura que el contenido se centre
-            #bootstyle="inverse-success"
         )
 
-        self.label_img_producto.place(relx=0.5, rely=0.5, anchor="center")
+        self.label_img_producto.place(relx=0.5, rely=0.45, anchor="center")
         self.label_precios_extra_estado = ttk.Label(
             self.frame_img_producto,
             text="Precios adicionales: -",
@@ -163,6 +189,14 @@ class ContenidoProducto:
             font=("Segoe UI", 10, "bold"),
         )
         self.label_precios_extra_estado.pack(side="bottom", fill="x", padx=8, pady=(0, 8))
+        self.label_oferta_estado = ttk.Label(
+            self.frame_img_producto,
+            text="Oferta activa: -",
+            anchor="center",
+            justify="center",
+            font=("Segoe UI", 10, "bold"),
+        )
+        self.label_oferta_estado.pack(side="bottom", fill="x", padx=8, pady=(0, 4))
         self._fijar_layout_productos()
 
     def _fijar_layout_productos(self):
@@ -174,9 +208,9 @@ class ContenidoProducto:
         try:
             self.dt.view.column("#0", width=0, minwidth=0, stretch=False)
             columnas = self.dt.view["columns"]
-            anchos = (260, 150, 110)
+            anchos = (420, 220, 140)
             for columna, ancho in zip(columnas, anchos):
-                self.dt.view.column(columna, width=ancho, minwidth=ancho, stretch=False)
+                self.dt.view.column(columna, width=ancho, minwidth=ancho, stretch=True)
         except Exception as e:
             print(f"No se pudo fijar el ancho de columnas: {e}")
         self.frame_table_view.update_idletasks()
@@ -1034,6 +1068,7 @@ class ContenidoProducto:
         item = self.dt.view.item(seleccion)  # Obtener datos de la fila seleccionada
         codigo_producto = item["values"][1]  # Obtener el código del producto
         self._actualizar_estado_precios_adicionales(codigo_producto)
+        self._actualizar_estado_oferta(codigo_producto)
 
         try:
             img_base64, _ = self._obtener_imagen_producto(codigo_producto)
@@ -1043,7 +1078,7 @@ class ContenidoProducto:
 
             imagen_bytes = base64.b64decode(img_base64)
             imagen_pil = Image.open(BytesIO(imagen_bytes))
-            imagen_pil = imagen_pil.resize(self.PREVIEW_IMAGE_SIZE)
+            imagen_pil.thumbnail(self.PREVIEW_IMAGE_SIZE, Image.Resampling.LANCZOS)
             imagen_tk = ImageTk.PhotoImage(imagen_pil)
             self.label_img_producto.image = imagen_tk
             self.label_img_producto.config(image=imagen_tk)
@@ -1105,6 +1140,42 @@ class ContenidoProducto:
             print(f"Error actualizando estado de precios adicionales: {e}")
             self.label_precios_extra_estado.config(text="Precios adicionales: error", bootstyle="danger")
 
+    def _obtener_oferta_producto(self, codigo_producto):
+        try:
+            fila = self._crear_productos_sqlite_dao(self.CONEXIONDBA).obtener_oferta_por_codigo(codigo_producto)
+        except Exception as e:
+            print(f"Error al obtener oferta desde SQLite: {e}")
+            return None
+
+        if not fila:
+            return None
+
+        _, tiene_oferta, precio_oferta, oferta_desde, oferta_hasta, oferta_origen, oferta_ccoddiv, oferta_dto = fila
+        return {
+            "tiene_oferta": bool(tiene_oferta),
+            "precio_oferta": float(precio_oferta or 0) if precio_oferta is not None else None,
+            "oferta_desde": oferta_desde,
+            "oferta_hasta": oferta_hasta,
+            "oferta_origen": oferta_origen,
+            "oferta_ccoddiv": oferta_ccoddiv,
+            "oferta_dto": float(oferta_dto or 0) if oferta_dto is not None else None,
+        }
+
+    def _actualizar_estado_oferta(self, codigo_producto):
+        try:
+            oferta = self._obtener_oferta_producto(codigo_producto)
+            if oferta and oferta.get("tiene_oferta"):
+                precio_txt = f"${float(oferta.get('precio_oferta') or 0):,.2f}"
+                texto = f"Oferta activa: SI ({precio_txt})"
+                estilo = "warning"
+            else:
+                texto = "Oferta activa: NO"
+                estilo = "secondary"
+            self.label_oferta_estado.config(text=texto, bootstyle=estilo)
+        except Exception as e:
+            print(f"Error actualizando estado de oferta: {e}")
+            self.label_oferta_estado.config(text="Oferta activa: error", bootstyle="danger")
+
 
             
     def abrir_detalle_producto(self, event):
@@ -1153,6 +1224,7 @@ class ContenidoProducto:
         entry_codigo = crear_entry(frame_info, "Código:", codigo_producto, 0)
         entry_descripcion = crear_entry(frame_info, "Descripción:", descripcion_producto, 1)
         entry_precio = crear_entry(frame_info, "Precio:", precio_producto, 2)
+        oferta = self._obtener_oferta_producto(codigo_producto)
 
         # Frame para la imagen
         frame_img = ttk.Frame(
@@ -1279,23 +1351,17 @@ class ContenidoProducto:
             )
             if archivo:
                 try:
-                    # Convertir imagen a Base64
-                    with open(archivo, "rb") as img_file:
-                        img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+                    img_base64, formato_imagen, resumen_imagen = self._preparar_imagen_producto_para_db(archivo)
 
-                    # Obtener el formato de la imagen
-                    formato_imagen = archivo.split(".")[-1]  # Extraer la extensión
-
-                    # Guardar imagen en la base de datos
                     CONSULTA_SQL_GUARDAR_IMG = """
                     UPDATE productos SET img_base64 = ?, formato_imagen = ? WHERE codigo = ?
                     """
                     self.CONEXIONDBA.ejecutar_consulta(CONSULTA_SQL_GUARDAR_IMG, (img_base64, formato_imagen, codigo_producto))
 
-                    # Cargar la nueva imagen en la interfaz
                     cargar_imagen_desde_db()
                     self.registrar_cambio_producto(codigo_producto)
-                    print("Imagen guardada correctamente en la base de datos.")
+                    print(f"Imagen guardada correctamente en la base de datos. {resumen_imagen}")
+                    messagebox.showinfo("Imagen de producto", f"Imagen optimizada y guardada.\n{resumen_imagen}")
 
                 except Exception as e:
                     print(f"Error al guardar la imagen en la base de datos: {e}")
@@ -1303,6 +1369,41 @@ class ContenidoProducto:
         # Botón para cargar nueva imagen
         btn_cargar_img = ttk.Button(frame_info, text="Cargar Imagen", command=seleccionar_imagen)
         btn_cargar_img.grid(row=3, column=2, padx=5, pady=5)
+
+        ttk.Label(
+            frame_info,
+            text="Oferta activa (SQLite local)",
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=6, column=0, columnspan=3, sticky="w", padx=5, pady=(12, 6))
+
+        frame_oferta = ttk.Frame(frame_info)
+        frame_oferta.grid(row=7, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 6))
+        frame_oferta.columnconfigure(0, weight=1)
+        frame_oferta.columnconfigure(1, weight=1)
+        frame_oferta.columnconfigure(2, weight=1)
+        frame_oferta.columnconfigure(3, weight=1)
+
+        oferta_activa = bool(oferta and oferta.get("tiene_oferta"))
+        precio_oferta = f"${float(oferta.get('precio_oferta') or 0):,.2f}" if oferta_activa else "-"
+        oferta_desde = str((oferta or {}).get("oferta_desde") or "-")
+        oferta_hasta = str((oferta or {}).get("oferta_hasta") or "-")
+        oferta_origen = str((oferta or {}).get("oferta_origen") or "-")
+        oferta_ccoddiv = str((oferta or {}).get("oferta_ccoddiv") or "-")
+
+        ttk.Label(frame_oferta, text="Activa").grid(row=0, column=0, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text="Precio oferta").grid(row=0, column=1, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text="Desde").grid(row=0, column=2, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text="Hasta").grid(row=0, column=3, sticky="w", padx=4, pady=2)
+        ttk.Label(
+            frame_oferta,
+            text="SI" if oferta_activa else "NO",
+            bootstyle="warning" if oferta_activa else "secondary",
+        ).grid(row=1, column=0, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text=precio_oferta).grid(row=1, column=1, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text=oferta_desde).grid(row=1, column=2, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text=oferta_hasta).grid(row=1, column=3, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text=f"Origen: {oferta_origen}").grid(row=2, column=0, columnspan=2, sticky="w", padx=4, pady=2)
+        ttk.Label(frame_oferta, text=f"CCODDIV: {oferta_ccoddiv}").grid(row=2, column=2, columnspan=2, sticky="w", padx=4, pady=2)
 
     def registrar_cambio_producto(self, codigo_producto):
             """Registra que un producto ha sido modificado."""
@@ -1315,14 +1416,8 @@ class ContenidoProducto:
             print("Error: La imagen no existe.")
             return
 
-        # Leer la imagen y convertirla en Base64
-        with open(ruta_imagen, "rb") as img_file:
-            img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+        img_base64, tipo_imagen, _resumen_imagen = self._preparar_imagen_producto_para_db(ruta_imagen)
 
-        # Obtener la extensión del archivo
-        tipo_imagen = os.path.splitext(ruta_imagen)[1].lower().replace(".", "")
-
-        # Guardar en la base de datos (ajusta esto según tu esquema)
         try:
             CONSULTA_SQL_ACTUALIZAR_IMG = """
             UPDATE productos 
@@ -1334,6 +1429,47 @@ class ContenidoProducto:
 
         except Exception as e:
             print(f"Error al guardar en la base de datos: {e}")
+
+    def _preparar_imagen_producto_para_db(self, ruta_imagen):
+        img = Image.open(ruta_imagen)
+        ancho_original, alto_original = img.size
+
+        if img.mode not in ("RGB", "RGBA"):
+            img = img.convert("RGBA")
+
+        if img.mode == "RGBA":
+            fondo = Image.new("RGB", img.size, (255, 255, 255))
+            fondo.paste(img, mask=img.split()[3])
+            img = fondo
+        else:
+            img = img.convert("RGB")
+
+        maximo = (1400, 1400)
+        objetivo = (1000, 1000)
+
+        if img.width > maximo[0] or img.height > maximo[1]:
+            img.thumbnail(maximo, Image.Resampling.LANCZOS)
+
+        img.thumbnail(objetivo, Image.Resampling.LANCZOS)
+
+        calidad = 88
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", quality=calidad, optimize=True)
+        contenido = buffer.getvalue()
+
+        while len(contenido) > 700 * 1024 and calidad > 65:
+            calidad -= 5
+            buffer = BytesIO()
+            img.save(buffer, format="JPEG", quality=calidad, optimize=True)
+            contenido = buffer.getvalue()
+
+        img_base64 = base64.b64encode(contenido).decode("utf-8")
+        resumen = (
+            f"Original: {ancho_original}x{alto_original}px | "
+            f"Final: {img.width}x{img.height}px | "
+            f"Peso: {len(contenido) / 1024:.0f} KB | Formato: JPEG"
+        )
+        return img_base64, "jpg", resumen
 
     def _notificar_sistema(self, titulo, mensaje):
         try:
