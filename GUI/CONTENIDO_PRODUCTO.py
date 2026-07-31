@@ -29,10 +29,10 @@ from FUNC.config_json import guardar_config
 
 class ContenidoProducto:
     AUTO_SYNC_INTERVAL_SECONDS = 5
-    TABLE_HEIGHT = 20
-    IMAGE_PANEL_WIDTH = 470
-    IMAGE_PANEL_HEIGHT = 470
-    PREVIEW_IMAGE_SIZE = (450, 450)
+    TABLE_HEIGHT = 24
+    IMAGE_PANEL_WIDTH = 560
+    IMAGE_PANEL_HEIGHT = 620
+    PREVIEW_IMAGE_SIZE = (520, 520)
     DETAIL_IMAGE_SIZE = (200, 200)
 
     def __init__(self, DICT_WIDGETS):
@@ -50,26 +50,47 @@ class ContenidoProducto:
             self.CONEXIONDBA_SYBASE = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA_SYBASE")
         self.variables_globales()
         self.frame_producto = self.DICT_WIDGETS.get_widget("GUI_MAIN", "frame_seccion_productos")
-        
-        self.label_producto = ttk.Label(self.frame_producto, text="SECCION PRODUCTOS")
-        self.label_producto.pack(pady=10)
-        
+
+        self.frame_producto.columnconfigure(0, weight=1)
+        self.frame_producto.rowconfigure(1, weight=1)
+
+        self.frame_header_productos = ttk.Frame(self.frame_producto)
+        self.frame_header_productos.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 8))
+        self.frame_header_productos.columnconfigure(0, weight=1)
+
+        self.label_producto = ttk.Label(
+            self.frame_header_productos,
+            text="Productos",
+            font=("Segoe UI", 18, "bold"),
+        )
+        self.label_producto.grid(row=0, column=0, sticky="w")
+
+        self.label_producto_subtitulo = ttk.Label(
+            self.frame_header_productos,
+            text="Busqueda local, vista previa y envio a verificadores.",
+            bootstyle="secondary",
+            font=("Segoe UI", 10),
+        )
+        self.label_producto_subtitulo.grid(row=1, column=0, sticky="w", pady=(4, 0))
+
         self.crear_interfaz_table_view()
-        
+
         self.frame_buttons_productos = ttk.Frame(self.frame_producto)
-        self.frame_buttons_productos.pack(padx=50, pady=10)
+        self.frame_buttons_productos.grid(row=2, column=0, sticky="ew", padx=18, pady=(8, 16))
+        for column in range(4):
+            self.frame_buttons_productos.columnconfigure(column, weight=1)
         
         self.button_crear_datos = ttk.Button(self.frame_buttons_productos, text="Recargar Productos", command=self.command_crear_datos)
-        self.button_crear_datos.grid(row=0, column=0, padx=10)
+        self.button_crear_datos.grid(row=0, column=0, padx=6, sticky="ew")
         
         self.button_transmitir_novedades = ttk.Button(self.frame_buttons_productos, text="Transmitir Novedades", command=self.command_transmitir_novedades, state=DISABLED)
-        self.button_transmitir_novedades.grid(row=0, column=1, padx=10)
+        self.button_transmitir_novedades.grid(row=0, column=1, padx=6, sticky="ew")
 
         self.button_transmitir_datos_fecha = ttk.Button(self.frame_buttons_productos, text="Transmitir por Fecha", command=self.command_transmitir_por_fecha, state=DISABLED)
-        self.button_transmitir_datos_fecha.grid(row=0, column=2, padx=10)
+        self.button_transmitir_datos_fecha.grid(row=0, column=2, padx=6, sticky="ew")
         
         self.button_transmitir_datos = ttk.Button(self.frame_buttons_productos, text="Transmitir Datos Completos", command=self.command_transmitir_datos, state=DISABLED)
-        self.button_transmitir_datos.grid(row=0, column=3, padx=10)
+        self.button_transmitir_datos.grid(row=0, column=3, padx=6, sticky="ew")
         
         # Agregar el nuevo botón en la columna 3
         #self.button_actualizar_datos = ttk.Button(self.frame_buttons_productos, text="Actualizar Datos", command=self.command_actualizar_datos, state=DISABLED)
@@ -107,20 +128,25 @@ class ContenidoProducto:
         
     def crear_interfaz_table_view(self):
         self.frame_table_view = ttk.Frame(self.frame_producto)
-        self.frame_table_view.pack(fill=BOTH, expand=YES, padx=10, pady=10)
-        self.frame_table_view.pack_propagate(False)
+        self.frame_table_view.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 8))
+        self.frame_table_view.columnconfigure(0, weight=5, minsize=760)
+        self.frame_table_view.columnconfigure(1, weight=4, minsize=420)
+        self.frame_table_view.rowconfigure(0, weight=1)
         colors = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style.colors
         coldata = [
-            {"text": "Producto", "stretch": False},
-            {"text": "Codígo de Barras", "stretch": False},
-            {"text": "Precio", "stretch": False},
+            {"text": "Producto", "stretch": True},
+            {"text": "Código de Barras", "stretch": True},
+            {"text": "Precio", "stretch": True},
         ]
-        
-        
+
+        self.frame_tabla_producto = ttk.Frame(self.frame_table_view, bootstyle="light")
+        self.frame_tabla_producto.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        self.frame_tabla_producto.columnconfigure(0, weight=1)
+        self.frame_tabla_producto.rowconfigure(0, weight=1)
+
         self.dt = Tableview(
-            master=self.frame_table_view,
+            master=self.frame_tabla_producto,
             coldata=coldata,
-            #rowdata=rowdata,
             paginated=True,
             pagesize=100,
             searchable=True,
@@ -132,10 +158,10 @@ class ContenidoProducto:
         self.dt.align_heading_center(cid=0)
         self.dt.align_heading_center(cid=1)
         self.dt.align_heading_center(cid=2)
-        self.dt.align_column_center(cid=0)
+        self.dt.align_column_left(cid=0)
         self.dt.align_column_center(cid=1)
-        self.dt.align_column_center(cid=2)
-        self.dt.pack(side="left", fill=BOTH, expand=False, padx=10, pady=10)
+        self.dt.align_column_right(cid=2)
+        self.dt.pack(fill=BOTH, expand=True, padx=0, pady=0)
         self.dt.view.bind("<<TreeviewSelect>>", self.mostrar_imagen_producto)
         self.dt.view.bind("<Double-1>", self.abrir_detalle_producto)
         
@@ -143,18 +169,18 @@ class ContenidoProducto:
             self.frame_table_view,
             width=self.IMAGE_PANEL_WIDTH,
             height=self.IMAGE_PANEL_HEIGHT,
+            bootstyle="light",
         )
-        self.frame_img_producto.pack(side="right", fill=BOTH, expand=False, padx=10, pady=10)
+        self.frame_img_producto.grid(row=0, column=1, sticky="nsew")
         self.frame_img_producto.pack_propagate(False)
         self.label_img_producto = ttk.Label(
             self.frame_img_producto, 
             text="", 
             image=self.IMG_NO_FOTO,
             anchor="center",  # Asegura que el contenido se centre
-            #bootstyle="inverse-success"
         )
 
-        self.label_img_producto.place(relx=0.5, rely=0.5, anchor="center")
+        self.label_img_producto.place(relx=0.5, rely=0.45, anchor="center")
         self.label_precios_extra_estado = ttk.Label(
             self.frame_img_producto,
             text="Precios adicionales: -",
@@ -182,9 +208,9 @@ class ContenidoProducto:
         try:
             self.dt.view.column("#0", width=0, minwidth=0, stretch=False)
             columnas = self.dt.view["columns"]
-            anchos = (260, 150, 110)
+            anchos = (420, 220, 140)
             for columna, ancho in zip(columnas, anchos):
-                self.dt.view.column(columna, width=ancho, minwidth=ancho, stretch=False)
+                self.dt.view.column(columna, width=ancho, minwidth=ancho, stretch=True)
         except Exception as e:
             print(f"No se pudo fijar el ancho de columnas: {e}")
         self.frame_table_view.update_idletasks()
@@ -1052,7 +1078,7 @@ class ContenidoProducto:
 
             imagen_bytes = base64.b64decode(img_base64)
             imagen_pil = Image.open(BytesIO(imagen_bytes))
-            imagen_pil = imagen_pil.resize(self.PREVIEW_IMAGE_SIZE)
+            imagen_pil.thumbnail(self.PREVIEW_IMAGE_SIZE, Image.Resampling.LANCZOS)
             imagen_tk = ImageTk.PhotoImage(imagen_pil)
             self.label_img_producto.image = imagen_tk
             self.label_img_producto.config(image=imagen_tk)

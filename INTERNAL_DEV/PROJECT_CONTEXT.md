@@ -1,6 +1,6 @@
 ﻿# Project Context
 
-Version actual: `1.16.25`
+Version actual: `1.16.26`
 
 ## 1. Objetivo del sistema
 
@@ -64,6 +64,7 @@ Modos:
 5. El selector manual y el autoenvio pueden descubrir verificadores por red local si no hay equipos online registrados.
 6. Antes de enviar, tambien puede empujar GO-UPC key y URL de API propia de imagenes.
 7. La siguiente fase prevista agrega columnas locales de oferta por producto (`TIENE_OFERTA`, `PRECIO_OFERTA`, vigencias y origen) para que la SQLite refleje promociones activas provenientes de `DBA.ATIPICAS`.
+8. La siguiente linea abierta `VPC-F4` debe resolver clientes legacy que guardan `CCODEBAR` con `12` digitos sin check digit, conservando codigo original y codigo normalizado antes del envio al verificador.
 
 ### Publicidades
 1. `CONTENIDO_PUBLICIDAD` mantiene grupos y globales en config.
@@ -130,6 +131,7 @@ Mantener compatibilidad con:
 - La rama `publicidades` del config es compartida entre usuarios; las vistas de Publicidad deben refrescar desde disco antes de operar para no trabajar con copias stale en memoria.
 - La deteccion por red diferencia por tipo de dispositivo (`verificador` vs `infotv`) y esa separacion no debe perderse en futuros flujos de envio.
 - La futura integracion de ofertas no debe mezclar `precio_oferta` con `precios_adicionales` de `PACKS_MINI`; son contratos distintos y deben viajar separados al verificador.
+- La futura normalizacion de codigos no debe asumir que cualquier valor de `12` digitos es automaticamente UPC-A o GS1 valido; la fase inicial se limita a fallback `EAN-13` para clientes legacy documentados.
 
 ## 7. Decisiones vigentes que no deben romperse
 
@@ -142,3 +144,4 @@ Mantener compatibilidad con:
 - La instancia unica debe ser por usuario Windows para no bloquear sesiones distintas en la misma PC/Windows Server.
 - El arranque debe mostrar feedback visible de carga y evitar congelar la primera pantalla; la shell de GUI debe pintar antes del bootstrap pesado.
 - Productos y Publicidad no deben mezclar destinos: descubrimiento y selector deben filtrar verificadores para catalogo y dispositivos InforTV para multimedia.
+- Mientras no cierre `VPC-F4`, SmartPrice sigue guardando y enviando `codigo` tal cual viene de Sybase; no asumir normalizacion implicita.

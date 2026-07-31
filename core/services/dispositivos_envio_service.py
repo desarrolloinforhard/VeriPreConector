@@ -28,6 +28,7 @@ class DispositivosEnvioService:
 
         precios_adicionales_map = self._cargar_precios_adicionales_map(datos)
         ofertas_map = self._cargar_ofertas_map(datos)
+        codigos_envio_map = self._cargar_codigos_envio_map(datos)
         total_con_packs = sum(1 for precios in precios_adicionales_map.values() if precios)
         total_con_oferta = sum(1 for oferta in ofertas_map.values() if oferta.get("tiene_oferta"))
 
@@ -40,11 +41,11 @@ class DispositivosEnvioService:
             actualizar(f"Se adjuntaran ofertas activas en {total_con_oferta} productos")
 
         if modo == "novedades":
-            self._enviar_novedades(client, datos, actualizar, precios_adicionales_map, ofertas_map)
+            self._enviar_novedades(client, datos, actualizar, precios_adicionales_map, ofertas_map, codigos_envio_map)
         elif modo == "rango_fecha":
-            self._enviar_rango_fecha(client, datos, actualizar, precios_adicionales_map, ofertas_map)
+            self._enviar_rango_fecha(client, datos, actualizar, precios_adicionales_map, ofertas_map, codigos_envio_map)
         else:
-            self._enviar_completo(client, datos, actualizar, precios_adicionales_map, ofertas_map)
+            self._enviar_completo(client, datos, actualizar, precios_adicionales_map, ofertas_map, codigos_envio_map)
 
         actualizar("FINAL_OK: Enviado correctamente")
 
@@ -343,31 +344,33 @@ class DispositivosEnvioService:
         except Exception as e:
             return False, f"Error: {e}"
 
-    def _enviar_novedades(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None):
+    def _enviar_novedades(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None, codigos_envio_map=None):
         for art in datos:
             try:
                 actualizar(f"Enviando: {art[0]} - {art[1]}")
-                response = client.enviar_post_json([self._producto_payload(art, precios_adicionales_map, ofertas_map)])
+                response = client.enviar_post_json(
+                    [self._producto_payload(art, precios_adicionales_map, ofertas_map, codigos_envio_map)]
+                )
                 if response is None:
                     raise RuntimeError("sin respuesta OK del dispositivo")
                 self._informar_resumen_productos(client, response, actualizar)
             except Exception as e:
                 raise RuntimeError(f"Error con {art[0]} - {art[1]}: {e}") from e
 
-    def _enviar_rango_fecha(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None):
+    def _enviar_rango_fecha(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None, codigos_envio_map=None):
         for i in range(0, len(datos), self.batch_size):
             batch = datos[i:i + self.batch_size]
             if batch:
                 actualizar(f"Enviando producto de fecha: {batch[0][0]} - {batch[0][1]}")
             response = client.enviar_post_json(
-                [self._producto_payload(art, precios_adicionales_map, ofertas_map) for art in batch]
+                [self._producto_payload(art, precios_adicionales_map, ofertas_map, codigos_envio_map) for art in batch]
             )
             if response is None:
                 raise RuntimeError("sin respuesta OK del dispositivo")
             self._informar_resumen_productos(client, response, actualizar)
         actualizar("Rango de fecha enviado correctamente")
 
-    def _enviar_completo(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None):
+    def _enviar_completo(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None, codigos_envio_map=None):
         response = client.enviar_delete()
         if response is None:
             raise RuntimeError("no se pudo limpiar productos en el dispositivo")
@@ -390,6 +393,8 @@ class DispositivosEnvioService:
             "sin imagen",
             actualizar,
             precios_adicionales_map,
+            ofertas_map,
+            codigos_envio_map,
         )
         enviados = self._enviar_batches(
             client,
@@ -400,6 +405,8 @@ class DispositivosEnvioService:
             "con imagen",
             actualizar,
             precios_adicionales_map,
+            ofertas_map,
+            codigos_envio_map,
         )
         self._informar_status_dispositivo(client, esperado_productos=enviados, actualizar=actualizar)
 
@@ -426,6 +433,8 @@ class DispositivosEnvioService:
         etiqueta,
         actualizar,
         precios_adicionales_map=None,
+        ofertas_map=None,
+        codigos_envio_map=None,
     ):
         if not productos:
             return enviados
@@ -439,7 +448,7 @@ class DispositivosEnvioService:
             )
             timeout = 120 if etiqueta == "con imagen" else 60
             response = client.enviar_post_json(
-                [self._producto_payload(art, precios_adicionales_map, ofertas_map) for art in batch],
+                [self._producto_payload(art, precios_adicionales_map, ofertas_map, codigos_envio_map) for art in batch],
                 timeout=timeout,
             )
             if response is None:
@@ -552,6 +561,20 @@ class DispositivosEnvioService:
 
         return precios_map
 
+    def _cargar_codigos_envio_map(self, datos):
+        codigos = [str(producto[0]).strip() for producto in datos if producto and producto[0] is not None]
+        filas = self.productos_sqlite_dao.listar_codigos_normalizados_por_codigos(codigos)
+        codigos_map = {}
+
+        for codigo, codigo_normalizado in filas:
+            codigo_base = str(codigo).strip() if codigo is not None else ""
+            codigo_envio = str(codigo_normalizado).strip() if codigo_normalizado is not None else ""
+            if not codigo_base:
+                continue
+            codigos_map[codigo_base] = codigo_envio or codigo_base
+
+        return codigos_map
+
     def _cargar_ofertas_map(self, datos):
         codigos = [str(producto[0]).strip() for producto in datos if producto and producto[0] is not None]
         ofertas_map = {}
@@ -574,10 +597,11 @@ class DispositivosEnvioService:
 
         return ofertas_map
 
-    def _producto_payload(self, art, precios_adicionales_map=None, ofertas_map=None):
+    def _producto_payload(self, art, precios_adicionales_map=None, ofertas_map=None, codigos_envio_map=None):
         codigo = str(art[0]).strip() if art[0] is not None else ""
+        codigo_envio = (codigos_envio_map or {}).get(codigo) or codigo
         payload = {
-            "codigo": codigo,
+            "codigo": codigo_envio,
             "descripcion": art[1],
             "precio": art[2],
             "img_base64": art[3],

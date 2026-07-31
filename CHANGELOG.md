@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.16.26 - 2026-07-31
+
+- Added legacy barcode normalization support for clients that store `CCODEBAR` with 12 numeric digits and no check digit.
+- SQLite now persists `CODIGO_ORIGINAL` and `CODIGO_NORMALIZADO` for product traceability.
+- Product sync now calculates EAN-13 check digits during synchronization without altering the Sybase source value.
+- Product payloads sent to Android now prioritize the normalized barcode while preserving the original value locally.
+- Validated the migration and a full real synchronization against the installed SmartPrice database in `C:\ProgramData\SmartPrice\veripre.db`.
+
 ## 1.16.25 - 2026-07-31
 
 - Added an in-app Android image specification guide for product images and company logos under `Configuracion de Datos`.

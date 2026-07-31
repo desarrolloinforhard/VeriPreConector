@@ -16,7 +16,9 @@ class ProductosSQLiteDAO:
             OFERTA_HASTA,
             OFERTA_ORIGEN,
             OFERTA_CCODDIV,
-            OFERTA_DTO
+            OFERTA_DTO,
+            CODIGO_ORIGINAL,
+            CODIGO_NORMALIZADO
         FROM productos
         ORDER BY descripcion
         """
@@ -39,9 +41,10 @@ class ProductosSQLiteDAO:
         INSERT OR REPLACE INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
             TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
+            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -50,9 +53,10 @@ class ProductosSQLiteDAO:
         INSERT INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
             TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
+            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(codigo) DO UPDATE SET
             CREF = excluded.CREF,
             descripcion = excluded.descripcion,
@@ -64,7 +68,9 @@ class ProductosSQLiteDAO:
             OFERTA_HASTA = excluded.OFERTA_HASTA,
             OFERTA_ORIGEN = excluded.OFERTA_ORIGEN,
             OFERTA_CCODDIV = excluded.OFERTA_CCODDIV,
-            OFERTA_DTO = excluded.OFERTA_DTO
+            OFERTA_DTO = excluded.OFERTA_DTO,
+            CODIGO_ORIGINAL = excluded.CODIGO_ORIGINAL,
+            CODIGO_NORMALIZADO = excluded.CODIGO_NORMALIZADO
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -110,6 +116,19 @@ class ProductosSQLiteDAO:
         FROM producto_precios
         WHERE codigo IN ({placeholders})
         ORDER BY codigo ASC, orden ASC, cantidad ASC, titulo ASC
+        """
+        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
+
+    def listar_codigos_normalizados_por_codigos(self, codigos):
+        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
+        if not codigos:
+            return []
+
+        placeholders = ",".join("?" for _ in codigos)
+        sql = f"""
+        SELECT codigo, CODIGO_NORMALIZADO
+        FROM productos
+        WHERE codigo IN ({placeholders})
         """
         return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
@@ -209,10 +228,29 @@ class ProductosSQLiteDAO:
                         producto.get("oferta_origen"),
                         producto.get("oferta_ccoddiv"),
                         producto.get("oferta_dto"),
+                        producto.get("codigo_original"),
+                        producto.get("codigo_normalizado"),
                     )
                 )
             else:
-                parametros.append((producto[0], producto[2], producto[1], producto[3], producto[4], 0, None, None, None, None, None, None))
+                parametros.append(
+                    (
+                        producto[0],
+                        producto[2],
+                        producto[1],
+                        producto[3],
+                        producto[4],
+                        0,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        producto[2],
+                        producto[2],
+                    )
+                )
 
         return parametros
 

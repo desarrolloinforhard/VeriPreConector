@@ -2,7 +2,7 @@
   "app": {
     "name": "SmartPrice",
     "display_name": "VeriPre Connector",
-    "version": "1.16.25",
+    "version": "1.16.26",
     "build_mode": "folder",
     "entrypoint": "main.py",
     "description": "SmartPrice - VeriPre Connector desktop application",

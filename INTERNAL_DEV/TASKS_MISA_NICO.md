@@ -42,6 +42,11 @@ Si un cambio cruza ambas lineas, se define contrato primero y luego cada uno imp
    - `VPC-F3-002` sync Sybase -> SQLite usando `ATIPICAS` (`86e2k22vu`) [completado]
    - `VPC-F3-003` envio Android en `batch_productos` con `tiene_oferta` y `precio_oferta` (`86e2k22wb`) [completado]
    - `VPC-F3-004` visualizacion y validacion en UI / verificador (`86e2k22wr`) [en curso]
+9. Abrir linea de normalizacion de codigos legados sin digito verificador:
+   - `VPC-F4-001` estrategia EAN/UPC y helper de normalizacion (`86e2k4289`)
+   - `VPC-F4-002` persistencia local de codigo original vs normalizado (`86e2k428k`)
+   - `VPC-F4-003` sync y busqueda local con fallback por codigo legacy (`86e2k4295`)
+   - `VPC-F4-004` envio Android con codigo normalizado y compatibilidad (`86e2k429k`)
 
 ## Nico - Ownership principal
 
@@ -114,3 +119,27 @@ Contrato candidato para Android / Verificador:
 Notas:
 - Esta fase debe dejar trazabilidad suficiente para pasarse al chat del verificador de precio.
 - No se incorpora todavia `OFCANASTA`, `OFERTAP` ni `MIX_CANAS` al payload operativo principal.
+
+## Anexo fase VPC-F4
+
+Responsable acordado: `Misael Ramirez`
+
+Objetivo tecnico inicial:
+- Resolver clientes que guardan `CCODEBAR` en formato legacy de `12` digitos sin check digit.
+- No asumir que todo valor de `12` digitos es UPC-A valido; la fase inicial se enfoca en fallback `EAN-13` para clientes legacy relevados.
+- No romper productos que ya tienen `13` digitos correctos.
+
+Hipotesis operativa actual:
+- Hoy SmartPrice guarda y envia el codigo exactamente como viene desde Sybase.
+- Para clientes legacy eso provoca que el verificador reciba `12` digitos y no el `EAN-13` completo.
+
+Alcance propuesto:
+- agregar helper de calculo de digito verificador `EAN-13`
+- conservar `codigo_original`
+- derivar `codigo_normalizado`
+- usar fallback de busqueda y envio sobre el codigo normalizado
+
+Fuera de alcance inicial:
+- deteccion completa de todos los formatos GS1
+- reescritura de historicos fuera de la sync controlada
+- reglas especiales por proveedor salvo que se documenten luego

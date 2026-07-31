@@ -39,8 +39,8 @@ class GUI_CONFIG:
         self.top_level_configuracion.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         #self.top_level_configuracion.grab_set()
         self.top_level_configuracion.title("VeriPre_Connector - Configuración")
-        self.top_level_configuracion.geometry("1120x760")
-        self.top_level_configuracion.minsize(1020, 680)
+        self.top_level_configuracion.geometry("1320x860")
+        self.top_level_configuracion.minsize(1180, 760)
         self.top_level_configuracion.place_window_center()
         self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind(
             "<<DispositivosActualizados>>",
@@ -1429,7 +1429,7 @@ class GUI_CONFIG:
 
         selector = ttk.Toplevel(self.top_level_configuracion)
         selector.title("Buscar en red")
-        selector.geometry("420x170")
+        selector.geometry("520x230")
         selector.place_window_center()
         selector.transient(self.top_level_configuracion)
         selector.grab_set()
@@ -1439,15 +1439,23 @@ class GUI_CONFIG:
             selector,
             text="Seleccione qué tipo de dispositivos desea detectar:",
             font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=18, pady=(18, 10))
+        ).pack(anchor="w", padx=22, pady=(22, 12))
+
+        ttk.Label(
+            selector,
+            text="Puede buscar verificadores de precio, players InforTV o ambos.",
+            bootstyle="secondary",
+            justify="left",
+            wraplength=460,
+        ).pack(anchor="w", padx=22, pady=(0, 10))
 
         combo = ttk.Combobox(
             selector,
             state="readonly",
             values=["Ambos", "Verificadores", "InforTV"],
-            width=26,
+            width=34,
         )
-        combo.pack(anchor="w", padx=18)
+        combo.pack(anchor="w", padx=22)
         combo.set("Ambos")
 
         usar_cache = ttk.BooleanVar(value=True)
@@ -1455,7 +1463,7 @@ class GUI_CONFIG:
             selector,
             text="Usar cache reciente si existe",
             variable=usar_cache,
-        ).pack(anchor="w", padx=18, pady=(10, 0))
+        ).pack(anchor="w", padx=22, pady=(12, 0))
 
         def resolver_tipos():
             valor = combo.get().strip().lower()
@@ -1475,14 +1483,14 @@ class GUI_CONFIG:
             )
 
         acciones = ttk.Frame(selector)
-        acciones.pack(fill="x", padx=18, pady=(18, 0))
-        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info").pack(side="left")
-        ttk.Button(acciones, text="Cancelar", command=selector.destroy).pack(side="right")
+        acciones.pack(fill="x", padx=22, pady=(24, 0))
+        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info", width=14).pack(side="left")
+        ttk.Button(acciones, text="Cancelar", command=selector.destroy, width=14).pack(side="right")
 
     def _ejecutar_busqueda_dispositivos_red(self, tipos=("verificador", "infotv"), use_cache=True):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Buscar dispositivos en red")
-        top.geometry("460x180")
+        top.geometry("580x220")
         top.place_window_center()
         top.transient(self.top_level_configuracion)
         top.grab_set()
@@ -1492,19 +1500,19 @@ class GUI_CONFIG:
             top,
             text="Buscando verificadores (8080) e InforTV (2727) en la red local...",
             font=("Segoe UI", 11, "bold"),
-            wraplength=410,
+            wraplength=520,
             justify="left",
-        ).pack(anchor="w", padx=20, pady=(18, 10))
+        ).pack(anchor="w", padx=24, pady=(22, 12))
 
         progress = ttk.Progressbar(top, mode="indeterminate", bootstyle="info-striped")
-        progress.pack(fill="x", padx=20, pady=(0, 12))
+        progress.pack(fill="x", padx=24, pady=(0, 14))
         progress.start(12)
 
         estado_var = ttk.StringVar(value="Iniciando descubrimiento...")
-        ttk.Label(top, textvariable=estado_var, bootstyle="secondary").pack(anchor="w", padx=20)
+        ttk.Label(top, textvariable=estado_var, bootstyle="secondary", wraplength=520, justify="left").pack(anchor="w", padx=24)
 
         acciones = ttk.Frame(top)
-        acciones.pack(fill="x", padx=20, pady=(18, 0))
+        acciones.pack(fill="x", padx=24, pady=(24, 0))
         btn_cerrar = ttk.Button(acciones, text="Cerrar", command=top.destroy, state="disabled")
         btn_cerrar.pack(side="right")
 
@@ -1540,7 +1548,7 @@ class GUI_CONFIG:
     def _mostrar_resultados_dispositivos_detectados(self, dispositivos):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Dispositivos detectados")
-        top.geometry("1040x500")
+        top.geometry("1240x680")
         top.place_window_center()
         top.transient(self.top_level_configuracion)
 
@@ -1552,8 +1560,8 @@ class GUI_CONFIG:
 
         frame_contenido = ttk.Frame(top)
         frame_contenido.pack(fill="both", expand=True, padx=14, pady=(0, 10))
-        frame_contenido.columnconfigure(0, weight=4)
-        frame_contenido.columnconfigure(1, weight=2)
+        frame_contenido.columnconfigure(0, weight=5)
+        frame_contenido.columnconfigure(1, weight=3)
         frame_contenido.rowconfigure(0, weight=1)
 
         frame_tree = ttk.Frame(frame_contenido)
@@ -1574,13 +1582,13 @@ class GUI_CONFIG:
         combo_filtro.set("Solo nuevos")
 
         columns = ("nombre", "tipo", "ip", "puerto", "estado")
-        tree = ttk.Treeview(frame_tree, columns=columns, show="headings", height=12, selectmode="extended")
+        tree = ttk.Treeview(frame_tree, columns=columns, show="headings", height=18, selectmode="extended")
         headings = {
-            "nombre": ("Nombre", 240),
-            "tipo": ("Tipo", 110),
-            "ip": ("IP", 170),
-            "puerto": ("Puerto", 90),
-            "estado": ("Estado", 160),
+            "nombre": ("Nombre", 300),
+            "tipo": ("Tipo", 130),
+            "ip": ("IP", 210),
+            "puerto": ("Puerto", 100),
+            "estado": ("Estado", 180),
         }
         for key, (text, width) in headings.items():
             tree.heading(key, text=text)
@@ -1690,7 +1698,7 @@ class GUI_CONFIG:
         ttk.Label(frame_editor, textvariable=estado_var_editor).grid(row=4, column=1, sticky="w", pady=4)
 
         ayuda_var = ttk.StringVar(value="Seleccione un dispositivo para editar su nombre antes de guardar.")
-        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", wraplength=240, justify="left").grid(
+        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", wraplength=320, justify="left").grid(
             row=5, column=0, columnspan=2, sticky="w", pady=(14, 10)
         )
 

@@ -1,3 +1,9 @@
+Version 1.16.26
+- Se agrego normalizacion de codigos legacy de 12 digitos sin digito verificador usando fallback EAN-13 durante la sincronizacion.
+- SQLite ahora guarda `CODIGO_ORIGINAL` y `CODIGO_NORMALIZADO` para mantener trazabilidad del dato fuente y del codigo operativo.
+- Los envios de productos al verificador ya priorizan el codigo normalizado en el payload sin alterar el valor original en Sybase.
+- Se valido la migracion de esquema y una sincronizacion completa real sobre la base instalada `C:\ProgramData\SmartPrice\veripre.db`.
+
 Version 1.16.25
 - Se agrego una guia visible de especificaciones de imagen en Configuracion de Datos para productos y logo segun los limites del verificador Android.
 - La seleccion de logo ahora lo normaliza automaticamente a PNG 4:1 con margen interno y valida resolucion, peso y proporcion antes del envio.
