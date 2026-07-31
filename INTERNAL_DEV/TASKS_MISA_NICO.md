@@ -37,6 +37,11 @@ Si un cambio cruza ambas lineas, se define contrato primero y luego cada uno imp
    - `VPC-F1-009` cierre de integracion Python-Android (`86e2hfxz2`)
 7. Consolidar descubrimiento de dispositivos en red:
    - `VPC-F1-010` deteccion automatica de dispositivos y alta desde GUI (`86e2jhakm`)
+8. Abrir linea de ofertas por precio desde `ATIPICAS`:
+   - `VPC-F3-001` esquema SQLite y snapshot local de ofertas activas (`86e2k22vh`) [completado]
+   - `VPC-F3-002` sync Sybase -> SQLite usando `ATIPICAS` (`86e2k22vu`) [completado]
+   - `VPC-F3-003` envio Android en `batch_productos` con `tiene_oferta` y `precio_oferta` (`86e2k22wb`) [completado]
+   - `VPC-F3-004` visualizacion y validacion en UI / verificador (`86e2k22wr`) [en curso]
 
 ## Nico - Ownership principal
 
@@ -83,3 +88,29 @@ Tareas ClickUp activadas para esta linea:
 
 Documento base obligatorio para esta fase:
 - `INTERNAL_DEV/BOOTSTACK_MIGRATION_BASE.md`
+
+## Anexo fase VPC-F3
+
+Responsable acordado: `Misael Ramirez`
+
+Objetivo tecnico inicial:
+- No mezclar canastas ni packs con precio oferta.
+- Primera implementacion usando solo `DBA.ATIPICAS`.
+- Regla activa: `CCLAVEC = 'O'` + `DFECINI/DFECFIN` vigentes.
+- `NPRECIO` se considera `precio_oferta`.
+- `NPVP1` se mantiene como precio principal normal.
+
+Contrato candidato para Android / Verificador:
+- reutilizar `POST /api/veri/batch_productos`
+- agregar campos opcionales:
+  - `tiene_oferta`
+  - `precio_oferta`
+  - `oferta_desde`
+  - `oferta_hasta`
+  - `oferta_origen`
+  - `oferta_ccoddiv`
+  - `oferta_dto`
+
+Notas:
+- Esta fase debe dejar trazabilidad suficiente para pasarse al chat del verificador de precio.
+- No se incorpora todavia `OFCANASTA`, `OFERTAP` ni `MIX_CANAS` al payload operativo principal.

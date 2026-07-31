@@ -48,14 +48,18 @@ class ProductosSyncService:
         self._notify(progress_callback, "Iniciando la carga de articulos...", 0, 100)
 
         articulos_normalizados = self._normalizar_articulos(articulos)
+        ofertas_por_cref = self._buscar_ofertas_activas(progress_callback)
+
         if not articulos_normalizados:
-            self._notify(progress_callback, "No hay datos en ARTICULO", 100, 100)
+            self._sync_snapshot_ofertas(ofertas_por_cref, progress_callback)
+            self._notify(progress_callback, "No hay datos en ARTICULO; se refresco snapshot de ofertas.", 100, 100)
             return {
                 "articulos": [],
                 "productos": [],
                 "productos_resueltos": [],
                 "codigos": [],
                 "precios_adicionales": [],
+                "ofertas_activas": list(ofertas_por_cref.values()),
                 "total": 0,
             }
 
@@ -63,9 +67,9 @@ class ProductosSyncService:
         productos_completos = self._completar_con_codbarp(articulos_normalizados, progress_callback)
         ivas = self._buscar_ivas(progress_callback)
         packs_por_cref = self._buscar_packs_por_cref(productos_completos, progress_callback)
-        productos_resueltos = self._resolver_productos(productos_completos, ivas, packs_por_cref, progress_callback)
+        productos_resueltos = self._resolver_productos(productos_completos, ivas, packs_por_cref, ofertas_por_cref, progress_callback)
         productos_legado = self._productos_resueltos_a_tuplas(productos_resueltos)
-        total = self._guardar_productos(productos_resueltos, productos_legado, replace_all, progress_callback)
+        total = self._guardar_productos(productos_resueltos, productos_legado, ofertas_por_cref, replace_all, progress_callback)
 
         return {
             "articulos": articulos_normalizados,
@@ -73,6 +77,7 @@ class ProductosSyncService:
             "productos_resueltos": productos_resueltos,
             "codigos": [producto["codigo"] for producto in productos_resueltos],
             "precios_adicionales": self._flatten_precios_adicionales(productos_resueltos),
+            "ofertas_activas": list(ofertas_por_cref.values()),
             "total": total,
         }
 
@@ -197,7 +202,32 @@ class ProductosSyncService:
         self._notify(progress_callback, f"{len(packs)} registros PACKS_MINI encontrados.", 100, 100)
         return packs_por_cref
 
-    def _resolver_productos(self, productos_completos, ivas, packs_por_cref, progress_callback=None):
+    def _buscar_ofertas_activas(self, progress_callback=None):
+        self._notify(progress_callback, "Obteniendo ofertas activas desde ATIPICAS...", 0, 100)
+        filas = self.sybase_dao.listar_ofertas_atipicas_activas()
+        ofertas_por_cref = {}
+
+        for cref, precio_oferta, oferta_dto, oferta_desde, oferta_hasta, oferta_ccoddiv, cclavec in filas:
+            cref = str(cref).strip() if cref is not None else ""
+            if not cref or cref in ofertas_por_cref:
+                continue
+
+            ofertas_por_cref[cref] = {
+                "cref": cref,
+                "tiene_oferta": True,
+                "precio_oferta": round(self._to_float(precio_oferta), 2),
+                "oferta_desde": oferta_desde,
+                "oferta_hasta": oferta_hasta,
+                "oferta_origen": "ATIPICAS",
+                "oferta_ccoddiv": str(oferta_ccoddiv).strip() if oferta_ccoddiv is not None else None,
+                "oferta_dto": self._to_float(oferta_dto),
+                "cclavec": str(cclavec).strip() if cclavec is not None else None,
+            }
+
+        self._notify(progress_callback, f"{len(ofertas_por_cref)} ofertas activas encontradas.", 100, 100)
+        return ofertas_por_cref
+
+    def _resolver_productos(self, productos_completos, ivas, packs_por_cref, ofertas_por_cref, progress_callback=None):
         iva_dict = {str(iva[0]): self._to_float(iva[2]) for iva in ivas}
         productos_resueltos = []
         total = len(productos_completos)
@@ -218,6 +248,7 @@ class ProductosSyncService:
                 precios_finales,
                 packs_por_cref.get(producto["cref"], []),
             )
+            oferta = ofertas_por_cref.get(str(producto["cref"]).strip()) or {}
 
             productos_resueltos.append(
                 {
@@ -229,6 +260,13 @@ class ProductosSyncService:
                     "dfechau": producto.get("dfechau"),
                     "precios_finales": precios_finales,
                     "precios_adicionales": precios_adicionales,
+                    "tiene_oferta": bool(oferta.get("tiene_oferta")),
+                    "precio_oferta": oferta.get("precio_oferta"),
+                    "oferta_desde": oferta.get("oferta_desde"),
+                    "oferta_hasta": oferta.get("oferta_hasta"),
+                    "oferta_origen": oferta.get("oferta_origen"),
+                    "oferta_ccoddiv": oferta.get("oferta_ccoddiv"),
+                    "oferta_dto": oferta.get("oferta_dto"),
                 }
             )
 
@@ -308,11 +346,7 @@ class ProductosSyncService:
             precios.extend(producto.get("precios_adicionales", []))
         return precios
 
-    def _guardar_productos(self, productos_resueltos, productos_legado, replace_all, progress_callback=None):
-        if not productos_legado:
-            self._notify(progress_callback, "No hay productos para insertar o actualizar.", 100, 100)
-            return 0
-
+    def _guardar_productos(self, productos_resueltos, productos_legado, ofertas_por_cref, replace_all, progress_callback=None):
         if replace_all:
             guardar_productos = self.sqlite_dao.reemplazar_todos
             guardar_precios = self.sqlite_dao.reemplazar_precios_adicionales
@@ -323,14 +357,26 @@ class ProductosSyncService:
         precios_adicionales = self._flatten_precios_adicionales(productos_resueltos)
         codigos_actualizados = [producto["codigo"] for producto in productos_resueltos]
 
-        self._notify(progress_callback, "Insertando o actualizando productos...", 0, len(productos_legado))
-        guardar_productos(productos_legado)
-        if replace_all:
-            guardar_precios(precios_adicionales)
+        total_productos = len(productos_resueltos)
+        if total_productos:
+            self._notify(progress_callback, "Insertando o actualizando productos...", 0, total_productos)
+            guardar_productos(productos_resueltos)
+            if replace_all:
+                guardar_precios(precios_adicionales)
+            else:
+                guardar_precios(precios_adicionales, codigos_objetivo=codigos_actualizados)
+            self._notify(progress_callback, f"{total_productos} productos procesados.", total_productos, total_productos)
         else:
-            guardar_precios(precios_adicionales, codigos_objetivo=codigos_actualizados)
-        self._notify(progress_callback, f"{len(productos_legado)} productos procesados.", len(productos_legado), len(productos_legado))
-        return len(productos_legado)
+            self._notify(progress_callback, "No hubo productos nuevos; se actualizara snapshot de ofertas.", 100, 100)
+
+        self._sync_snapshot_ofertas(ofertas_por_cref, progress_callback)
+        return total_productos
+
+    def _sync_snapshot_ofertas(self, ofertas_por_cref, progress_callback=None):
+        self._notify(progress_callback, "Actualizando snapshot local de ofertas...", 0, 100)
+        self.sqlite_dao.limpiar_snapshot_ofertas()
+        self.sqlite_dao.aplicar_snapshot_ofertas_por_cref(list(ofertas_por_cref.values()))
+        self._notify(progress_callback, f"Snapshot local de ofertas actualizado: {len(ofertas_por_cref)} activas.", 100, 100)
 
     def _normalizar_nroprecio(self, nroprecio):
         if nroprecio is None:
