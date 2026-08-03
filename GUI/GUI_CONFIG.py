@@ -3,7 +3,7 @@ import sys
 import subprocess
 import threading
 import time
-from tkinter import BooleanVar, StringVar, filedialog, messagebox
+from tkinter import BooleanVar, StringVar, filedialog, messagebox, simpledialog
 import ttkbootstrap as ttk
 from FUNC.windows_manager import VentanaManager 
 from DB.database_sybase import ConexionSybase, dsn_configurados
@@ -16,6 +16,17 @@ from FUNC.config_json import guardar_config
 from core.dao.api_key_dao import ApiKeyDAO
 from core.dao.conexion_dao import ConexionDAO
 from core.dao.dispositivos_dao import DispositivosDAO
+from core.ui.responsive import clamp, fit_toplevel_to_workarea, get_size_class, get_workarea_size
+from core.ui.theme_tokens import (
+    BUTTON_PAD_X,
+    BUTTON_PAD_Y,
+    FONT_BODY_BOLD,
+    FONT_LABEL_BOLD,
+    FONT_SUBTITLE,
+    FONT_TITLE_LG,
+    PANEL_PAD_X,
+    PANEL_PAD_Y,
+)
 from core.services.device_discovery_service import DeviceDiscoveryService
 from core.services.productos_sync_service import ProductosSyncService
 
@@ -29,6 +40,7 @@ class GUI_CONFIG:
             messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Configuración.")
             raise PermissionError("Usuario sin permiso de configuración")
         self.datos_dispositivos = {}
+        self._responsive_after_id = None
         self.sqlite_db = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA")
         self.dispositivos_dao = DispositivosDAO(self.sqlite_db)
         self.conexion_dao = ConexionDAO(self.sqlite_db)
@@ -39,9 +51,10 @@ class GUI_CONFIG:
         self.top_level_configuracion.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         #self.top_level_configuracion.grab_set()
         self.top_level_configuracion.title("VeriPre_Connector - Configuración")
-        self.top_level_configuracion.geometry("1320x860")
-        self.top_level_configuracion.minsize(1180, 760)
+        fit_toplevel_to_workarea(self.top_level_configuracion, 1320, 860, min_width=1080, min_height=680)
+        self.top_level_configuracion.minsize(1040, 660)
         self.top_level_configuracion.place_window_center()
+        self.top_level_configuracion.bind("<Configure>", self._programar_layout_responsivo, add="+")
         self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").bind(
             "<<DispositivosActualizados>>",
             self._refrescar_dispositivos_desde_evento,
@@ -61,8 +74,179 @@ class GUI_CONFIG:
         self.notebook_widget_configuracion.add(self.frame_notebook_config_datos, text="Configuración de Datos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_usuarios_permisos, text="Usuarios y Permisos", padding=10)
         self.notebook_widget_configuracion.add(self.frame_notebook_go_upc, text="Conexión GO-UPC", padding=10)
-        
-        self.notebook_widget_configuracion.pack(side="top", expand=True, fill="both")
+
+        self.notebook_widget_configuracion.pack(side="top", expand=True, fill="both", padx=8, pady=8)
+        self._aplicar_layout_responsivo()
+
+    def _programar_layout_responsivo(self, _event=None):
+        if self._responsive_after_id:
+            try:
+                self.top_level_configuracion.after_cancel(self._responsive_after_id)
+            except Exception:
+                pass
+        self._responsive_after_id = self.top_level_configuracion.after(80, self._aplicar_layout_responsivo)
+
+    def _aplicar_layout_responsivo(self):
+        self._responsive_after_id = None
+        try:
+            width = max(self.top_level_configuracion.winfo_width(), get_workarea_size(self.top_level_configuracion)[0])
+            height = max(self.top_level_configuracion.winfo_height(), get_workarea_size(self.top_level_configuracion)[1])
+            size_class = get_size_class(width, height)
+            ancho_util = min(width, 1540)
+            padding_lateral = max(int((width - ancho_util) / 2), PANEL_PAD_X - 8)
+
+            if size_class == "compact":
+                combo_width = 34
+                combo_perfiles_width = 24
+                combo_fuente_width = 28
+                mostrar_texto_botones = False
+            elif size_class == "standard":
+                combo_width = 40
+                combo_perfiles_width = 28
+                combo_fuente_width = 34
+                mostrar_texto_botones = True
+            else:
+                combo_width = 46
+                combo_perfiles_width = 32
+                combo_fuente_width = 40
+                mostrar_texto_botones = True
+
+            if hasattr(self, "combobox_dispositivos"):
+                self.combobox_dispositivos.configure(width=combo_width)
+            if hasattr(self, "combobox_perfiles_permiso"):
+                self.combobox_perfiles_permiso.configure(width=combo_perfiles_width)
+            if hasattr(self, "combobox_lista_fuente_datos"):
+                self.combobox_lista_fuente_datos.configure(width=combo_fuente_width)
+            if hasattr(self, "combobox_odbc"):
+                self.combobox_odbc.configure(width=combo_fuente_width + 4)
+            if hasattr(self, "labelframe_opciones"):
+                self.labelframe_opciones.pack_configure(padx=padding_lateral)
+            if hasattr(self, "labelframe_datos_dispositivos"):
+                self.labelframe_datos_dispositivos.pack_configure(padx=padding_lateral)
+            if hasattr(self, "labelframe_conexion_fuente_datos"):
+                self.labelframe_conexion_fuente_datos.pack_configure(padx=padding_lateral)
+            if hasattr(self, "labelframe_datos_de_conexion_fuente_datos"):
+                self.labelframe_datos_de_conexion_fuente_datos.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_logo_config_datos"):
+                self.frame_logo_config_datos.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_guia_imagenes"):
+                self.frame_guia_imagenes.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_automatizacion_config_datos"):
+                self.frame_automatizacion_config_datos.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_superior_usuarios"):
+                self.frame_superior_usuarios.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_perfiles_usuarios"):
+                self.frame_perfiles_usuarios.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_editor_usuarios"):
+                self.frame_editor_usuarios.pack_configure(padx=padding_lateral)
+            if hasattr(self, "frame_acciones_usuarios"):
+                self.frame_acciones_usuarios.pack_configure(padx=padding_lateral)
+            if hasattr(self, "labelframe_go_upc"):
+                self.labelframe_go_upc.pack_configure(padx=padding_lateral)
+            if hasattr(self, "label_info_notebook_config_datos"):
+                self.label_info_notebook_config_datos.configure(wraplength=max(ancho_util - 180, 320))
+            if hasattr(self, "label_usuario_windows_actual"):
+                self.label_usuario_windows_actual.configure(wraplength=max(ancho_util - 220, 320))
+            if hasattr(self, "label_rol_windows_actual"):
+                self.label_rol_windows_actual.configure(wraplength=max(ancho_util - 220, 320))
+            if hasattr(self, "label_permisos_efectivos"):
+                self.label_permisos_efectivos.configure(wraplength=max(ancho_util - 220, 320))
+            if hasattr(self, "label_info_permisos"):
+                self.label_info_permisos.configure(wraplength=max(int(ancho_util * 0.34), 260), justify="right")
+            if hasattr(self, "lbl_estado_go_upc"):
+                self.lbl_estado_go_upc.configure(wraplength=max(ancho_util - 180, 320))
+            if hasattr(self, "lbl_estado_api_imagenes"):
+                self.lbl_estado_api_imagenes.configure(wraplength=max(ancho_util - 180, 320))
+            if hasattr(self, "tree_perfiles_usuario"):
+                self.tree_perfiles_usuario.column("usuario", width=clamp(int(ancho_util * 0.20), 180, 280), anchor="w")
+                self.tree_perfiles_usuario.column("admin_windows", width=clamp(int(ancho_util * 0.09), 100, 130), anchor="center")
+                self.tree_perfiles_usuario.column("estado", width=clamp(int(ancho_util * 0.13), 120, 170), anchor="center")
+                self.tree_perfiles_usuario.column("productos", width=clamp(int(ancho_util * 0.09), 95, 120), anchor="center")
+                self.tree_perfiles_usuario.column("publicidad", width=clamp(int(ancho_util * 0.09), 95, 120), anchor="center")
+                self.tree_perfiles_usuario.column("configuracion", width=clamp(int(ancho_util * 0.11), 110, 145), anchor="center")
+            self._reordenar_toolbar_dispositivos(mostrar_texto_botones)
+        except Exception:
+            pass
+
+    def _reordenar_toolbar_dispositivos(self, mostrar_texto_botones):
+        if not hasattr(self, "frame_contenedor_botones"):
+            return
+
+        botones = [
+            self.button_agregar,
+            self.button_editar,
+            self.button_eliminar,
+            self.button_guardar,
+            self.button_estado,
+            self.button_player,
+            self.button_buscar_red,
+        ]
+
+        for i in range(7):
+            self.frame_contenedor_botones.columnconfigure(i, weight=0)
+
+        for button in botones:
+            button.grid_forget()
+
+        width_actual = max(self.top_level_configuracion.winfo_width(), 1040)
+        compacto = width_actual < 1220
+
+        if mostrar_texto_botones:
+            self.button_estado.configure(text="Estado")
+            self.button_player.configure(text="Player")
+            self.button_buscar_red.configure(text="Buscar red")
+        else:
+            self.button_estado.configure(text="Estado")
+            self.button_player.configure(text="Player")
+            self.button_buscar_red.configure(text="Red")
+
+        if compacto:
+            for col in range(4):
+                self.frame_contenedor_botones.columnconfigure(col, weight=1)
+            layout = [
+                (self.button_agregar, 0, 0),
+                (self.button_editar, 0, 1),
+                (self.button_eliminar, 0, 2),
+                (self.button_guardar, 0, 3),
+                (self.button_estado, 1, 0),
+                (self.button_player, 1, 1),
+                (self.button_buscar_red, 1, 2),
+            ]
+            for button, row, col in layout:
+                    colspan = 2 if button is self.button_buscar_red else 1
+                    button.grid(
+                        row=row,
+                        column=col,
+                        columnspan=colspan,
+                        padx=BUTTON_PAD_X,
+                        pady=BUTTON_PAD_Y,
+                        sticky="ew",
+                    )
+        else:
+            for col in range(7):
+                self.frame_contenedor_botones.columnconfigure(col, weight=1)
+            self.button_agregar.grid(row=0, column=0, padx=BUTTON_PAD_X, sticky="ew")
+            self.button_editar.grid(row=0, column=1, padx=BUTTON_PAD_X, sticky="ew")
+            self.button_eliminar.grid(row=0, column=2, padx=BUTTON_PAD_X, sticky="ew")
+            self.button_guardar.grid(row=0, column=3, padx=BUTTON_PAD_X, sticky="ew")
+            self.button_estado.grid(row=0, column=4, padx=(BUTTON_PAD_X + 4, BUTTON_PAD_X), sticky="ew")
+            self.button_player.grid(row=0, column=5, padx=(BUTTON_PAD_X, max(1, BUTTON_PAD_X - 3)), sticky="ew")
+            self.button_buscar_red.grid(row=0, column=6, padx=(BUTTON_PAD_X + 2, 0), sticky="ew")
+
+    def _crear_textarea_base(self, parent, height=4, width=None):
+        kwargs = {"height": height, "wrap": "word"}
+        if width is not None:
+            kwargs["width"] = width
+        text_widget = ttk.Text(parent, **kwargs)
+        text_widget.configure(relief="solid", borderwidth=1)
+        return text_widget
+
+    def _set_textarea_value(self, widget, value, readonly=True):
+        widget.config(state="normal")
+        widget.delete("1.0", "end")
+        widget.insert("1.0", value)
+        if readonly:
+            widget.config(state="disabled")
 
     def _refrescar_dispositivos_desde_evento(self, _event=None):
         try:
@@ -88,26 +272,48 @@ class GUI_CONFIG:
         self.DICT_WIDGETS.register("GUI_CONFIG","frame_notebook_dispositivos", self.frame_notebook_dispositivos)
         
         
-        self.labelframe_opciones = ttk.Labelframe(self.frame_notebook_dispositivos, text="Opciones", bootstyle="primary")
-        self.labelframe_opciones.pack(fill="x", padx=10, pady=(10, 6))
+        self.labelframe_opciones = ttk.Labelframe(
+            self.frame_notebook_dispositivos,
+            text="Opciones",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 4, PANEL_PAD_Y - 4),
+        )
+        self.labelframe_opciones.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(PANEL_PAD_Y - 4, 8))
         self.DICT_WIDGETS.register("GUI_CONFIG","labelframe_opciones", self.labelframe_opciones)
         self.creacion_contenido_labelframe_opciones()
         
         
-        self.labelframe_datos_dispositivos = ttk.Labelframe(self.frame_notebook_dispositivos, text="Datos de Dispositivo", bootstyle="primary")
-        self.labelframe_datos_dispositivos.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.labelframe_datos_dispositivos = ttk.Labelframe(
+            self.frame_notebook_dispositivos,
+            text="Datos de Dispositivo",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 4, PANEL_PAD_Y - 4),
+        )
+        self.labelframe_datos_dispositivos.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(0, PANEL_PAD_Y - 4))
         self.DICT_WIDGETS.register("GUI_CONFIG","labelframe_datos_dispositivos", self.labelframe_datos_dispositivos)
         self.creacion_labelframe_datos_dispositivos()       
         
         
     def creacion_contenido_labelframe_opciones(self):
         self.frame_contenedor_combobox_dispositivos = ttk.Frame(self.labelframe_opciones)
-        self.frame_contenedor_combobox_dispositivos.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=8)
+        self.frame_contenedor_combobox_dispositivos.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=(0, PANEL_PAD_X - 8),
+            pady=0,
+        )
         self.DICT_WIDGETS.register("GUI_CONFIG","frame_contenedor_combobox_dispositivos", self.frame_contenedor_combobox_dispositivos)
         self.creacion_contenido_frame_contenedor_combobox_dispositivos()
         
         self.frame_contenedor_botones = ttk.Frame(self.labelframe_opciones)
-        self.frame_contenedor_botones.grid(row=0, column=1, sticky="e", padx=(8, 12), pady=8)
+        self.frame_contenedor_botones.grid(
+            row=0,
+            column=1,
+            sticky="e",
+            padx=(PANEL_PAD_X - 8, 0),
+            pady=0,
+        )
         self.DICT_WIDGETS.register("GUI_CONFIG","frame_contenedor_botones", self.frame_contenedor_botones)
         self.creacion_contenido_frame_contenedor_botones()
         self.labelframe_opciones.columnconfigure(0, weight=1)
@@ -121,16 +327,16 @@ class GUI_CONFIG:
         self.img_eliminar = READ_IMG(PNG_Delete(), 25, 25)
 
         # Creación de botones
-        self.button_agregar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_agregar, command=self.command_button_agregar, compound="center" ,bootstyle="outline", width=4)
+        self.button_agregar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_agregar, command=self.command_button_agregar, compound="center" ,bootstyle="success-outline", width=4, padding=(8, 8))
         ToolTip(self.button_agregar, text="Agregar Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_agregar", self.button_agregar)
-        self.button_editar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_editar, command=self.command_button_editar_dispositivo, compound="center" ,bootstyle="outline", width=4, state="disable")
+        self.button_editar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_editar, command=self.command_button_editar_dispositivo, compound="center" ,bootstyle="info-outline", width=4, state="disable", padding=(8, 8))
         ToolTip(self.button_editar, text="Editar datos de Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_editar", self.button_editar)
-        self.button_eliminar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_eliminar, command=self.command_button_eliminar, compound="center" ,bootstyle="outline", width=4, state="disable")
+        self.button_eliminar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_eliminar, command=self.command_button_eliminar, compound="center" ,bootstyle="danger-outline", width=4, state="disable", padding=(8, 8))
         ToolTip(self.button_eliminar, text="Eliminar Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_eliminar", self.button_eliminar)
-        self.button_guardar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_guardar, compound="center" ,bootstyle="outline", width=4)
+        self.button_guardar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_guardar, compound="center" ,bootstyle="primary", width=4, padding=(8, 8))
         ToolTip(self.button_guardar, text="Guardar configuración de Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_guardar", self.button_guardar)
         self.button_estado = ttk.Button(
@@ -140,6 +346,7 @@ class GUI_CONFIG:
             bootstyle="outline",
             width=10,
             state="disable",
+            padding=(12, 8),
         )
         ToolTip(self.button_estado, text="Consultar estado del dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_estado", self.button_estado)
@@ -150,6 +357,7 @@ class GUI_CONFIG:
             bootstyle="outline",
             width=10,
             state="disable",
+            padding=(12, 8),
         )
         ToolTip(self.button_player, text="Configurar pantalla y parametros del player")
         self.DICT_WIDGETS.register("GUI_CONFIG", "button_player", self.button_player)
@@ -159,6 +367,7 @@ class GUI_CONFIG:
             command=self.command_button_buscar_dispositivos_red,
             bootstyle="info-outline",
             width=12,
+            padding=(12, 8),
         )
         ToolTip(self.button_buscar_red, text="Detectar verificadores e InforTV en la red local")
         self.DICT_WIDGETS.register("GUI_CONFIG", "button_buscar_red", self.button_buscar_red)
@@ -172,128 +381,156 @@ class GUI_CONFIG:
         self.frame_contenedor_botones.columnconfigure(5, weight=1)
         self.frame_contenedor_botones.columnconfigure(6, weight=1)
 
-        self.button_agregar.grid(row=0, column=0, padx=3)
-        self.button_editar.grid(row=0, column=1, padx=3)
-        self.button_eliminar.grid(row=0, column=2, padx=3)
-        self.button_guardar.grid(row=0, column=3, padx=3)
-        self.button_estado.grid(row=0, column=4, padx=(10, 3))
-        self.button_player.grid(row=0, column=5, padx=(3, 1))
-        self.button_buscar_red.grid(row=0, column=6, padx=(8, 0))
+        self.button_agregar.grid(row=0, column=0, padx=BUTTON_PAD_X)
+        self.button_editar.grid(row=0, column=1, padx=BUTTON_PAD_X)
+        self.button_eliminar.grid(row=0, column=2, padx=BUTTON_PAD_X)
+        self.button_guardar.grid(row=0, column=3, padx=BUTTON_PAD_X)
+        self.button_estado.grid(row=0, column=4, padx=(BUTTON_PAD_X + 4, BUTTON_PAD_X))
+        self.button_player.grid(row=0, column=5, padx=(BUTTON_PAD_X, max(1, BUTTON_PAD_X - 3)))
+        self.button_buscar_red.grid(row=0, column=6, padx=(BUTTON_PAD_X + 2, 0))
         
     def creacion_contenido_frame_contenedor_combobox_dispositivos(self):
         self.frame_label_combobox_dispositivos = ttk.Label(
             self.frame_contenedor_combobox_dispositivos,
             text="Seleccione su dispositivo:",
-            font=("Segoe UI", 10, "bold"),
+            font=FONT_BODY_BOLD,
         )
         self.DICT_WIDGETS.register("GUI_CONFIG","frame_label_combobox_dispositivos", self.frame_label_combobox_dispositivos)
-        self.frame_label_combobox_dispositivos.pack(side="left", padx=(0, 10))
+        self.frame_label_combobox_dispositivos.pack(side="left", padx=(0, PANEL_PAD_X - 6))
         
         self.combobox_dispositivos = ttk.Combobox(self.frame_contenedor_combobox_dispositivos, values=self.actualizar_datos_combobox(), state="readonly", width=42)
         self.combobox_dispositivos.bind("<<ComboboxSelected>>", self.seleccion_dispositivo)
         self.DICT_WIDGETS.register("GUI_CONFIG","combobox_dispositivos", self.combobox_dispositivos)
-        self.combobox_dispositivos.pack(side="right", fill="x", expand=True)
+        self.combobox_dispositivos.pack(side="right", fill="x", expand=True, ipady=4)
         
     def creacion_contenido_toplevel_button_agregar(self):
         self.creacion_labelframe_nuevo_dispositivo_button_agregar()
         self.creacion_labelframe_datos_button_agregar()
         self.button_agregar_dispositivo = ttk.Button(self.toplevel_button_agregar, text="Agregar", command=self.command_button_agregar_dispositivo)
-        self.button_agregar_dispositivo.pack(pady=(0,5))
+        self.button_agregar_dispositivo.pack(pady=(0, PANEL_PAD_Y - 6))
         
     def creacion_labelframe_nuevo_dispositivo_button_agregar(self):
-        self.labelframe_nuevo_dispositivo_button_agregar = ttk.Labelframe(self.toplevel_button_agregar, text="Nuevo dispositivo", bootstyle="primary")
-        self.labelframe_nuevo_dispositivo_button_agregar.pack(fill="x", padx=5)
+        self.labelframe_nuevo_dispositivo_button_agregar = ttk.Labelframe(
+            self.toplevel_button_agregar,
+            text="Nuevo dispositivo",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 6, PANEL_PAD_Y - 6),
+        )
+        self.labelframe_nuevo_dispositivo_button_agregar.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(PANEL_PAD_Y - 4, 6))
 
         self.label_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos = ttk.Label(
-            self.labelframe_nuevo_dispositivo_button_agregar, text="Nombre del equipo:"
+            self.labelframe_nuevo_dispositivo_button_agregar,
+            text="Nombre del equipo:",
+            font=FONT_BODY_BOLD,
         )
-        self.label_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos.pack(side="left", pady=10, padx=10)
+        self.label_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos.pack(
+            side="left",
+            pady=BUTTON_PAD_Y + 4,
+            padx=(0, PANEL_PAD_X - 8),
+        )
 
         self.entry_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos = ttk.Entry(self.labelframe_nuevo_dispositivo_button_agregar)
-        self.entry_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos.pack(side="right", pady=10, padx=(0,10), fill="x", expand=True)
+        self.entry_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos.pack(
+            side="right",
+            pady=BUTTON_PAD_Y + 4,
+            fill="x",
+            expand=True,
+        )
         
     def creacion_labelframe_datos_button_agregar(self):
-        self.labelframe_datos_button_agregar = ttk.Labelframe(self.toplevel_button_agregar, text="Nuevo dispositivo", bootstyle="primary")
-        self.labelframe_datos_button_agregar.pack(fill="both", expand=True, padx=5, pady=5)
+        self.labelframe_datos_button_agregar = ttk.Labelframe(
+            self.toplevel_button_agregar,
+            text="Datos de conexión",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 6, PANEL_PAD_Y - 6),
+        )
+        self.labelframe_datos_button_agregar.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(0, PANEL_PAD_Y - 6))
         
-        # DirecciÃ³n IP/RED
-        self.label_direccion_ip = ttk.Label(self.labelframe_datos_button_agregar, text="DirecciÃ³n IP/RED:")
+        # Dirección IP/RED
+        self.label_direccion_ip = ttk.Label(self.labelframe_datos_button_agregar, text="Dirección IP/RED:", font=FONT_BODY_BOLD)
         self.entry_direccion_ip = ttk.Entry(self.labelframe_datos_button_agregar)
 
         # Puerto
-        self.label_puerto = ttk.Label(self.labelframe_datos_button_agregar, text="PUERTO:")
+        self.label_puerto = ttk.Label(self.labelframe_datos_button_agregar, text="PUERTO:", font=FONT_BODY_BOLD)
         self.entry_puerto = ttk.Entry(self.labelframe_datos_button_agregar)
 
-        # Comentario (mÃ¡s grande)
-        self.label_comentario = ttk.Label(self.labelframe_datos_button_agregar, text="COMENTARIO:")
-        self.text_comentario = ttk.Text(self.labelframe_datos_button_agregar, height=4, width=30)  # Ajusta tamaÃ±o
+        # Comentario (más grande)
+        self.label_comentario = ttk.Label(self.labelframe_datos_button_agregar, text="COMENTARIO:", font=FONT_BODY_BOLD)
+        self.text_comentario = self._crear_textarea_base(self.labelframe_datos_button_agregar, height=4, width=30)
 
         # Posicionar con grid
-        self.label_direccion_ip.grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        self.entry_direccion_ip.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+        self.label_direccion_ip.grid(row=0, column=0, sticky="w", padx=(0, BUTTON_PAD_X), pady=BUTTON_PAD_Y)
+        self.entry_direccion_ip.grid(row=0, column=1, sticky="ew", padx=(BUTTON_PAD_X, 0), pady=BUTTON_PAD_Y)
 
-        self.label_puerto.grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        self.entry_puerto.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        self.label_puerto.grid(row=1, column=0, sticky="w", padx=(0, BUTTON_PAD_X), pady=BUTTON_PAD_Y)
+        self.entry_puerto.grid(row=1, column=1, sticky="ew", padx=(BUTTON_PAD_X, 0), pady=BUTTON_PAD_Y)
 
-        self.label_comentario.grid(row=2, column=0, sticky="w", padx=5, pady=2)
-        self.text_comentario.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+        self.label_comentario.grid(row=2, column=0, sticky="w", padx=(0, BUTTON_PAD_X), pady=BUTTON_PAD_Y)
+        self.text_comentario.grid(row=2, column=1, sticky="ew", padx=(BUTTON_PAD_X, 0), pady=BUTTON_PAD_Y)
 
         # Expandir entradas en el contenedor
         self.labelframe_datos_button_agregar.columnconfigure(1, weight=1)
         
     def creacion_labelframe_datos_dispositivos(self):
-        self.frame_contenedor_labelframe_datos_dispositivo = ttk.Frame(self.labelframe_datos_dispositivos, padding=20)
+        self.frame_contenedor_labelframe_datos_dispositivo = ttk.Frame(
+            self.labelframe_datos_dispositivos,
+            padding=(PANEL_PAD_X + 2, PANEL_PAD_Y + 2),
+        )
 
         self.label_nombre_contenido_labelframe_opciones = ttk.Label(
             self.frame_contenedor_labelframe_datos_dispositivo,
             text="Seleccione un dispositivo",
-            font=("Segoe UI", 18, "bold"),
+            font=FONT_TITLE_LG,
         )
-        self.label_nombre_contenido_labelframe_opciones.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 18))
+        self.label_nombre_contenido_labelframe_opciones.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(0, PANEL_PAD_Y + 6),
+        )
 
         self.label_direccion_ip_izq_contenido_labelframe_opciones = ttk.Label(
             self.frame_contenedor_labelframe_datos_dispositivo,
             text="Dirección IP / Red",
-            font=("Segoe UI", 11, "bold"),
+            font=FONT_LABEL_BOLD,
         )
-        self.label_direccion_ip_izq_contenido_labelframe_opciones.grid(row=1, column=0, sticky="w", pady=(0, 6))
+        self.label_direccion_ip_izq_contenido_labelframe_opciones.grid(row=1, column=0, sticky="w", pady=(0, 8), padx=(0, 14))
         self.label_direccion_ip_der_contenido_labelframe_opciones = ttk.Label(
             self.frame_contenedor_labelframe_datos_dispositivo,
             text="-",
-            font=("Segoe UI", 11),
+            font=FONT_SUBTITLE,
             bootstyle="secondary",
         )
-        self.label_direccion_ip_der_contenido_labelframe_opciones.grid(row=1, column=1, sticky="ew", pady=(0, 6))
+        self.label_direccion_ip_der_contenido_labelframe_opciones.grid(row=1, column=1, sticky="ew", pady=(0, 8))
 
         self.label_puerto_izq_contenido_labelframe_opciones = ttk.Label(
             self.frame_contenedor_labelframe_datos_dispositivo,
             text="Puerto",
-            font=("Segoe UI", 11, "bold"),
+            font=FONT_LABEL_BOLD,
         )
-        self.label_puerto_izq_contenido_labelframe_opciones.grid(row=2, column=0, sticky="w", pady=(0, 6))
+        self.label_puerto_izq_contenido_labelframe_opciones.grid(row=2, column=0, sticky="w", pady=(0, 8), padx=(0, 14))
         self.label_puerto_der_contenido_labelframe_opciones = ttk.Label(
             self.frame_contenedor_labelframe_datos_dispositivo,
             text="-",
-            font=("Segoe UI", 11),
+            font=FONT_SUBTITLE,
             bootstyle="secondary",
         )
-        self.label_puerto_der_contenido_labelframe_opciones.grid(row=2, column=1, sticky="ew", pady=(0, 6))
+        self.label_puerto_der_contenido_labelframe_opciones.grid(row=2, column=1, sticky="ew", pady=(0, 8))
 
         self.label_comentario_contenido_labelframe_opciones = ttk.Label(
             self.frame_contenedor_labelframe_datos_dispositivo,
             text="Comentario",
-            font=("Segoe UI", 11, "bold"),
+            font=FONT_LABEL_BOLD,
         )
-        self.label_comentario_contenido_labelframe_opciones.grid(row=3, column=0, sticky="nw", pady=(8, 6))
+        self.label_comentario_contenido_labelframe_opciones.grid(row=3, column=0, sticky="nw", pady=(10, 6), padx=(0, 14))
 
-        self.text_comentario_contenido_labelframe_opciones = ttk.Text(
+        self.text_comentario_contenido_labelframe_opciones = self._crear_textarea_base(
             self.frame_contenedor_labelframe_datos_dispositivo,
-            height=8,
-            wrap="word",
+            height=10,
         )
-        self.text_comentario_contenido_labelframe_opciones.insert("1.0", "Sin comentario")
-        self.text_comentario_contenido_labelframe_opciones.config(state="disabled")
-        self.text_comentario_contenido_labelframe_opciones.grid(row=3, column=1, sticky="nsew", pady=(8, 6))
+        self._set_textarea_value(self.text_comentario_contenido_labelframe_opciones, "Sin comentario")
+        self.text_comentario_contenido_labelframe_opciones.grid(row=3, column=1, sticky="nsew", pady=(10, 6))
 
         self.frame_contenedor_labelframe_datos_dispositivo.columnconfigure(1, weight=1)
         self.frame_contenedor_labelframe_datos_dispositivo.rowconfigure(3, weight=1)
@@ -302,29 +539,52 @@ class GUI_CONFIG:
 
     def creacion_frame_notebook_fuente_datos(self):
         self.frame_notebook_fuente_datos = ttk.Frame(self.notebook_widget_configuracion)
-        self.frame_notebook_fuente_datos.pack(fill="both", expand=True)  # CorrecciÃ³n aquÃ­
+        self.frame_notebook_fuente_datos.pack(fill="both", expand=True)  # Corrección aquí
         self.DICT_WIDGETS.register("GUI_CONFIG","frame_notebook_fuente_datos", self.frame_notebook_fuente_datos)
 
-        self.labelframe_conexion_fuente_datos = ttk.Labelframe(self.frame_notebook_fuente_datos, text="Conexiones disponibles: ", bootstyle="primary")
-        self.labelframe_conexion_fuente_datos.pack(fill="x")
-        
-        lista_conexiones_disponibles = ["ConexiÃ³n ODBC"]
-        self.label_tipo_conexion = ttk.Label(self.labelframe_conexion_fuente_datos, text="Tipos de Conexiones:")
-        self.label_tipo_conexion.pack(side="left", padx=(30,15))
-        self.combobox_lista_fuente_datos = ttk.Combobox(self.labelframe_conexion_fuente_datos, values=lista_conexiones_disponibles, state="readonly")
-        self.combobox_lista_fuente_datos.pack(side="right", fill="x", expand=True, padx=(5,10), pady=(0,5))
+        self.labelframe_conexion_fuente_datos = ttk.Labelframe(
+            self.frame_notebook_fuente_datos,
+            text="Conexiones disponibles",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
+        )
+        self.labelframe_conexion_fuente_datos.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(PANEL_PAD_Y - 4, 8))
+
+        self.frame_selector_fuente_datos = ttk.Frame(self.labelframe_conexion_fuente_datos)
+        self.frame_selector_fuente_datos.pack(fill="x")
+        self.frame_selector_fuente_datos.columnconfigure(1, weight=1)
+
+        lista_conexiones_disponibles = ["Conexión ODBC"]
+        self.label_tipo_conexion = ttk.Label(
+            self.frame_selector_fuente_datos,
+            text="Tipos de conexiones:",
+            font=FONT_BODY_BOLD,
+        )
+        self.label_tipo_conexion.grid(row=0, column=0, sticky="w", padx=(0, PANEL_PAD_X - 8))
+        self.combobox_lista_fuente_datos = ttk.Combobox(
+            self.frame_selector_fuente_datos,
+            values=lista_conexiones_disponibles,
+            state="readonly",
+        )
+        self.combobox_lista_fuente_datos.grid(row=0, column=1, sticky="ew")
+        self.combobox_lista_fuente_datos.configure(width=36)
         self.combobox_lista_fuente_datos.bind("<<ComboboxSelected>>", self.bind_combobox_lista_fuente_datos)
         
         
-        self.labelframe_datos_de_conexion_fuente_datos = ttk.Labelframe(self.frame_notebook_fuente_datos, text="Datos de ConexiÃ³n: ", bootstyle="primary")
-        self.labelframe_datos_de_conexion_fuente_datos.pack(fill="both", expand=True, pady=10)
+        self.labelframe_datos_de_conexion_fuente_datos = ttk.Labelframe(
+            self.frame_notebook_fuente_datos,
+            text="Datos de conexión",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
+        )
+        self.labelframe_datos_de_conexion_fuente_datos.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(0, PANEL_PAD_Y - 4))
 
         
         
         
         
     def bind_combobox_lista_fuente_datos(self, event):
-        if self.combobox_lista_fuente_datos.get() == "ConexiÃ³n ODBC":
+        if self.combobox_lista_fuente_datos.get() == "Conexión ODBC":
             self.mostrar_widgets_ODBC()
             self.obtener_datos_conexion_odbc()
         
@@ -332,60 +592,76 @@ class GUI_CONFIG:
         
         
     def mostrar_widgets_ODBC(self):
-        self.frame_contenido_opcion_odbc = ttk.Frame(self.labelframe_datos_de_conexion_fuente_datos)
-        self.frame_contenido_opcion_odbc.pack(fill="both", expand=True, padx=(50,55), pady=50)
-        self.frame_odbc = ttk.Frame(self.frame_contenido_opcion_odbc)
-        self.frame_odbc.pack(fill="x", pady=5)
+        if hasattr(self, "frame_contenido_opcion_odbc") and self.frame_contenido_opcion_odbc.winfo_exists():
+            self.frame_contenido_opcion_odbc.destroy()
+        if hasattr(self, "frame_acciones_fuente_datos") and self.frame_acciones_fuente_datos.winfo_exists():
+            self.frame_acciones_fuente_datos.destroy()
 
-        self.label_odbc = ttk.Label(self.frame_odbc, text="ConexiÃ³n ODBC:")
-        self.label_odbc.pack(side="left", padx=5)
+        self.frame_contenido_opcion_odbc = ttk.Frame(self.labelframe_datos_de_conexion_fuente_datos)
+        self.frame_contenido_opcion_odbc.pack(fill="both", expand=True, padx=(PANEL_PAD_X + 8, PANEL_PAD_X + 8), pady=(PANEL_PAD_Y + 6, PANEL_PAD_Y))
+        self.frame_contenido_opcion_odbc.columnconfigure(1, weight=1)
+
+        self.frame_odbc = ttk.Frame(self.frame_contenido_opcion_odbc)
+        self.frame_odbc.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, BUTTON_PAD_Y + 8))
+        self.frame_odbc.columnconfigure(1, weight=1)
+
+        self.label_odbc = ttk.Label(self.frame_odbc, text="Conexión ODBC:", font=FONT_BODY_BOLD)
+        self.label_odbc.grid(row=0, column=0, sticky="w", padx=(0, BUTTON_PAD_X + 4))
 
         self.combobox_odbc = ttk.Combobox(self.frame_odbc, values=self.obtener_listaDSN(), state="readonly")
-        self.combobox_odbc.pack(side="right", fill="x", expand=True)
+        self.combobox_odbc.grid(row=0, column=1, sticky="ew", ipady=4)
 
-        # ðŸ”¹ Frame para User ID
         self.frame_user = ttk.Frame(self.frame_contenido_opcion_odbc)
-        self.frame_user.pack(fill="x", pady=5)
+        self.frame_user.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, BUTTON_PAD_Y + 8))
+        self.frame_user.columnconfigure(1, weight=1)
 
-        self.label_user = ttk.Label(self.frame_user, text="User ID:")
-        self.label_user.pack(side="left", padx=5)
+        self.label_user = ttk.Label(self.frame_user, text="User ID:", font=FONT_BODY_BOLD)
+        self.label_user.grid(row=0, column=0, sticky="w", padx=(0, BUTTON_PAD_X + 4))
 
         self.entry_user = ttk.Entry(self.frame_user)
-        self.entry_user.pack(side="right", fill="x", expand=True)
+        self.entry_user.grid(row=0, column=1, sticky="ew", ipady=4)
 
-        # ðŸ”¹ Frame para Password
         self.frame_password = ttk.Frame(self.frame_contenido_opcion_odbc)
-        self.frame_password.pack(fill="x", pady=5)
+        self.frame_password.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, BUTTON_PAD_Y + 8))
+        self.frame_password.columnconfigure(1, weight=1)
 
-        self.label_password = ttk.Label(self.frame_password, text="Password:")
-        self.label_password.pack(side="left", padx=5)
+        self.label_password = ttk.Label(self.frame_password, text="Password:", font=FONT_BODY_BOLD)
+        self.label_password.grid(row=0, column=0, sticky="w", padx=(0, BUTTON_PAD_X + 4))
 
-        self.entry_password = ttk.Entry(self.frame_password, show="*")  # Ocultar texto
-        self.entry_password.pack(side="right", fill="x", expand=True)
+        self.entry_password = ttk.Entry(self.frame_password, show="*")
+        self.entry_password.grid(row=0, column=1, sticky="ew", ipady=4)
         
         
         self.frame_checkbox = ttk.Frame(self.frame_contenido_opcion_odbc)
-        self.frame_checkbox.pack(fill="x", pady=5)
+        self.frame_checkbox.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(BUTTON_PAD_Y + 4, 0))
 
-        self.checkbox_var = ttk.BooleanVar()  # Variable para almacenar el estado del checkbox
-        self.checkbox = ttk.Checkbutton(self.frame_checkbox, text="ConexiÃ³n a DBA de Inforhard Sistemas", variable=self.checkbox_var)
-        self.checkbox.pack(side="left", padx=5)
-        
-        self.button_agregar_datos_de_conexion = ttk.Button(self.labelframe_datos_de_conexion_fuente_datos, text="Agregar", command=self.command_button_agregar_datos_de_conexion)
-        self.button_agregar_datos_de_conexion.pack(pady=(0,5), side="bottom")
+        self.checkbox_var = ttk.BooleanVar()
+        self.checkbox = ttk.Checkbutton(self.frame_checkbox, text="Conexión a DBA de Inforhard Sistemas", variable=self.checkbox_var)
+        self.checkbox.pack(side="left")
+
+        self.frame_acciones_fuente_datos = ttk.Frame(self.labelframe_datos_de_conexion_fuente_datos)
+        self.frame_acciones_fuente_datos.pack(fill="x", padx=(PANEL_PAD_X + 8, PANEL_PAD_X + 8), pady=(0, PANEL_PAD_Y - 2), side="bottom")
+        self.button_agregar_datos_de_conexion = ttk.Button(
+            self.frame_acciones_fuente_datos,
+            text="Guardar conexión",
+            command=self.command_button_agregar_datos_de_conexion,
+            bootstyle="success",
+            padding=(14, 8),
+        )
+        self.button_agregar_datos_de_conexion.pack(side="left")
     
     def validar_campos(self):
-        """Verifica que los campos no estÃ©n vacÃ­os."""
+        """Verifica que los campos no estén vacíos."""
         campos = {
             "Nuevo dispositivo": self.entry_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos.get().strip(),
-            "DirecciÃ³n IP/RED": self.entry_direccion_ip.get().strip(),
+            "Dirección IP/RED": self.entry_direccion_ip.get().strip(),
             "PUERTO": self.entry_puerto.get().strip(),
             "COMENTARIO": self.text_comentario.get("1.0", "end").strip()  # Obtener texto desde Text
         }
 
         for campo, valor in campos.items():
-            if not valor:  # Si el campo estÃ¡ vacÃ­o
-                messagebox.showwarning("Campo vacÃ­o", f"El campo '{campo}' no puede estar vacÃ­o.")
+            if not valor:  # Si el campo está vacío
+                messagebox.showwarning("Campo vacío", f"El campo '{campo}' no puede estar vacío.")
                 return False
 
         return True  # Si todos los campos tienen datos       
@@ -397,20 +673,22 @@ class GUI_CONFIG:
         for dsnNAME, dsnDRIVER in datos.items():
             cadena = dsnNAME.decode('utf-8')
             dsnLIST.append(cadena)
-        for dsnNAME in dsnLIST:
-            print(dsnNAME) 
         return dsnLIST
     
-#///////////////////////////////////////////////////// NOTEBOOK CONFIGURACIÃ“N DE DATOS /////////////////////////////////////////////////////
+#///////////////////////////////////////////////////// NOTEBOOK CONFIGURACIÓN DE DATOS /////////////////////////////////////////////////////
 
     def creacion_frame_notebook_config_datos(self):
-        self.frame_notebook_config_datos = ttk.Labelframe(self.notebook_widget_configuracion, text="Configurar Datos")
+        self.frame_notebook_config_datos = ttk.Frame(self.notebook_widget_configuracion)
         self.frame_notebook_config_datos.pack(fill="both", expand=True)
         
-        frame_logo = ttk.LabelFrame(self.frame_notebook_config_datos, text="Logo Principal", padding=10)
-        frame_logo.pack(fill="x", padx=10, pady=10)
+        self.frame_logo_config_datos = ttk.Labelframe(
+            self.frame_notebook_config_datos,
+            text="Logo Principal",
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
+        )
+        self.frame_logo_config_datos.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(PANEL_PAD_Y - 4, 10))
 
-        self.label_logo_preview = ttk.Label(frame_logo, width=200)
+        self.label_logo_preview = ttk.Label(self.frame_logo_config_datos, width=200)
         self.label_logo_preview.pack(fill="both", expand=True, padx=10, pady=10)
         self.label_logo_preview.config(anchor="center")
         self.label_logo_preview.config(style="preview.TLabel")
@@ -418,22 +696,23 @@ class GUI_CONFIG:
 
 
         self._mostrar_logo_actual()
-        # Contenedor para los botones en lÃ­nea
-        frame_botones_logo = ttk.Frame(frame_logo)
-        frame_botones_logo.pack(fill="x", pady=5)
+        # Contenedor para los botones en línea
+        frame_botones_logo = ttk.Frame(self.frame_logo_config_datos)
+        frame_botones_logo.pack(fill="x", pady=(8, 4))
 
-        # BotÃ³n izquierda
-        ttk.Button(frame_botones_logo, text="Seleccionar Imagen", command=self._seleccionar_logo).pack(side="left", padx=(0, 5))
-        ttk.Button(frame_botones_logo, text="Normalizar Logo", command=self._normalizar_logo_seleccionado).pack(side="left", padx=(0, 5))
+        # Botón izquierda
+        ttk.Button(frame_botones_logo, text="Seleccionar Imagen", command=self._seleccionar_logo, bootstyle="primary", padding=(12, 8)).pack(side="left", padx=(0, 6))
+        ttk.Button(frame_botones_logo, text="Normalizar Logo", command=self._normalizar_logo_seleccionado, bootstyle="secondary", padding=(12, 8)).pack(side="left", padx=(0, 6))
 
-        # BotÃ³n derecha
-        ttk.Button(frame_botones_logo, text="Enviar Logo a Dispositivos", command=self._enviar_logo_a_dispositivos).pack(side="right", padx=(5, 0))
+        # Botón derecha
+        ttk.Button(frame_botones_logo, text="Enviar Logo a Dispositivos", command=self._enviar_logo_a_dispositivos, bootstyle="success", padding=(12, 8)).pack(side="right", padx=(6, 0))
 
         self.label_validacion_logo = ttk.Label(
-            frame_logo,
+            self.frame_logo_config_datos,
             text="Sin imagen seleccionada.",
             bootstyle="secondary",
             justify="left",
+            font=FONT_SUBTITLE,
         )
         self.label_validacion_logo.pack(fill="x", padx=10, pady=(6, 2))
 
@@ -442,8 +721,12 @@ class GUI_CONFIG:
 
         
         
-        self.label_info_notebook_config_datos = ttk.Label(self.frame_notebook_config_datos)
-        self.label_info_notebook_config_datos.pack(fill="x", padx=5, pady=5)
+        self.label_info_notebook_config_datos = ttk.Label(
+            self.frame_notebook_config_datos,
+            bootstyle="secondary",
+            font=FONT_SUBTITLE,
+        )
+        self.label_info_notebook_config_datos.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 8))
         
         
         
@@ -451,59 +734,65 @@ class GUI_CONFIG:
         self.creacion_frame_config_datos_INFORHARD()
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
         valor_configurado = config.get("sincronizacion_automatica", True)
-        self.auto_sync_var = BooleanVar(value=valor_configurado)
-        # Crear checkbox de sincronizaciÃ³n automÃ¡tica
-        self.checkbox_auto_sync = ttk.Checkbutton(
+        self.frame_automatizacion_config_datos = ttk.Labelframe(
             self.frame_notebook_config_datos,
-            text="SincronizaciÃ³n automÃ¡tica de productos",
+            text="Automatización y envío",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
+        )
+        self.frame_automatizacion_config_datos.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 10))
+
+        self.auto_sync_var = BooleanVar(value=valor_configurado)
+        # Crear checkbox de sincronización automática
+        self.checkbox_auto_sync = ttk.Checkbutton(
+            self.frame_automatizacion_config_datos,
+            text="Sincronización automática de productos",
             variable=self.auto_sync_var,
             command=self.actualizar_config_sincronizacion_automatica
         )
-        self.checkbox_auto_sync.pack(pady=15)
+        self.checkbox_auto_sync.pack(anchor="w", pady=(0, 12))
 
         valor_envio_auto = bool(config.get("envio_automatico_novedades", False)) and bool(valor_configurado)
         self.auto_send_news_var = BooleanVar(value=valor_envio_auto)
         self.checkbox_auto_send_news = ttk.Checkbutton(
-            self.frame_notebook_config_datos,
+            self.frame_automatizacion_config_datos,
             text="Envio automatico de novedades al detectar cambios",
             variable=self.auto_send_news_var,
             command=self.actualizar_config_envio_automatico_novedades,
         )
-        self.checkbox_auto_send_news.pack(pady=(0, 15))
+        self.checkbox_auto_send_news.pack(anchor="w", pady=(0, 12))
         self._actualizar_estado_checkbox_envio_auto()
 
         self.keep_video_audio_var = BooleanVar(
             value=bool(config.get("mantener_audio_publicidades", False))
         )
         self.checkbox_keep_video_audio = ttk.Checkbutton(
-            self.frame_notebook_config_datos,
+            self.frame_automatizacion_config_datos,
             text="Mantener audio en videos de publicidades (modo prueba)",
             variable=self.keep_video_audio_var,
             command=self.actualizar_config_audio_publicidades,
         )
-        self.checkbox_keep_video_audio.pack(pady=(0, 15))
+        self.checkbox_keep_video_audio.pack(anchor="w")
 
         # Registrar en el diccionario global
         self.DICT_WIDGETS.register("VARIABLES_GLOBALES", "sincronizacion_automatica", self.auto_sync_var)
         self.DICT_WIDGETS.register("VARIABLES_GLOBALES", "envio_automatico_novedades", self.auto_send_news_var)
         self.DICT_WIDGETS.register("VARIABLES_GLOBALES", "mantener_audio_publicidades", self.keep_video_audio_var)
         
-        print(datos_conexion)
-
-        if datos_conexion:  # Verifica si la lista NO estÃ¡ vacÃ­a
+        if datos_conexion:  # Verifica si la lista NO está vacía
             datos_conexion = datos_conexion[0]
             if len(datos_conexion) > 3 and datos_conexion[3]:  # Verifica que haya al menos 4 elementos
                 self.label_info_notebook_config_datos.config(
-                    text="Se encontrÃ³ conexiÃ³n a la fuente de datos de Inforhard Sistema S.R.L"
+                    text="Se encontró conexión a la fuente de datos de Inforhard Sistema S.R.L"
                 )
                 self.frame_config_datos_INFORHARD.pack(fill="both", expand=True)
             else:
                 self.label_info_notebook_config_datos.config(
-                    text="No se encontrÃ³ conexiÃ³n a una fuente de datos"
+                    text="No se encontró conexión a una fuente de datos"
                 )
         else:
             self.label_info_notebook_config_datos.config(
-                text="No se encontrÃ³ ninguna conexiÃ³n a una fuente de datos"
+                text="No se encontró ninguna conexión a una fuente de datos"
             )
 
     def creacion_frame_notebook_usuarios_permisos(self):
@@ -511,48 +800,57 @@ class GUI_CONFIG:
         self.frame_notebook_usuarios_permisos.pack(fill="both", expand=True)
         self.DICT_WIDGETS.register("GUI_CONFIG", "frame_notebook_usuarios_permisos", self.frame_notebook_usuarios_permisos)
 
-        frame_superior = ttk.Labelframe(
+        self.frame_superior_usuarios = ttk.Labelframe(
             self.frame_notebook_usuarios_permisos,
             text="Usuario actual",
             bootstyle="primary",
-            padding=12,
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
         )
-        frame_superior.pack(fill="x", padx=10, pady=(10, 6))
+        self.frame_superior_usuarios.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(PANEL_PAD_Y - 4, 6))
+        self.frame_superior_usuarios.columnconfigure(0, weight=1)
+
+        self.frame_resumen_usuarios = ttk.Frame(self.frame_superior_usuarios)
+        self.frame_resumen_usuarios.pack(fill="x")
+        self.frame_resumen_usuarios.columnconfigure(0, weight=1)
 
         self.label_usuario_windows_actual = ttk.Label(
-            frame_superior,
+            self.frame_resumen_usuarios,
             text="Usuario Windows: -",
-            font=("Segoe UI", 11, "bold"),
+            font=FONT_LABEL_BOLD,
         )
-        self.label_usuario_windows_actual.pack(anchor="w", pady=(0, 6))
+        self.label_usuario_windows_actual.grid(row=0, column=0, sticky="w", pady=(0, 6))
 
         self.label_rol_windows_actual = ttk.Label(
-            frame_superior,
+            self.frame_resumen_usuarios,
             text="Rol Windows: -",
             bootstyle="info",
-            font=("Segoe UI", 10),
+            font=FONT_SUBTITLE,
         )
-        self.label_rol_windows_actual.pack(anchor="w", pady=(0, 6))
+        self.label_rol_windows_actual.grid(row=1, column=0, sticky="w", pady=(0, 6))
 
         self.label_permisos_efectivos = ttk.Label(
-            frame_superior,
+            self.frame_resumen_usuarios,
             text="Permisos efectivos: -",
             bootstyle="secondary",
-            font=("Segoe UI", 10),
+            font=FONT_SUBTITLE,
+            justify="left",
         )
-        self.label_permisos_efectivos.pack(anchor="w")
+        self.label_permisos_efectivos.grid(row=2, column=0, sticky="w")
 
-        frame_perfiles = ttk.Labelframe(
+        self.frame_perfiles_usuarios = ttk.Labelframe(
             self.frame_notebook_usuarios_permisos,
             text="Perfiles configurados",
             bootstyle="primary",
-            padding=12,
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
         )
-        frame_perfiles.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.frame_perfiles_usuarios.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(0, 10))
+
+        self.frame_tree_perfiles = ttk.Frame(self.frame_perfiles_usuarios)
+        self.frame_tree_perfiles.pack(fill="both", expand=True)
 
         columnas = ("usuario", "admin_windows", "estado", "productos", "publicidad", "configuracion")
         self.tree_perfiles_usuario = ttk.Treeview(
-            frame_perfiles,
+            self.frame_tree_perfiles,
             columns=columnas,
             show="headings",
             height=8,
@@ -572,69 +870,82 @@ class GUI_CONFIG:
         self.tree_perfiles_usuario.column("configuracion", width=130, anchor="center")
         self.tree_perfiles_usuario.pack(fill="both", expand=True, side="left")
 
-        scroll_y = ttk.Scrollbar(frame_perfiles, orient="vertical", command=self.tree_perfiles_usuario.yview)
+        scroll_y = ttk.Scrollbar(self.frame_tree_perfiles, orient="vertical", command=self.tree_perfiles_usuario.yview)
         scroll_y.pack(side="right", fill="y")
         self.tree_perfiles_usuario.configure(yscrollcommand=scroll_y.set)
         self.tree_perfiles_usuario.bind("<<TreeviewSelect>>", self._seleccionar_perfil_desde_tabla)
 
-        frame_editor = ttk.Labelframe(
+        self.frame_editor_usuarios = ttk.Labelframe(
             self.frame_notebook_usuarios_permisos,
             text="Editar perfil",
             bootstyle="primary",
-            padding=12,
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
         )
-        frame_editor.pack(fill="x", padx=10, pady=(0, 10))
+        self.frame_editor_usuarios.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 10))
+        self.frame_editor_usuarios.columnconfigure(1, weight=1)
+        self.frame_editor_usuarios.columnconfigure(2, weight=1)
 
-        ttk.Label(frame_editor, text="Perfil / usuario Windows:").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(self.frame_editor_usuarios, text="Perfil / usuario Windows:", font=FONT_BODY_BOLD).grid(row=0, column=0, sticky="w", pady=(0, 10), padx=(0, 10))
         self.perfil_permiso_var = StringVar()
         self.combobox_perfiles_permiso = ttk.Combobox(
-            frame_editor,
+            self.frame_editor_usuarios,
             textvariable=self.perfil_permiso_var,
             state="readonly",
             width=30,
         )
-        self.combobox_perfiles_permiso.grid(row=0, column=1, sticky="w", pady=(0, 8))
+        self.combobox_perfiles_permiso.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(0, 10))
         self.combobox_perfiles_permiso.bind("<<ComboboxSelected>>", self._seleccionar_perfil_permiso)
 
         self.perm_productos_var = BooleanVar(value=False)
         self.perm_publicidad_var = BooleanVar(value=False)
         self.perm_configuracion_var = BooleanVar(value=False)
 
-        ttk.Checkbutton(frame_editor, text="Productos", variable=self.perm_productos_var).grid(row=1, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(frame_editor, text="Publicidad", variable=self.perm_publicidad_var).grid(row=1, column=1, sticky="w", pady=2)
-        ttk.Checkbutton(frame_editor, text="Configuración", variable=self.perm_configuracion_var).grid(row=1, column=2, sticky="w", pady=2)
+        self.frame_checks_usuarios = ttk.Frame(self.frame_editor_usuarios)
+        self.frame_checks_usuarios.grid(row=1, column=0, columnspan=3, sticky="ew")
+        self.frame_checks_usuarios.columnconfigure(0, weight=1)
+        self.frame_checks_usuarios.columnconfigure(1, weight=1)
+        self.frame_checks_usuarios.columnconfigure(2, weight=1)
 
-        frame_acciones = ttk.Frame(self.frame_notebook_usuarios_permisos)
-        frame_acciones.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Checkbutton(self.frame_checks_usuarios, text="Productos", variable=self.perm_productos_var).grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(self.frame_checks_usuarios, text="Publicidad", variable=self.perm_publicidad_var).grid(row=0, column=1, sticky="w", pady=2)
+        ttk.Checkbutton(self.frame_checks_usuarios, text="Configuración", variable=self.perm_configuracion_var).grid(row=0, column=2, sticky="w", pady=2)
+
+        self.frame_acciones_usuarios = ttk.Frame(self.frame_notebook_usuarios_permisos)
+        self.frame_acciones_usuarios.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 10))
 
         self.button_refrescar_perfiles = ttk.Button(
-            frame_acciones,
+            self.frame_acciones_usuarios,
             text="Refrescar",
-            bootstyle="outline",
+            bootstyle="secondary-outline",
             command=self.refrescar_tab_usuarios_permisos,
+            padding=(12, 8),
         )
         self.button_refrescar_perfiles.pack(side="left")
 
         self.button_nuevo_perfil = ttk.Button(
-            frame_acciones,
+            self.frame_acciones_usuarios,
             text="Nuevo perfil",
-            bootstyle="outline",
+            bootstyle="info-outline",
             command=self._crear_nuevo_perfil_permiso,
+            padding=(12, 8),
         )
         self.button_nuevo_perfil.pack(side="left", padx=(8, 0))
 
         self.button_guardar_perfil = ttk.Button(
-            frame_acciones,
+            self.frame_acciones_usuarios,
             text="Guardar permisos",
             bootstyle="success",
             command=self._guardar_perfil_permiso,
+            padding=(14, 8),
         )
         self.button_guardar_perfil.pack(side="left", padx=(8, 0))
 
         self.label_info_permisos = ttk.Label(
-            frame_acciones,
+            self.frame_acciones_usuarios,
             text="Los cambios aplican al próximo ingreso del usuario afectado.",
             bootstyle="secondary",
+            font=FONT_SUBTITLE,
+            justify="right",
         )
         self.label_info_permisos.pack(side="right")
 
@@ -893,13 +1204,13 @@ class GUI_CONFIG:
         self.button_importar_datos_INFORHARD.pack()
 
     def _crear_panel_guia_imagenes(self):
-        frame_guia = ttk.Labelframe(
+        self.frame_guia_imagenes = ttk.Labelframe(
             self.frame_notebook_config_datos,
             text="Guia de imagenes para Android",
             bootstyle="info",
-            padding=12,
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
         )
-        frame_guia.pack(fill="x", padx=10, pady=(0, 10))
+        self.frame_guia_imagenes.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 10))
 
         texto_producto = (
             "Imagen de producto\n"
@@ -928,13 +1239,13 @@ class GUI_CONFIG:
             "- Imagenes grandes consumen mas memoria y tardan mas en mostrar"
         )
 
-        ttk.Label(frame_guia, text=texto_producto, justify="left").grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        ttk.Label(frame_guia, text=texto_logo, justify="left").grid(row=0, column=1, sticky="nw", padx=(0, 12))
-        ttk.Label(frame_guia, text=texto_motivo, justify="left", bootstyle="secondary").grid(row=0, column=2, sticky="nw")
+        ttk.Label(self.frame_guia_imagenes, text=texto_producto, justify="left", font=FONT_SUBTITLE).grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        ttk.Label(self.frame_guia_imagenes, text=texto_logo, justify="left", font=FONT_SUBTITLE).grid(row=0, column=1, sticky="nw", padx=(0, 12))
+        ttk.Label(self.frame_guia_imagenes, text=texto_motivo, justify="left", bootstyle="secondary", font=FONT_SUBTITLE).grid(row=0, column=2, sticky="nw")
 
-        frame_guia.columnconfigure(0, weight=1)
-        frame_guia.columnconfigure(1, weight=1)
-        frame_guia.columnconfigure(2, weight=1)
+        self.frame_guia_imagenes.columnconfigure(0, weight=1)
+        self.frame_guia_imagenes.columnconfigure(1, weight=1)
+        self.frame_guia_imagenes.columnconfigure(2, weight=1)
 
     def _validar_logo_seleccionado(self, filepath):
         try:
@@ -986,7 +1297,7 @@ class GUI_CONFIG:
         self.top_level_carga.protocol("WM_DELETE_WINDOW", self.bloquear_cierre)
         
         # Posicionar la ventana en el centro
-        self.top_level_carga.geometry("400x250")  # TamaÃ±o ajustado
+        fit_toplevel_to_workarea(self.top_level_carga, 400, 250, min_width=360, min_height=220)
         self.top_level_carga.place_window_center()
 
         # Agregar una barra de progreso
@@ -994,37 +1305,42 @@ class GUI_CONFIG:
         self.DICT_WIDGETS.register("UI", "BARRA_PROGRESO", self.progressbar_carga)
         self.progressbar_carga.pack(fill="x", expand=True, padx=20, pady=(20,10))
         
-        # Label de porcentaje con tamaÃ±o mayor
-        self.label_porcentaje = ttk.Label(self.top_level_carga, text="0%", anchor="center", font=("Arial", 14))
+        # Label de porcentaje con tamaño mayor
+        self.label_porcentaje = ttk.Label(self.top_level_carga, text="0%", anchor="center", font=FONT_LABEL_BOLD)
         self.label_porcentaje.pack(pady=10)
 
-        # Entry para mostrar las acciones, con tamaÃ±o mayor y centrado
-        self.entry_acciones = ttk.Entry(self.top_level_carga, state="readonly", width=40, font=("Arial", 12))
-        self.entry_acciones.pack(pady=10)
+        # Entry para mostrar las acciones, con tamaño mayor y centrado
+        self.entry_acciones = ttk.Entry(self.top_level_carga, state="readonly", font=FONT_SUBTITLE)
+        self.entry_acciones.pack(fill="x", padx=20, pady=10)
         self.mostrar_accion("Iniciando la carga de datos...")
         
     #///////////////////////////////////////////////////// NOTEBOOK GO-UPC /////////////////////////////////////////////////////
 
     def creacion_frame_notebook_go_upc(self):
-        """PestaÃ±a para configurar la API KEY de GO-UPC (guardada en SQLite)."""
+        """Pestaña para configurar la API KEY de GO-UPC (guardada en SQLite)."""
         self.frame_notebook_go_upc = ttk.Frame(self.notebook_widget_configuracion)
         self.frame_notebook_go_upc.pack(fill="both", expand=True)
         self.DICT_WIDGETS.register("GUI_CONFIG", "frame_notebook_go_upc", self.frame_notebook_go_upc)
 
-        lab = ttk.Labelframe(self.frame_notebook_go_upc, text="ConexiÃ³n GO-UPC", bootstyle="primary", padding=15)
-        lab.pack(fill="both", expand=True, padx=10, pady=10)
+        self.labelframe_go_upc = ttk.Labelframe(
+            self.frame_notebook_go_upc,
+            text="Conexión GO-UPC",
+            bootstyle="primary",
+            padding=(PANEL_PAD_X - 2, PANEL_PAD_Y - 2),
+        )
+        self.labelframe_go_upc.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(PANEL_PAD_Y - 4, PANEL_PAD_Y - 4))
 
         ttk.Label(
-            lab,
+            self.labelframe_go_upc,
             text="API KEY (se guarda localmente en la base de datos):",
-            font=("Arial", 12, "bold"),
+            font=FONT_LABEL_BOLD,
         ).pack(anchor="w", pady=(0, 6))
 
-        self.entry_go_upc_api_key = ttk.Entry(lab, show="â€¢")
+        self.entry_go_upc_api_key = ttk.Entry(self.labelframe_go_upc, show="â€¢")
         self.entry_go_upc_api_key.pack(fill="x", pady=(0, 10))
         self.DICT_WIDGETS.register("GUI_CONFIG", "entry_go_upc_api_key", self.entry_go_upc_api_key)
 
-        frame_btn = ttk.Frame(lab)
+        frame_btn = ttk.Frame(self.labelframe_go_upc)
         frame_btn.pack(fill="x")
 
         self.btn_guardar_go_upc = ttk.Button(
@@ -1043,10 +1359,10 @@ class GUI_CONFIG:
         )
         self.btn_limpiar_go_upc.pack(side="left", padx=8)
 
-        self.lbl_estado_go_upc = ttk.Label(lab, text="", bootstyle="secondary")
+        self.lbl_estado_go_upc = ttk.Label(self.labelframe_go_upc, text="", bootstyle="secondary", font=FONT_SUBTITLE)
         self.lbl_estado_go_upc.pack(anchor="w", pady=(10, 0))
 
-        self.lbl_estado_api_imagenes = ttk.Label(lab, text="", bootstyle="secondary")
+        self.lbl_estado_api_imagenes = ttk.Label(self.labelframe_go_upc, text="", bootstyle="secondary", font=FONT_SUBTITLE)
         self.lbl_estado_api_imagenes.pack(anchor="w", pady=(6, 0))
         self.top_level_configuracion.bind("<Control-Shift-I>", self._abrir_config_api_imagenes)
         self.top_level_configuracion.bind("<Control-Shift-i>", self._abrir_config_api_imagenes)
@@ -1061,7 +1377,7 @@ class GUI_CONFIG:
         try:
             self.api_key_dao.asegurar_tabla()
         except Exception as e:
-            print(f"[GO-UPC] Error creando tabla api_key: {e}")
+            messagebox.showerror("GO-UPC", f"No se pudo asegurar la tabla de API KEY.\n\n{e}")
 
     def _cargar_go_upc_api_key(self):
         """Carga la API KEY desde la DB y la muestra en el Entry (si existe)."""
@@ -1080,7 +1396,7 @@ class GUI_CONFIG:
         """Guarda la API KEY en la DB (deja una sola vigente)."""
         api_key = self.entry_go_upc_api_key.get().strip()
         if not api_key:
-            messagebox.showwarning("GO-UPC", "IngresÃ¡ la API KEY.")
+            messagebox.showwarning("GO-UPC", "Ingresá la API KEY.")
             return
 
         try:
@@ -1092,7 +1408,7 @@ class GUI_CONFIG:
 
     def _abrir_config_api_imagenes(self, event=None):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
-        actual = config.get("api_imagenes_url", "")
+        actual = config.get("api_imagenes_url", "") or "http://inforhardserver.ddns.net:5000"
         url = simpledialog.askstring(
             "API propia de imagenes",
             "URL base de tu API de imagenes:",
@@ -1120,8 +1436,8 @@ class GUI_CONFIG:
             )
         else:
             self.lbl_estado_api_imagenes.config(
-                text="API propia de imagenes sin configurar. Atajo: Ctrl+Shift+I",
-                bootstyle="secondary",
+                text="API propia de imagenes usando valor por defecto: http://inforhardserver.ddns.net:5000 | Atajo: Ctrl+Shift+I",
+                bootstyle="info",
             )
 
 
@@ -1132,13 +1448,13 @@ class GUI_CONFIG:
         self.DICT_WIDGETS.register("GUI_CONFIG", "toplevel_button_agregar", self.toplevel_button_agregar)
         self.toplevel_button_agregar.title("VeriPre_Connector - Agregar Dispositivo")
         self.toplevel_button_agregar.transient(self.top_level_configuracion)
-        self.toplevel_button_agregar.geometry("500x300")
+        fit_toplevel_to_workarea(self.toplevel_button_agregar, 500, 300, min_width=460, min_height=280)
         self.toplevel_button_agregar.place_window_center()
 
         self.creacion_contenido_toplevel_button_agregar()
         
     def command_button_eliminar(self):
-        if messagebox.askyesno("Eliminar Dispositivo", f"Â¿Desea eliminar el Dispositivo {self.combobox_dispositivos.get()}?"):
+        if messagebox.askyesno("Eliminar Dispositivo", f"¿Desea eliminar el Dispositivo {self.combobox_dispositivos.get()}?"):
             
             self.dispositivos_dao.eliminar_por_nombre(self.combobox_dispositivos.get())
             self.limpiar_frame_despues_actualizacion()
@@ -1215,7 +1531,7 @@ class GUI_CONFIG:
                 self.button_player.config(state="normal", text="Player")
                 if not config_player:
                     messagebox.showinfo(
-                        "Configuracion Player",
+                        "Configuración Player",
                         "El endpoint /api/veri/configuracion_player no esta disponible.\n"
                         "Puede ser un APK anterior o el dispositivo no respondio.",
                     )
@@ -1237,7 +1553,7 @@ class GUI_CONFIG:
     def _abrir_dialogo_configuracion_player(self, nombre, base_url, config_player):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title(f"Player - {nombre}")
-        top.geometry("700x470")
+        fit_toplevel_to_workarea(top, 700, 470, min_width=640, min_height=420)
         top.place_window_center()
         top.transient(self.top_level_configuracion)
         top.grab_set()
@@ -1248,7 +1564,7 @@ class GUI_CONFIG:
 
         ttk.Label(
             top,
-            text=f"Configuracion remota del player para {nombre}",
+            text=f"Configuración remota del player para {nombre}",
             font=("Segoe UI", 12, "bold"),
         ).pack(anchor="w", padx=12, pady=(12, 6))
 
@@ -1306,7 +1622,7 @@ class GUI_CONFIG:
 
         info = ttk.Labelframe(top, text="Pantallas detectadas", padding=12, bootstyle="primary")
         info.pack(fill="both", expand=True, padx=12, pady=(8, 10))
-        text_info = ttk.Text(info, height=8, wrap="word")
+        text_info = self._crear_textarea_base(info, height=8)
         text_info.pack(fill="both", expand=True)
         if pantallas:
             text_info.insert("1.0", "\n".join(self._descripcion_pantalla(p) for p in pantallas))
@@ -1349,8 +1665,8 @@ class GUI_CONFIG:
                     if not respuesta:
                         estado_lbl.config(text="No se pudo guardar la configuracion.", bootstyle="danger")
                         return
-                    estado_lbl.config(text="Configuracion guardada correctamente.", bootstyle="success")
-                    messagebox.showinfo("Player", "Configuracion del player guardada correctamente.")
+                    estado_lbl.config(text="Configuración guardada correctamente.", bootstyle="success")
+                    messagebox.showinfo("Player", "Configuración del player guardada correctamente.")
 
                 self._run_en_ui(finalizar)
 
@@ -1373,7 +1689,7 @@ class GUI_CONFIG:
             self.entry_puerto.insert(0, self.datos_dispositivos[dispositivo]["puerto"])
             self.text_comentario.insert("1.0", self.datos_dispositivos[self.combobox_dispositivos.get()]["comentario"])
         else:
-            print(f"Error: {dispositivo} no encontrado en datos_dispositivos")
+            messagebox.showwarning("Dispositivo", "No se encontró el dispositivo seleccionado en memoria.")
         
         self.button_agregar_dispositivo.config(text="Actualizar", command=self.command_button_actualizar_datos_dispositivo)
         
@@ -1387,15 +1703,15 @@ class GUI_CONFIG:
                     self.text_comentario.get("1.0", "end").strip(),
                 )
                 self.combobox_dispositivos.config(values=self.actualizar_datos_combobox())
-                messagebox.showinfo("Dispositivo Agregado", "Â¡Dispositivo Agregado con exito!")
+                messagebox.showinfo("Dispositivo Agregado", "Dispositivo agregado con éxito.")
                 self.toplevel_button_agregar.destroy()
         except Exception as e:
-            print(e)    
+            return []
             
     def command_button_actualizar_datos_dispositivo(self):
         try:
             if self.validar_campos():
-                # Prepara la consulta segura usando parÃ¡metros
+                # Prepara la consulta segura usando parámetros
                 sentencia_actualizacion = """
                 UPDATE VERIPRE_EQUIPOS 
                 SET nombre = ?, direccion_conexion = ?, puerto = ?, comentarios = ? 
@@ -1406,7 +1722,7 @@ class GUI_CONFIG:
                     self.entry_labelframe_nuevo_dispositivo_button_agregar_nombre_dispositivos.get(),
                     self.entry_direccion_ip.get(),
                     self.entry_puerto.get(),
-                    self.text_comentario.get("1.0", "end").strip(),  # Evita el salto de lÃ­nea final
+                    self.text_comentario.get("1.0", "end").strip(),  # Evita el salto de línea final
                     self.combobox_dispositivos.get()
                 )
 
@@ -1417,53 +1733,58 @@ class GUI_CONFIG:
                 # Actualiza el Combobox con los nuevos datos
                 self.combobox_dispositivos.config(values=self.actualizar_datos_combobox())
 
-                messagebox.showinfo("Dispositivo Actualizado", "Â¡Dispositivo actualizado con Ã©xito!")
+                messagebox.showinfo("Dispositivo Actualizado", "Dispositivo actualizado con éxito.")
                 self.toplevel_button_agregar.destroy()
                 self.limpiar_frame_despues_actualizacion()
 
         except Exception as e:
-            print(f"Error al actualizar el dispositivo: {e}")
+            messagebox.showerror("Dispositivo", f"No se pudo actualizar el dispositivo.\n\n{e}")
 
     def command_button_buscar_dispositivos_red(self):
         tipos_var = ttk.StringVar(value="ambos")
 
         selector = ttk.Toplevel(self.top_level_configuracion)
         selector.title("Buscar en red")
-        selector.geometry("520x230")
+        fit_toplevel_to_workarea(selector, 520, 230, min_width=480, min_height=220)
         selector.place_window_center()
         selector.transient(self.top_level_configuracion)
         selector.grab_set()
         selector.resizable(False, False)
 
-        ttk.Label(
-            selector,
-            text="Seleccione qué tipo de dispositivos desea detectar:",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=22, pady=(22, 12))
+        frame_selector = ttk.Frame(selector, padding=(PANEL_PAD_X + 2, PANEL_PAD_Y + 2))
+        frame_selector.pack(fill="both", expand=True)
+        frame_selector.columnconfigure(0, weight=1)
 
         ttk.Label(
-            selector,
+            frame_selector,
+            text="Seleccione qué tipo de dispositivos desea detectar:",
+            font=FONT_LABEL_BOLD,
+        ).pack(anchor="w", pady=(4, 12))
+
+        ttk.Label(
+            frame_selector,
             text="Puede buscar verificadores de precio, players InforTV o ambos.",
             bootstyle="secondary",
+            font=FONT_SUBTITLE,
             justify="left",
             wraplength=460,
-        ).pack(anchor="w", padx=22, pady=(0, 10))
+        ).pack(anchor="w", pady=(0, 12))
 
         combo = ttk.Combobox(
-            selector,
+            frame_selector,
             state="readonly",
             values=["Ambos", "Verificadores", "InforTV"],
             width=34,
         )
-        combo.pack(anchor="w", padx=22)
+        combo.pack(anchor="w", fill="x", ipady=4)
         combo.set("Ambos")
 
         usar_cache = ttk.BooleanVar(value=True)
         ttk.Checkbutton(
-            selector,
+            frame_selector,
             text="Usar cache reciente si existe",
             variable=usar_cache,
-        ).pack(anchor="w", padx=22, pady=(12, 0))
+        ).pack(anchor="w", pady=(14, 0))
 
         def resolver_tipos():
             valor = combo.get().strip().lower()
@@ -1482,38 +1803,48 @@ class GUI_CONFIG:
                 use_cache=cache_habilitado,
             )
 
-        acciones = ttk.Frame(selector)
-        acciones.pack(fill="x", padx=22, pady=(24, 0))
-        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info", width=14).pack(side="left")
-        ttk.Button(acciones, text="Cancelar", command=selector.destroy, width=14).pack(side="right")
+        acciones = ttk.Frame(frame_selector)
+        acciones.pack(fill="x", pady=(PANEL_PAD_Y + 10, 0))
+        ttk.Button(acciones, text="Buscar", command=iniciar_busqueda, bootstyle="info", width=14, padding=(12, 8)).pack(side="left")
+        ttk.Button(acciones, text="Cancelar", command=selector.destroy, width=14, padding=(12, 8)).pack(side="right")
 
     def _ejecutar_busqueda_dispositivos_red(self, tipos=("verificador", "infotv"), use_cache=True):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Buscar dispositivos en red")
-        top.geometry("580x220")
+        fit_toplevel_to_workarea(top, 580, 220, min_width=520, min_height=210)
         top.place_window_center()
         top.transient(self.top_level_configuracion)
         top.grab_set()
         top.resizable(False, False)
 
+        frame_estado_busqueda = ttk.Frame(top, padding=(PANEL_PAD_X + 6, PANEL_PAD_Y + 6))
+        frame_estado_busqueda.pack(fill="both", expand=True)
+
         ttk.Label(
-            top,
+            frame_estado_busqueda,
             text="Buscando verificadores (8080) e InforTV (2727) en la red local...",
-            font=("Segoe UI", 11, "bold"),
+            font=FONT_LABEL_BOLD,
             wraplength=520,
             justify="left",
-        ).pack(anchor="w", padx=24, pady=(22, 12))
+        ).pack(anchor="w", pady=(2, 12))
 
-        progress = ttk.Progressbar(top, mode="indeterminate", bootstyle="info-striped")
-        progress.pack(fill="x", padx=24, pady=(0, 14))
+        progress = ttk.Progressbar(frame_estado_busqueda, mode="indeterminate", bootstyle="info-striped")
+        progress.pack(fill="x", pady=(0, 14))
         progress.start(12)
 
         estado_var = ttk.StringVar(value="Iniciando descubrimiento...")
-        ttk.Label(top, textvariable=estado_var, bootstyle="secondary", wraplength=520, justify="left").pack(anchor="w", padx=24)
+        ttk.Label(
+            frame_estado_busqueda,
+            textvariable=estado_var,
+            bootstyle="secondary",
+            font=FONT_SUBTITLE,
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w")
 
-        acciones = ttk.Frame(top)
-        acciones.pack(fill="x", padx=24, pady=(24, 0))
-        btn_cerrar = ttk.Button(acciones, text="Cerrar", command=top.destroy, state="disabled")
+        acciones = ttk.Frame(frame_estado_busqueda)
+        acciones.pack(fill="x", pady=(PANEL_PAD_Y + 10, 0))
+        btn_cerrar = ttk.Button(acciones, text="Cerrar", command=top.destroy, state="disabled", padding=(12, 8))
         btn_cerrar.pack(side="right")
 
         def update_estado(msg):
@@ -1548,18 +1879,23 @@ class GUI_CONFIG:
     def _mostrar_resultados_dispositivos_detectados(self, dispositivos):
         top = ttk.Toplevel(self.top_level_configuracion)
         top.title("Dispositivos detectados")
-        top.geometry("1240x680")
+        fit_toplevel_to_workarea(top, 1240, 680, min_width=980, min_height=560)
         top.place_window_center()
         top.transient(self.top_level_configuracion)
 
-        ttk.Label(
-            top,
-            text="Seleccione los dispositivos detectados que desea agregar a la configuración local.",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=14, pady=(14, 8))
+        frame_principal = ttk.Frame(top, padding=(PANEL_PAD_X - 4, PANEL_PAD_Y - 2))
+        frame_principal.pack(fill="both", expand=True)
+        frame_principal.columnconfigure(0, weight=1)
+        frame_principal.rowconfigure(1, weight=1)
 
-        frame_contenido = ttk.Frame(top)
-        frame_contenido.pack(fill="both", expand=True, padx=14, pady=(0, 10))
+        ttk.Label(
+            frame_principal,
+            text="Seleccione los dispositivos detectados que desea agregar a la configuración local.",
+            font=FONT_LABEL_BOLD,
+        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+        frame_contenido = ttk.Frame(frame_principal)
+        frame_contenido.grid(row=1, column=0, sticky="nsew", pady=(0, PANEL_PAD_Y - 4))
         frame_contenido.columnconfigure(0, weight=5)
         frame_contenido.columnconfigure(1, weight=3)
         frame_contenido.rowconfigure(0, weight=1)
@@ -1569,7 +1905,7 @@ class GUI_CONFIG:
 
         frame_filtros = ttk.Frame(frame_tree)
         frame_filtros.pack(fill="x", pady=(0, 8))
-        ttk.Label(frame_filtros, text="Mostrar:").pack(side="left", padx=(0, 8))
+        ttk.Label(frame_filtros, text="Mostrar:", font=FONT_BODY_BOLD).pack(side="left", padx=(0, 8))
         filtro_var = ttk.StringVar(value="nuevos")
         combo_filtro = ttk.Combobox(
             frame_filtros,
@@ -1601,7 +1937,12 @@ class GUI_CONFIG:
         tree.pack(side="left", fill="both", expand=True)
         scroll_y.pack(side="right", fill="y")
 
-        frame_editor = ttk.LabelFrame(frame_contenido, text="Edición rápida", padding=14)
+        frame_editor = ttk.Labelframe(
+            frame_contenido,
+            text="Edición rápida",
+            padding=(PANEL_PAD_X - 4, PANEL_PAD_Y - 2),
+            bootstyle="primary",
+        )
         frame_editor.grid(row=0, column=1, sticky="nsew")
         frame_editor.columnconfigure(1, weight=1)
 
@@ -1684,21 +2025,21 @@ class GUI_CONFIG:
             tree.see(destino)
             cargar_editor(destino)
 
-        ttk.Label(frame_editor, text="Nombre:").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(frame_editor, text="Nombre:", font=FONT_BODY_BOLD).grid(row=0, column=0, sticky="w", pady=(0, 8))
         entry_nombre = ttk.Entry(frame_editor, textvariable=nombre_var, width=28)
         entry_nombre.grid(row=0, column=1, sticky="ew", pady=(0, 8))
 
-        ttk.Label(frame_editor, text="Tipo:").grid(row=1, column=0, sticky="w", pady=4)
-        ttk.Label(frame_editor, textvariable=tipo_var).grid(row=1, column=1, sticky="w", pady=4)
-        ttk.Label(frame_editor, text="IP:").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Label(frame_editor, textvariable=ip_var).grid(row=2, column=1, sticky="w", pady=4)
-        ttk.Label(frame_editor, text="Puerto:").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Label(frame_editor, textvariable=puerto_var).grid(row=3, column=1, sticky="w", pady=4)
-        ttk.Label(frame_editor, text="Estado:").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Label(frame_editor, textvariable=estado_var_editor).grid(row=4, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="Tipo:", font=FONT_BODY_BOLD).grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=tipo_var, font=FONT_SUBTITLE).grid(row=1, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="IP:", font=FONT_BODY_BOLD).grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=ip_var, font=FONT_SUBTITLE).grid(row=2, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="Puerto:", font=FONT_BODY_BOLD).grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=puerto_var, font=FONT_SUBTITLE).grid(row=3, column=1, sticky="w", pady=4)
+        ttk.Label(frame_editor, text="Estado:", font=FONT_BODY_BOLD).grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(frame_editor, textvariable=estado_var_editor, font=FONT_SUBTITLE).grid(row=4, column=1, sticky="w", pady=4)
 
         ayuda_var = ttk.StringVar(value="Seleccione un dispositivo para editar su nombre antes de guardar.")
-        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", wraplength=320, justify="left").grid(
+        ttk.Label(frame_editor, textvariable=ayuda_var, bootstyle="secondary", font=FONT_SUBTITLE, wraplength=320, justify="left").grid(
             row=5, column=0, columnspan=2, sticky="w", pady=(14, 10)
         )
 
@@ -1808,10 +2149,15 @@ class GUI_CONFIG:
         info_var = ttk.StringVar(
             value="No se encontraron dispositivos." if not dispositivos else f"Dispositivos encontrados: {len(dispositivos)}"
         )
-        ttk.Label(top, textvariable=info_var, bootstyle="secondary").pack(anchor="w", padx=14, pady=(0, 8))
+        ttk.Label(
+            frame_principal,
+            textvariable=info_var,
+            bootstyle="secondary",
+            font=FONT_SUBTITLE,
+        ).grid(row=2, column=0, sticky="w", pady=(0, 8))
 
-        acciones = ttk.Frame(top)
-        acciones.pack(fill="x", padx=14, pady=(0, 14))
+        acciones = ttk.Frame(frame_principal)
+        acciones.grid(row=3, column=0, sticky="ew")
 
         def agregar_seleccionados():
             seleccion = tree.selection()
@@ -1860,8 +2206,8 @@ class GUI_CONFIG:
             )
             top.destroy()
 
-        ttk.Button(acciones, text="Agregar seleccionados", command=agregar_seleccionados, bootstyle="success").pack(side="left")
-        ttk.Button(acciones, text="Cerrar", command=top.destroy).pack(side="right")
+        ttk.Button(acciones, text="Agregar seleccionados", command=agregar_seleccionados, bootstyle="success", padding=(12, 8)).pack(side="left")
+        ttk.Button(acciones, text="Cerrar", command=top.destroy, padding=(12, 8)).pack(side="right")
 
     def _generar_nombre_dispositivo_unico(self, dispositivo):
         base = (dispositivo.get("nombre") or f"Dispositivo {dispositivo.get('ip', '')}").strip()
@@ -1893,14 +2239,13 @@ class GUI_CONFIG:
             
     def command_button_agregar_datos_de_conexion(self):
         try:
-            if self.combobox_lista_fuente_datos.get() == "ConexiÃ³n ODBC":
+            if self.combobox_lista_fuente_datos.get() == "Conexión ODBC":
                 self.conexion_dao.crear(
                     self.combobox_odbc.get(),
                     self.entry_user.get(),
                     self.entry_password.get(),
                     self.checkbox_var.get(),
                 )
-                print(self.checkbox_var.get())
                 if self.checkbox_var.get():
                     conexion = {
                         "user": self.entry_user.get(),
@@ -1909,13 +2254,10 @@ class GUI_CONFIG:
                     }
                     self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
                     self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
-                else:
-                    print("NO CONEXION INFORHARD")
-                messagebox.showinfo("ConexiÃ³n Agregada", "Â¡ConexiÃ³n agregada con exito!")
+                messagebox.showinfo("Conexión Agregada", "Conexión agregada con éxito.")
             self.cambiar_estados_widgets_frame_odbc("disabled")
             self.button_agregar_datos_de_conexion.config(text="Actualizar datos", state="normal", command=self.command_modificado_button_actualizar_datos_de_conexion)
         except Exception as e:
-            print(e)
             messagebox.showerror("ERROR", e)
             
     def command_modificado_button_actualizar_datos_de_conexion(self):            
@@ -1933,7 +2275,6 @@ class GUI_CONFIG:
                 self.entry_password.get(),
                 self.checkbox_var.get(),
             )
-            print(self.checkbox_var.get())
             if self.checkbox_var.get():
                 conexion = {
                     "user": self.entry_user.get(),
@@ -1942,20 +2283,18 @@ class GUI_CONFIG:
                 }
                 self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
                 self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
-            else:
-                print("NO CONEXION INFORHARD")
-            messagebox.showinfo("Estado ConexiÃ³n", "Se ha actualizado el metodo de conexiÃ³n")
+            messagebox.showinfo("Estado Conexión", "Se ha actualizado el método de conexión")
             self.cambiar_estados_widgets_frame_odbc("disabled")
             self.button_agregar_datos_de_conexion.config(text="Actualizar datos", state="normal", command=self.command_modificado_button_actualizar_datos_de_conexion)
         except Exception as e:
-            print(e)
+            messagebox.showerror("ERROR", e)
             
     def command_importar_datos_INFORHARD(self):
         try:
             self.creacion_toplevel_carga_datos()
             threading.Thread(target=self.procesar_productos_completos).start()
         except Exception as e:
-            print(e)
+            messagebox.showerror("Carga de datos", f"No se pudo iniciar la carga.\n\n{e}")
             
 
     def actualizar_config_sincronizacion_automatica(self):
@@ -1963,11 +2302,11 @@ class GUI_CONFIG:
         nuevo_valor = self.auto_sync_var.get()
         valor_anterior = config.get("sincronizacion_automatica", False)
 
-        # Solo preguntar si se estÃ¡ activando (no al desactivar)
+        # Solo preguntar si se está activando (no al desactivar)
         if not valor_anterior and nuevo_valor:
             respuesta = messagebox.askyesno(
-                "Reiniciar aplicaciÃ³n",
-                "Se activÃ³ la sincronizaciÃ³n automÃ¡tica.\nÂ¿DeseÃ¡s reiniciar la aplicaciÃ³n para aplicar los cambios?"
+                "Reiniciar aplicación",
+                "Se activó la sincronización automática.\n¿Deseás reiniciar la aplicación para aplicar los cambios?"
             )
             if respuesta:
                 config["sincronizacion_automatica"] = True
@@ -2030,8 +2369,7 @@ class GUI_CONFIG:
 
 
     def mostrar_accion(self, texto):
-        print(texto)
-        """Actualiza el Entry con el texto de la acciÃ³n que se estÃ¡ realizando."""
+        """Actualiza el Entry con el texto de la acción que se está realizando."""
         self.entry_acciones.config(state="normal")
         self.entry_acciones.delete(0, "end")
         self.entry_acciones.insert(0, texto)
@@ -2043,10 +2381,10 @@ class GUI_CONFIG:
         
         barra_progreso = self.DICT_WIDGETS.get_widget("UI", "BARRA_PROGRESO")
         if barra_progreso is not None:
-            barra_progreso['value'] = porcentaje  # AsegÃºrate de usar 'value' para actualizar la barra
+            barra_progreso['value'] = porcentaje  # Asegúrate de usar 'value' para actualizar la barra
             self.label_porcentaje.configure(text=f"{int(porcentaje)}%")
         else:
-            self.mostrar_accion("Error: No se encontrÃ³ el widget BARRA_PROGRESO.")
+            self.mostrar_accion("Error: No se encontró el widget BARRA_PROGRESO.")
 
 
 
@@ -2069,7 +2407,7 @@ class GUI_CONFIG:
 
     #/////////////////////////////////////////// DATABASE ///////////////////////////////////////////
     def buscar_datos_en_tabla_ARTICULOS(self):
-        """Obtiene los artÃ­culos con cÃ³digos de barras vÃ¡lidos y muestra informaciÃ³n de lo que estÃ¡ haciendo."""
+        """Obtiene los artículos con códigos de barras válidos y muestra información de lo que está haciendo."""
         CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS = """
             SELECT CREF, CDETALLE, CCODEBAR, CTIPOIVA, NPVP1, dFechaU
             FROM ARTICULO 
@@ -2078,16 +2416,16 @@ class GUI_CONFIG:
         """
         self.datos_ARTICULOS = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_ARTICULOS)
 
-        self.mostrar_accion("Iniciando la carga de artÃ­culos...")
+        self.mostrar_accion("Iniciando la carga de artículos...")
         time.sleep(0.75)
 
-        # Primera actualizaciÃ³n al 50%
+        # Primera actualización al 50%
         self.actualizar_barra(50, 100)
 
-        self.mostrar_accion(f"{len(self.datos_ARTICULOS)} artÃ­culos encontrados.")
+        self.mostrar_accion(f"{len(self.datos_ARTICULOS)} artículos encontrados.")
         time.sleep(0.75)
 
-        # Ãšltima actualizaciÃ³n al 100%
+        # Última actualización al 100%
         self.actualizar_barra(100, 100)
 
 
@@ -2095,7 +2433,7 @@ class GUI_CONFIG:
 
 
     def buscar_datos_tabla_CODBARP(self):
-        """Obtiene los cÃ³digos de barra adicionales y los une con la lista de productos."""
+        """Obtiene los códigos de barra adicionales y los une con la lista de productos."""
         self.datos_PRODUCTOS_COMPLETOS = []
         
         if not self.datos_ARTICULOS:
@@ -2111,7 +2449,7 @@ class GUI_CONFIG:
             ORDER BY dFechaU ASC;
         """
         
-        self.mostrar_accion("Obteniendo cÃ³digos de barra adicionales...")
+        self.mostrar_accion("Obteniendo códigos de barra adicionales...")
         datos_codbarp = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_CODBARP)
         
         codbarp_dict = {}
@@ -2157,7 +2495,7 @@ class GUI_CONFIG:
             CONSULTA_SQL_BUSCAR_DATOS_IVAS = f"""
                 SELECT * FROM IVAS;
             """
-            # AquÃ­ ejecutamos la consulta y almacenamos los resultados
+            # Aquí ejecutamos la consulta y almacenamos los resultados
             self.datos_IVAS = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE").ejecutar_consulta(CONSULTA_SQL_BUSCAR_DATOS_IVAS)
 
             # Una vez que la consulta finalice, actualizamos el progreso al 100%
@@ -2215,7 +2553,7 @@ class GUI_CONFIG:
 
         self.mostrar_accion("Insertando o actualizando productos...")
         
-        total_productos = len(self.datos_PRODUCTOS_COMPLETOS)  # NÃºmero total de productos
+        total_productos = len(self.datos_PRODUCTOS_COMPLETOS)  # Número total de productos
         if total_productos == 0:
             self.mostrar_accion("No hay productos para insertar o actualizar.")
             return
@@ -2223,7 +2561,7 @@ class GUI_CONFIG:
         # Iniciar la barra de progreso en 0%
         self.actualizar_barra(0, total_productos)
         
-        # Preparar todos los parÃ¡metros para la inserciÃ³n o actualizaciÃ³n
+        # Preparar todos los parámetros para la inserción o actualización
         parametros = [(producto[0], producto[2], producto[1], producto[3], producto[4]) for producto in self.datos_PRODUCTOS_COMPLETOS]
 
         # Ejecutar la consulta para todos los productos a la vez
@@ -2241,7 +2579,7 @@ class GUI_CONFIG:
             
     def cierre_top_level_configuracion(self):
         """Cierra la ventana y la elimina del gestor de ventanas"""
-        VentanaManager.cerrar_ventana("configuracion")  # Llamamos al mÃ©todo de cierre
+        VentanaManager.cerrar_ventana("configuracion")  # Llamamos al método de cierre
         try:
             self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").unbind("<<DispositivosActualizados>>")
         except Exception:
@@ -2279,9 +2617,7 @@ class GUI_CONFIG:
         self.button_player.config(state="normal")
         self.frame_contenedor_labelframe_datos_dispositivo.pack(fill="both", expand=True)
         dispositivo = self.combobox_dispositivos.get()
-        print(f"Seleccionaste: {dispositivo}")
-
-        # Actualizar los Labels con la informaciÃ³n del dispositivo seleccionado
+        # Actualizar los Labels con la información del dispositivo seleccionado
         self.label_nombre_contenido_labelframe_opciones.config(text=dispositivo)
         self.label_direccion_ip_der_contenido_labelframe_opciones.config(
             text=self.datos_dispositivos[dispositivo]["direccion_ip"]
@@ -2291,12 +2627,12 @@ class GUI_CONFIG:
         )
 
         # Actualizar el contenido del Text para el comentario
-        self.text_comentario_contenido_labelframe_opciones.config(state="normal")  # Habilitar ediciÃ³n
-        self.text_comentario_contenido_labelframe_opciones.delete("1.0", "end")  # Eliminar texto anterior
-        self.text_comentario_contenido_labelframe_opciones.insert("1.0", self.datos_dispositivos[dispositivo]["comentario"])  # Insertar nuevo comentario
-        self.text_comentario_contenido_labelframe_opciones.config(state="disabled")  # Deshabilitar ediciÃ³n
+        self._set_textarea_value(
+            self.text_comentario_contenido_labelframe_opciones,
+            self.datos_dispositivos[dispositivo]["comentario"],
+        )
 
-        # Forzar la actualizaciÃ³n de la interfaz
+        # Forzar la actualización de la interfaz
         self.top_level_configuracion.update_idletasks()
 
     def actualizar_datos_combobox(self):
@@ -2307,7 +2643,7 @@ class GUI_CONFIG:
                 list_nombre_dispositivo.append(nombre_dispositivo)
             return list_nombre_dispositivo
         except Exception as e:
-            print(e)
+            return []
             return []
     
     def traer_todos_los_datos_de_VERIPRE_EQUIPOS(self):
@@ -2330,9 +2666,20 @@ class GUI_CONFIG:
 
     from PIL import Image, ImageTk
 
+    def _ruta_logo_dispositivo_actual(self):
+        ruta_nueva = PNG_LOGO_DISPOSITIVO()
+        if os.path.exists(ruta_nueva):
+            return ruta_nueva
+
+        ruta_legacy = PNG_LOGO_PRINCIPAL()
+        if os.path.exists(ruta_legacy):
+            return ruta_legacy
+
+        return None
+
     def _mostrar_logo_actual(self):
-        ruta_logo = PNG_LOGO_PRINCIPAL()
-        if not os.path.exists(ruta_logo):
+        ruta_logo = self._ruta_logo_dispositivo_actual()
+        if not ruta_logo:
             ruta_logo = PNG_LOGO_SECUNDARIO()
 
         if os.path.exists(ruta_logo):
@@ -2341,7 +2688,7 @@ class GUI_CONFIG:
             alto_disp = self.label_logo_preview.winfo_height()
 
             if ancho_disp <= 1 or alto_disp <= 1:
-                ancho_disp, alto_disp = 300, 300  # mayor Ã¡rea visible
+                ancho_disp, alto_disp = 300, 300  # mayor área visible
 
             img = Image.open(ruta_logo)
             img.thumbnail((ancho_disp, alto_disp), Image.Resampling.LANCZOS)
@@ -2353,7 +2700,7 @@ class GUI_CONFIG:
 
             
     def _seleccionar_logo(self):
-        filetypes = [("ImÃ¡genes", "*.png *.jpg *.jpeg *.webp")]
+        filetypes = [("Imágenes", "*.png *.jpg *.jpeg *.webp")]
         filepath = filedialog.askopenfilename(title="Seleccionar Logo", filetypes=filetypes)
         if not filepath:
             return
@@ -2363,14 +2710,13 @@ class GUI_CONFIG:
             self.ruta_logo_seleccionado = ruta_normalizada
             self._mostrar_logo_actual_desde_ruta(ruta_normalizada)
             self._validar_logo_seleccionado(ruta_normalizada)
-            print(f"âœ… Logo guardado normalizado como {ruta_normalizada}")
         except Exception as e:
-            print(f"âŒ No se pudo guardar el logo en assets/: {e}")
+            messagebox.showerror("Logo", f"No se pudo guardar el logo normalizado.\n{e}")
 
     def _guardar_logo_normalizado(self, filepath):
         from pathlib import Path
 
-        destino = Path("assets") / "!!!LOGO_PRINCIPAL!!!.png"
+        destino = Path("ASSETS") / "!!!LOGO_DISPOSITIVO!!!.png"
         destino.parent.mkdir(parents=True, exist_ok=True)
 
         ancho_objetivo = 1200
@@ -2394,8 +2740,8 @@ class GUI_CONFIG:
     def _normalizar_logo_seleccionado(self):
         ruta_logo = getattr(self, "ruta_logo_seleccionado", None)
         if not ruta_logo:
-            ruta_logo = PNG_LOGO_PRINCIPAL()
-            if not os.path.exists(ruta_logo):
+            ruta_logo = self._ruta_logo_dispositivo_actual()
+            if not ruta_logo or not os.path.exists(ruta_logo):
                 messagebox.showwarning("Logo", "Primero seleccione una imagen para normalizar.")
                 return
 
@@ -2436,12 +2782,10 @@ class GUI_CONFIG:
 
         # Si no hay logo seleccionado, buscar el logo principal o uno secundario
         if not ruta_logo:
-            ruta_logo = PNG_LOGO_PRINCIPAL()
-            if not os.path.exists(ruta_logo):
-                ruta_logo = PNG_LOGO_SECUNDARIO()  # â† definilo como ruta alternativa
-                if not os.path.exists(ruta_logo):
-                    messagebox.showwarning("Logo no disponible", "No se encontrÃ³ ningÃºn logo para enviar.")
-                    return
+            ruta_logo = self._ruta_logo_dispositivo_actual()
+            if not ruta_logo or not os.path.exists(ruta_logo):
+                messagebox.showwarning("Logo no disponible", "No se encontró ningún logo de dispositivo para enviar.")
+                return
         ventana_padre = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
         sender = DispositivoSender(self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA"), ventana_padre)
         urls = sender.seleccionar_dispositivos()

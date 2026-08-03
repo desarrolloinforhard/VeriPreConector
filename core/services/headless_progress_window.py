@@ -5,6 +5,7 @@ import ttkbootstrap as ttk
 from ttkbootstrap.widgets import Floodgauge
 
 from core.services.headless_envio_service import HeadlessEnvioService
+from core.ui.responsive import fit_toplevel_to_workarea
 
 
 class HeadlessProgressWindow:
@@ -16,7 +17,7 @@ class HeadlessProgressWindow:
 
         self.root = ttk.Window(themename="flatly")
         self.root.title("VeriPre Connector - Envio")
-        self.root.geometry("560x190")
+        fit_toplevel_to_workarea(self.root, 560, 190, min_width=520, min_height=180)
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self._cerrar_si_finalizo)
 

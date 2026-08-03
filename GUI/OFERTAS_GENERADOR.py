@@ -7,6 +7,7 @@ from core.services.ofertas_service import OfertasService
 from core.dao.ofertas_dao import OfertasDAO
 from core.render.ofertas_renderer import OfertasRenderer
 from core.logging.logger import get_logger
+from core.ui.responsive import fit_toplevel_to_workarea
 
 logger = get_logger(__name__)
 
@@ -37,7 +38,7 @@ class GeneradorOfertasToplevel(ttk.Toplevel):
         super().__init__(master)
 
         self.title("Generador de Publicidad desde Ofertas")
-        self.geometry("1250x720")
+        fit_toplevel_to_workarea(self, 1250, 720, min_width=980, min_height=620)
         self.place_window_center()
         self.grab_set()
         self.focus_force()

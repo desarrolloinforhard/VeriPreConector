@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.16.27 - 2026-08-03
+
+- Removed the operational barcode normalization flow and restored SmartPrice to work with a single `codigo` end to end.
+- Product synchronization, local SQLite persistence, product UI, and Android payloads now use the original product code without deriving EAN-13 variants.
+- Preserved `PACKS_MINI`, additional prices, and offer synchronization while simplifying the product pipeline.
+- Added an automatic SQLite migration for legacy installations so the `productos` table drops `CODIGO_ORIGINAL` and `CODIGO_NORMALIZADO` on next schema verification.
+- Hardened file log rotation with a safe rotating handler to avoid `WinError 32` tracebacks when another process holds `veripre.log`.
+
 ## 1.16.26 - 2026-07-31
 
 - Added legacy barcode normalization support for clients that store `CCODEBAR` with 12 numeric digits and no check digit.

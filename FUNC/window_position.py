@@ -1,9 +1,8 @@
+from core.ui.responsive import center_toplevel_in_workarea
+
+
 def center_window(root, width, height):
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    window_height = int((screen_width / 2) - (width / 2))
-    window_width = int((screen_height / 2) - (height / 2))
-    root.geometry(f"{width}x{height}+{window_height}+{window_width}")
+    center_toplevel_in_workarea(root, width, height)
 
 
 # For toplevel window

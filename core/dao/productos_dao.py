@@ -16,9 +16,7 @@ class ProductosSQLiteDAO:
             OFERTA_HASTA,
             OFERTA_ORIGEN,
             OFERTA_CCODDIV,
-            OFERTA_DTO,
-            CODIGO_ORIGINAL,
-            CODIGO_NORMALIZADO
+            OFERTA_DTO
         FROM productos
         ORDER BY descripcion
         """
@@ -41,10 +39,9 @@ class ProductosSQLiteDAO:
         INSERT OR REPLACE INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
             TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
-            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -53,10 +50,9 @@ class ProductosSQLiteDAO:
         INSERT INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
             TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
-            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(codigo) DO UPDATE SET
             CREF = excluded.CREF,
             descripcion = excluded.descripcion,
@@ -68,9 +64,7 @@ class ProductosSQLiteDAO:
             OFERTA_HASTA = excluded.OFERTA_HASTA,
             OFERTA_ORIGEN = excluded.OFERTA_ORIGEN,
             OFERTA_CCODDIV = excluded.OFERTA_CCODDIV,
-            OFERTA_DTO = excluded.OFERTA_DTO,
-            CODIGO_ORIGINAL = excluded.CODIGO_ORIGINAL,
-            CODIGO_NORMALIZADO = excluded.CODIGO_NORMALIZADO
+            OFERTA_DTO = excluded.OFERTA_DTO
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -116,19 +110,6 @@ class ProductosSQLiteDAO:
         FROM producto_precios
         WHERE codigo IN ({placeholders})
         ORDER BY codigo ASC, orden ASC, cantidad ASC, titulo ASC
-        """
-        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
-
-    def listar_codigos_normalizados_por_codigos(self, codigos):
-        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
-        if not codigos:
-            return []
-
-        placeholders = ",".join("?" for _ in codigos)
-        sql = f"""
-        SELECT codigo, CODIGO_NORMALIZADO
-        FROM productos
-        WHERE codigo IN ({placeholders})
         """
         return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
@@ -228,8 +209,6 @@ class ProductosSQLiteDAO:
                         producto.get("oferta_origen"),
                         producto.get("oferta_ccoddiv"),
                         producto.get("oferta_dto"),
-                        producto.get("codigo_original"),
-                        producto.get("codigo_normalizado"),
                     )
                 )
             else:
@@ -247,8 +226,6 @@ class ProductosSQLiteDAO:
                         None,
                         None,
                         None,
-                        producto[2],
-                        producto[2],
                     )
                 )
 
@@ -296,7 +273,7 @@ class ProductosSybaseDAO:
             NPREMAYOR4,
             NPREMAYOR5,
             CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-        FROM ARTICULO
+        FROM DBA.ARTICULO
         WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
         ORDER BY dFechaU ASC
         """
@@ -320,7 +297,7 @@ class ProductosSybaseDAO:
             NPREMAYOR4,
             NPREMAYOR5,
             CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-        FROM ARTICULO
+        FROM DBA.ARTICULO
         WHERE CCODEBAR IS NOT NULL
         AND CCODEBAR <> ''
         AND CONVERT(DATE, dFechaU) = CONVERT(DATE, GETDATE())
@@ -348,7 +325,7 @@ class ProductosSybaseDAO:
             NPREMAYOR4,
             NPREMAYOR5,
             CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-        FROM ARTICULO
+        FROM DBA.ARTICULO
         WHERE CCODEBAR IS NOT NULL
         AND CCODEBAR <> ''
         AND CONVERT(VARCHAR, dFechaU, 120) {} '{}'
@@ -366,7 +343,7 @@ class ProductosSybaseDAO:
             valores = ",".join(f"'{cref}'" for cref in chunk_escapado)
             sql = f"""
             SELECT CREF, CDETALLE, CCODEBAR, CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-            FROM CODBARP
+            FROM DBA.CODBARP
             WHERE CREF IN ({valores})
             AND CCODEBAR IS NOT NULL
             AND CCODEBAR <> ''
@@ -392,7 +369,7 @@ class ProductosSybaseDAO:
                 NPRECIO,
                 CDETALLE,
                 CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-            FROM PACKS_MINI
+            FROM DBA.PACKS_MINI
             WHERE CREF IN ({valores})
             ORDER BY CREF ASC, dFechaU ASC
             """
@@ -419,4 +396,4 @@ class ProductosSybaseDAO:
         return self.db.ejecutar_consulta(sql) or []
 
     def listar_ivas(self):
-        return self.db.ejecutar_consulta("SELECT * FROM IVAS") or []
+        return self.db.ejecutar_consulta("SELECT * FROM DBA.IVAS") or []
