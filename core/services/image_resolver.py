@@ -1,5 +1,6 @@
 import base64
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import quote
 from io import BytesIO
@@ -9,6 +10,7 @@ from PIL import Image
 
 
 class ProductImageResolver:
+    DEFAULT_IMAGE_API_URL = "http://inforhardserver.ddns.net:5000"
     IMAGE_DIRS = (r"F:\Dba", r"F:\Sp\IMAGEN", r"S:\Sp\IMAGEN")
     FORMAT_PRIORITY = ("webp", "png", "jpg", "jpeg", "gif", "bmp")
     CONTENT_TYPES = {
@@ -46,30 +48,48 @@ class ProductImageResolver:
         if img_base64:
             return img_base64, formato
 
-        imagen = self._buscar_en_carpetas(codigo)
+        imagen = self._buscar_en_fuentes_concurrentes(codigo)
         if imagen:
+            origen = imagen.get("origen")
             imagen = self._normalizar_imagen_producto(imagen["bytes"], imagen["formato"], codigo)
             self._guardar_en_sqlite(codigo, imagen["bytes"], imagen["formato"])
+            if origen in {"carpetas", "api_propia", "go_upc"}:
+                ruta = self._guardar_en_carpeta(codigo, imagen["bytes"], imagen["formato"])
+            else:
+                ruta = None
+            if origen == "go_upc":
+                self._subir_a_api_propia(codigo, imagen["bytes"], imagen["formato"], ruta)
             return self._a_base64(imagen["bytes"]), imagen["formato"]
 
-        if self.incluir_api_propia:
-            imagen = self._buscar_en_api_propia(codigo)
-            if imagen:
-                imagen = self._normalizar_imagen_producto(imagen["bytes"], imagen["formato"], codigo)
-                self._guardar_en_sqlite(codigo, imagen["bytes"], imagen["formato"])
-                self._guardar_en_carpeta(codigo, imagen["bytes"], imagen["formato"])
-                return self._a_base64(imagen["bytes"]), imagen["formato"]
-
-        if self.incluir_go_upc:
-            imagen = self._buscar_en_go_upc(codigo)
-            if imagen:
-                imagen = self._normalizar_imagen_producto(imagen["bytes"], imagen["formato"], codigo)
-                self._guardar_en_sqlite(codigo, imagen["bytes"], imagen["formato"])
-                ruta = self._guardar_en_carpeta(codigo, imagen["bytes"], imagen["formato"])
-                self._subir_a_api_propia(codigo, imagen["bytes"], imagen["formato"], ruta)
-                return self._a_base64(imagen["bytes"]), imagen["formato"]
-
         return None, None
+
+    def _buscar_en_fuentes_concurrentes(self, codigo):
+        tasks = [
+            ("carpetas", self._buscar_en_carpetas),
+        ]
+        if self.incluir_api_propia:
+            tasks.append(("api_propia", self._buscar_en_api_propia))
+        if self.incluir_go_upc:
+            tasks.append(("go_upc", self._buscar_en_go_upc))
+
+        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            future_to_source = {
+                executor.submit(func, codigo): source
+                for source, func in tasks
+            }
+            for future in as_completed(future_to_source):
+                source = future_to_source[future]
+                try:
+                    imagen = future.result()
+                except Exception as e:
+                    self.estado_callback(f"[imagenes] Fuente {source} fallo para {codigo}: {e}")
+                    continue
+                if not imagen:
+                    continue
+                imagen["origen"] = source
+                self.estado_callback(f"[imagenes] Fuente {source} resolvio imagen para {codigo}")
+                return imagen
+        return None
 
     def _buscar_en_sqlite(self, codigo):
         try:
@@ -206,7 +226,11 @@ class ProductImageResolver:
         return None
 
     def _api_imagenes_url(self):
-        url = self.config.get("api_imagenes_url") or self.config.get("imagenes_api_url")
+        url = (
+            self.config.get("api_imagenes_url")
+            or self.config.get("imagenes_api_url")
+            or self.DEFAULT_IMAGE_API_URL
+        )
         return str(url).strip() if url else ""
 
     def _url_api_codigo(self, base_url, codigo):

@@ -9,7 +9,7 @@ import ttkbootstrap as ttk
 from io import BytesIO
 from plyer import notification
 from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageChops, ImageTk
 from ASSETS.path_img import *
 from ttkbootstrap.tableview import Tableview
 from ttkbootstrap.constants import *
@@ -48,6 +48,7 @@ class ContenidoProducto:
         self._envio_auto_en_curso = False
         self._layout_after_id = None
         self._preview_image_size = self.PREVIEW_IMAGE_SIZE
+        self._image_request_id = 0
         self.CONEXIONDBA = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA")
         self.CONEXION_INFORHARD = self.DICT_WIDGETS.get_widget("DATABASE","CONEXION_INFORHARD")
         if self.CONEXION_INFORHARD:
@@ -59,42 +60,106 @@ class ContenidoProducto:
         self.frame_producto.rowconfigure(1, weight=1)
 
         self.frame_header_productos = ttk.Frame(self.frame_producto)
-        self.frame_header_productos.grid(row=0, column=0, sticky="ew", padx=PANEL_PAD_X, pady=(PANEL_PAD_Y, 8))
-        self.frame_header_productos.columnconfigure(0, weight=1)
+        self.frame_header_productos.grid(row=0, column=0, sticky="ew", padx=PANEL_PAD_X, pady=(2, 6))
+        self.frame_header_productos.columnconfigure(0, weight=0)
+        self.frame_header_productos.columnconfigure(1, weight=0)
+        self.frame_header_productos.columnconfigure(2, weight=1)
+        self.frame_header_productos.columnconfigure(3, weight=1)
+
+        self.photo_back_local = READ_IMG(PNG_Back(), 24, 24)
+        self.button_back_local = ttk.Button(
+            self.frame_header_productos,
+            image=self.photo_back_local,
+            command=lambda: self.DICT_WIDGETS.get_widget("GUI_MAIN", "instance").command_button_volver(),
+            bootstyle="primary-link",
+            width=2,
+        )
+        self.button_back_local.grid(row=0, column=0, sticky="w", padx=(0, 10))
 
         self.label_producto = ttk.Label(
             self.frame_header_productos,
             text="Productos",
             font=FONT_TITLE_LG,
         )
-        self.label_producto.grid(row=0, column=0, sticky="w")
+        self.label_producto.grid(row=0, column=1, sticky="w")
 
-        self.label_producto_subtitulo = ttk.Label(
+        self.label_oferta_estado = ttk.Label(
             self.frame_header_productos,
-            text="Busqueda local, vista previa y envio a verificadores.",
-            bootstyle="secondary",
-            font=FONT_SUBTITLE,
+            text="Oferta activa: -",
+            anchor="w",
+            justify="left",
+            font=FONT_BODY_BOLD,
+            bootstyle="warning",
         )
-        self.label_producto_subtitulo.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.label_oferta_estado.grid(row=0, column=2, sticky="e", padx=(16, 10))
+
+        self.label_precios_extra_estado = ttk.Label(
+            self.frame_header_productos,
+            text="Precios adicionales: -",
+            anchor="w",
+            justify="left",
+            font=FONT_BODY_BOLD,
+            bootstyle="info",
+        )
+        self.label_precios_extra_estado.grid(row=0, column=3, sticky="e", padx=(10, 0))
 
         self.crear_interfaz_table_view()
 
-        self.frame_buttons_productos = ttk.Frame(self.frame_producto)
-        self.frame_buttons_productos.grid(row=2, column=0, sticky="ew", padx=PANEL_PAD_X, pady=(8, PANEL_PAD_Y))
-        for column in range(4):
-            self.frame_buttons_productos.columnconfigure(column, weight=1)
+        self.frame_buttons_productos = ttk.Labelframe(
+            self.frame_side_panel,
+            text="Acciones",
+            bootstyle="secondary",
+            padding=(12, 12),
+        )
+        self.frame_buttons_productos.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        self.frame_buttons_productos.columnconfigure(0, weight=1)
+
+        self.frame_buttons_inner = ttk.Frame(self.frame_buttons_productos)
+        self.frame_buttons_inner.grid(row=0, column=0, sticky="nsew")
+        self.frame_buttons_inner.columnconfigure(0, weight=1)
         
-        self.button_crear_datos = ttk.Button(self.frame_buttons_productos, text="Recargar Productos", command=self.command_crear_datos)
+        self.button_crear_datos = ttk.Button(
+            self.frame_buttons_inner,
+            text="Recargar Productos",
+            command=self.command_crear_datos,
+            bootstyle="primary",
+            padding=(14, 9),
+            width=22,
+        )
         self.button_crear_datos.grid(row=0, column=0, padx=BUTTON_PAD_X, sticky="ew")
         
-        self.button_transmitir_novedades = ttk.Button(self.frame_buttons_productos, text="Transmitir Novedades", command=self.command_transmitir_novedades, state=DISABLED)
-        self.button_transmitir_novedades.grid(row=0, column=1, padx=BUTTON_PAD_X, sticky="ew")
+        self.button_transmitir_novedades = ttk.Button(
+            self.frame_buttons_inner,
+            text="Transmitir Novedades",
+            command=self.command_transmitir_novedades,
+            state=DISABLED,
+            bootstyle="success",
+            padding=(14, 9),
+            width=22,
+        )
+        self.button_transmitir_novedades.grid(row=1, column=0, padx=BUTTON_PAD_X, pady=(BUTTON_PAD_Y, 0), sticky="ew")
 
-        self.button_transmitir_datos_fecha = ttk.Button(self.frame_buttons_productos, text="Transmitir por Fecha", command=self.command_transmitir_por_fecha, state=DISABLED)
-        self.button_transmitir_datos_fecha.grid(row=0, column=2, padx=BUTTON_PAD_X, sticky="ew")
+        self.button_transmitir_datos_fecha = ttk.Button(
+            self.frame_buttons_inner,
+            text="Transmitir por Fecha",
+            command=self.command_transmitir_por_fecha,
+            state=DISABLED,
+            bootstyle="secondary",
+            padding=(14, 9),
+            width=22,
+        )
+        self.button_transmitir_datos_fecha.grid(row=2, column=0, padx=BUTTON_PAD_X, pady=(BUTTON_PAD_Y, 0), sticky="ew")
         
-        self.button_transmitir_datos = ttk.Button(self.frame_buttons_productos, text="Transmitir Datos Completos", command=self.command_transmitir_datos, state=DISABLED)
-        self.button_transmitir_datos.grid(row=0, column=3, padx=BUTTON_PAD_X, sticky="ew")
+        self.button_transmitir_datos = ttk.Button(
+            self.frame_buttons_inner,
+            text="Transmitir Datos Completos",
+            command=self.command_transmitir_datos,
+            state=DISABLED,
+            bootstyle="dark",
+            padding=(14, 9),
+            width=22,
+        )
+        self.button_transmitir_datos.grid(row=3, column=0, padx=BUTTON_PAD_X, pady=(BUTTON_PAD_Y, 0), sticky="ew")
         
         # Agregar el nuevo botón en la columna 3
         #self.button_actualizar_datos = ttk.Button(self.frame_buttons_productos, text="Actualizar Datos", command=self.command_actualizar_datos, state=DISABLED)
@@ -128,16 +193,16 @@ class ContenidoProducto:
             self.CONEXIONDBA,
             config=config,
             estado_callback=estado_callback or print,
-            incluir_api_propia=False,
-            incluir_go_upc=False,
+            incluir_api_propia=True,
+            incluir_go_upc=True,
         )
         
         
     def crear_interfaz_table_view(self):
         self.frame_table_view = ttk.Frame(self.frame_producto)
         self.frame_table_view.grid(row=1, column=0, sticky="nsew", padx=PANEL_PAD_X, pady=(0, 8))
-        self.frame_table_view.columnconfigure(0, weight=1, minsize=560)
-        self.frame_table_view.columnconfigure(1, weight=0, minsize=320)
+        self.frame_table_view.columnconfigure(0, weight=1)
+        self.frame_table_view.columnconfigure(1, weight=0)
         self.frame_table_view.rowconfigure(0, weight=1)
         colors = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style.colors
         coldata = [
@@ -146,8 +211,13 @@ class ContenidoProducto:
             {"text": "Precio", "stretch": True},
         ]
 
-        self.frame_tabla_producto = ttk.Frame(self.frame_table_view, bootstyle="light")
-        self.frame_tabla_producto.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        self.frame_tabla_producto = ttk.Labelframe(
+            self.frame_table_view,
+            text="Listado local",
+            bootstyle="primary",
+            padding=(8, 8),
+        )
+        self.frame_tabla_producto.grid(row=0, column=0, sticky="nsew")
         self.frame_tabla_producto.columnconfigure(0, weight=1)
         self.frame_tabla_producto.rowconfigure(0, weight=1)
 
@@ -171,44 +241,168 @@ class ContenidoProducto:
         self.dt.pack(fill=BOTH, expand=True, padx=0, pady=0)
         self.dt.view.bind("<<TreeviewSelect>>", self.mostrar_imagen_producto)
         self.dt.view.bind("<Double-1>", self.abrir_detalle_producto)
-        
-        self.frame_img_producto = ttk.Frame(
+
+        self.frame_side_panel = ttk.Labelframe(
             self.frame_table_view,
+            text="Vista previa y acciones",
+            bootstyle="primary",
+            padding=(12, 12),
+        )
+        self.frame_side_panel.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        self.frame_side_panel.columnconfigure(0, weight=1)
+        self.frame_side_panel.rowconfigure(0, weight=0)
+        self.frame_side_panel.rowconfigure(1, weight=1)
+        self.frame_side_panel.rowconfigure(2, weight=0)
+
+        self.frame_resumen_preview = ttk.Frame(self.frame_side_panel)
+        self.frame_resumen_preview.grid(row=0, column=0, sticky="ew")
+        self.frame_resumen_preview.columnconfigure(0, weight=1)
+
+        self.label_preview_descripcion = ttk.Label(
+            self.frame_resumen_preview,
+            text="Sin producto seleccionado",
+            font=("Segoe UI", 10, "bold"),
+            anchor="w",
+            justify="left",
+        )
+        self.label_preview_descripcion.grid(row=0, column=0, sticky="ew")
+
+        self.label_preview_codigo = ttk.Label(
+            self.frame_resumen_preview,
+            text="Código: -",
+            bootstyle="secondary",
+            font=("Segoe UI", 9),
+            anchor="w",
+        )
+        self.label_preview_codigo.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+
+        self.label_preview_precio = ttk.Label(
+            self.frame_resumen_preview,
+            text="$0.00",
+            font=("Segoe UI", 18, "bold"),
+            bootstyle="success",
+            anchor="w",
+            justify="left",
+        )
+        self.label_preview_precio.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+
+        self.label_preview_oferta = ttk.Label(
+            self.frame_resumen_preview,
+            text="Oferta: NO",
+            bootstyle="secondary",
+            font=("Segoe UI", 9, "bold"),
+            anchor="w",
+            justify="left",
+        )
+        self.label_preview_oferta.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+
+        self.frame_img_producto = ttk.Frame(
+            self.frame_side_panel,
             width=self.IMAGE_PANEL_WIDTH,
             height=self.IMAGE_PANEL_HEIGHT,
             bootstyle="light",
         )
-        self.frame_img_producto.grid(row=0, column=1, sticky="nsew")
-        self.frame_img_producto.pack_propagate(False)
+        self.frame_img_producto.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        self.frame_img_producto.grid_propagate(False)
+        self.frame_img_producto.columnconfigure(0, weight=1)
+        self.frame_img_producto.rowconfigure(0, weight=0)
+        self.frame_img_producto.rowconfigure(1, weight=1)
+
+        self.label_preview_hint = ttk.Label(
+            self.frame_img_producto,
+            text="Seleccione un producto para ver su imagen.",
+            bootstyle="secondary",
+            font=FONT_SUBTITLE,
+            justify="center",
+            anchor="center",
+        )
+        self.label_preview_hint.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+
+        self.frame_preview_producto = ttk.Frame(self.frame_img_producto, bootstyle="light")
+        self.frame_preview_producto.grid(row=1, column=0, sticky="nsew")
+        self.frame_preview_producto.grid_propagate(False)
+        self.frame_preview_producto.columnconfigure(0, weight=1)
+        self.frame_preview_producto.rowconfigure(0, weight=1)
+
         self.label_img_producto = ttk.Label(
-            self.frame_img_producto, 
-            text="", 
-            anchor="center",  # Asegura que el contenido se centre
-        )
-        self.label_img_producto.place(relx=0.5, rely=0.40, anchor="center")
-
-        self.frame_estado_producto = ttk.Frame(self.frame_img_producto, bootstyle="light")
-        self.frame_estado_producto.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
-
-        self.label_oferta_estado = ttk.Label(
-            self.frame_estado_producto,
-            text="Oferta activa: -",
+            self.frame_preview_producto,
+            text="",
             anchor="center",
-            justify="center",
-            font=FONT_BODY_BOLD,
         )
-        self.label_oferta_estado.pack(fill="x", pady=(0, 4))
-        self.label_precios_extra_estado = ttk.Label(
-            self.frame_estado_producto,
-            text="Precios adicionales: -",
+        self.label_img_producto.place(relx=0.5, rely=0.5, anchor="center")
+
+        self.frame_preview_loader = ttk.Frame(self.frame_preview_producto, bootstyle="light")
+        self.frame_preview_loader.place_forget()
+        self.frame_preview_loader.columnconfigure(0, weight=1)
+        self.frame_preview_loader.rowconfigure(0, weight=1)
+        self.frame_preview_loader.rowconfigure(1, weight=0)
+
+        self.preview_loader = ttk.Progressbar(
+            self.frame_preview_loader,
+            mode="indeterminate",
+            bootstyle="info-striped",
+            length=180,
+        )
+        self.preview_loader.grid(row=0, column=0, padx=24, pady=(32, 10))
+
+        self.label_preview_loader = ttk.Label(
+            self.frame_preview_loader,
+            text="Cargando imagen...",
+            bootstyle="secondary",
+            font=FONT_SUBTITLE,
             anchor="center",
-            justify="center",
-            font=FONT_BODY_BOLD,
         )
-        self.label_precios_extra_estado.pack(fill="x")
+        self.label_preview_loader.grid(row=1, column=0, padx=24, pady=(0, 24))
+
+    def _actualizar_resumen_preview(self, descripcion=None, codigo=None, precio=None, oferta=None):
+        descripcion_txt = str(descripcion).strip() if descripcion else "Sin producto seleccionado"
+        codigo_txt = str(codigo).strip() if codigo else "-"
+
+        try:
+            if isinstance(precio, str):
+                precio_txt = precio.strip() or "$0.00"
+            elif precio is None:
+                precio_txt = "$0.00"
+            else:
+                precio_txt = f"${float(precio):,.2f}"
+        except Exception:
+            precio_txt = "$0.00"
+
+        self.label_preview_descripcion.configure(
+            text=descripcion_txt,
+            wraplength=max(self.frame_side_panel.winfo_width() - 32, 220),
+        )
+        self.label_preview_codigo.configure(text=f"Código: {codigo_txt}")
+        self.label_preview_precio.configure(text=precio_txt)
+
+        if oferta and oferta.get("tiene_oferta"):
+            precio_oferta = f"${float(oferta.get('precio_oferta') or 0):,.2f}"
+            self.label_preview_oferta.configure(
+                text=f"Oferta: {precio_oferta}",
+                bootstyle="warning",
+            )
+        else:
+            self.label_preview_oferta.configure(
+                text="Oferta: NO",
+                bootstyle="secondary",
+            )
 
     def _fijar_layout_productos(self):
         self._aplicar_layout_responsivo()
+
+    def _mostrar_loader_preview(self):
+        try:
+            self.frame_preview_loader.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.82, relheight=0.44)
+            self.preview_loader.start(12)
+        except Exception:
+            pass
+
+    def _ocultar_loader_preview(self):
+        try:
+            self.preview_loader.stop()
+            self.frame_preview_loader.place_forget()
+        except Exception:
+            pass
 
     def _programar_layout_responsivo(self, _event=None):
         root = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
@@ -222,16 +416,16 @@ class ContenidoProducto:
     def _aplicar_layout_responsivo(self):
         self._layout_after_id = None
         ancho_real = max(self.frame_producto.winfo_width(), 920)
-        alto_total = max(self.frame_table_view.winfo_height(), 520)
+        alto_total = max(self.frame_table_view.winfo_height(), 560)
         ancho_util = min(ancho_real, 1480)
         padding_lateral = max(int((ancho_real - ancho_util) / 2), PANEL_PAD_X)
 
         self.frame_header_productos.grid_configure(padx=(padding_lateral, padding_lateral))
         self.frame_table_view.grid_configure(padx=(padding_lateral, padding_lateral))
-        if not hasattr(self, "frame_buttons_productos"):
+        if not hasattr(self, "frame_buttons_productos") or not hasattr(self, "frame_side_panel"):
             return
-        self.frame_buttons_productos.grid_configure(padx=(padding_lateral, padding_lateral))
-        self.label_producto_subtitulo.configure(wraplength=max(ancho_util - 260, 320))
+        self.label_oferta_estado.configure(wraplength=max(int(ancho_util * 0.22), 180))
+        self.label_precios_extra_estado.configure(wraplength=max(int(ancho_util * 0.24), 200))
 
         ancho_total = max(ancho_util - (PANEL_PAD_X * 2), 920)
         if ancho_total < 1240 or alto_total < 700:
@@ -242,68 +436,66 @@ class ContenidoProducto:
             modo_layout = "wide"
 
         if modo_layout == "compact":
-            self.frame_table_view.columnconfigure(0, weight=1, minsize=520)
-            self.frame_table_view.columnconfigure(1, weight=0, minsize=0)
-            self.frame_table_view.rowconfigure(0, weight=1)
-            self.frame_table_view.rowconfigure(1, weight=0)
-            self.frame_tabla_producto.grid_configure(row=0, column=0, sticky="nsew", padx=(0, 0), pady=(0, 10))
-            self.frame_img_producto.grid_configure(row=1, column=0, sticky="ew")
-            panel_width = clamp(int(ancho_total * 0.62), 320, 460)
-            panel_height = clamp(int(alto_total * 0.24), 180, 260)
-            table_height = clamp(int((alto_total - panel_height) / 24), 10, 15)
+            self.frame_table_view.columnconfigure(0, weight=1)
+            self.frame_table_view.columnconfigure(1, weight=0)
+            panel_width = clamp(int(ancho_total * 0.30), 260, 320)
+            panel_height = clamp(int(alto_total * 0.34), 220, 300)
+            preview_height = clamp(int(panel_height * 0.84), 190, 250)
+            table_height = clamp(int(alto_total / 25), 14, 18)
             column_widths = (
-                clamp(int(ancho_total * 0.54), 280, 500),
-                clamp(int(ancho_total * 0.27), 170, 260),
-                clamp(int(ancho_total * 0.18), 110, 170),
+                clamp(int(ancho_total * 0.56), 320, 560),
+                clamp(int(ancho_total * 0.22), 160, 230),
+                clamp(int(ancho_total * 0.14), 105, 160),
             )
-            image_rely = 0.34
+            image_rely = 0.50
         elif modo_layout == "standard":
-            self.frame_table_view.columnconfigure(0, weight=5, minsize=640)
-            self.frame_table_view.columnconfigure(1, weight=3, minsize=280)
-            self.frame_table_view.rowconfigure(0, weight=1)
-            self.frame_table_view.rowconfigure(1, weight=0)
-            self.frame_tabla_producto.grid_configure(row=0, column=0, sticky="nsew", padx=(0, 12), pady=(0, 0))
-            self.frame_img_producto.grid_configure(row=0, column=1, sticky="nsew")
-            panel_width = clamp(int(ancho_total * 0.28), 280, 350)
-            panel_height = clamp(int(alto_total * 0.56), 230, 320)
-            table_height = clamp(int(alto_total / 31), 12, 17)
+            self.frame_table_view.columnconfigure(0, weight=1)
+            self.frame_table_view.columnconfigure(1, weight=0)
+            panel_width = clamp(int(ancho_total * 0.29), 300, 360)
+            panel_height = clamp(int(alto_total * 0.36), 240, 330)
+            preview_height = clamp(int(panel_height * 0.85), 215, 300)
+            table_height = clamp(int(alto_total / 27), 15, 20)
             column_widths = (
-                clamp(int((ancho_total - panel_width - 40) * 0.56), 300, 500),
-                clamp(int((ancho_total - panel_width - 40) * 0.28), 170, 240),
-                clamp(int((ancho_total - panel_width - 40) * 0.16), 110, 160),
+                clamp(int(ancho_total * 0.57), 420, 760),
+                clamp(int(ancho_total * 0.21), 180, 260),
+                clamp(int(ancho_total * 0.14), 110, 175),
             )
-            image_rely = 0.37
+            image_rely = 0.50
         else:
-            self.frame_table_view.columnconfigure(0, weight=6, minsize=760)
-            self.frame_table_view.columnconfigure(1, weight=2, minsize=300)
-            self.frame_table_view.rowconfigure(0, weight=1)
-            self.frame_table_view.rowconfigure(1, weight=0)
-            self.frame_tabla_producto.grid_configure(row=0, column=0, sticky="nsew", padx=(0, 16), pady=(0, 0))
-            self.frame_img_producto.grid_configure(row=0, column=1, sticky="nsew")
-            panel_width = clamp(int(ancho_total * 0.23), 280, 340)
-            panel_height = clamp(int(alto_total * 0.50), 230, 310)
-            table_height = clamp(int(alto_total / 29), 14, 20)
+            self.frame_table_view.columnconfigure(0, weight=1)
+            self.frame_table_view.columnconfigure(1, weight=0)
+            panel_width = clamp(int(ancho_total * 0.27), 320, 400)
+            panel_height = clamp(int(alto_total * 0.40), 260, 360)
+            preview_height = clamp(int(panel_height * 0.86), 240, 340)
+            table_height = clamp(int(alto_total / 25), 18, 24)
             column_widths = (
-                clamp(int((ancho_total - panel_width - 52) * 0.60), 380, 680),
-                clamp(int((ancho_total - panel_width - 52) * 0.24), 190, 270),
-                clamp(int((ancho_total - panel_width - 52) * 0.16), 120, 190),
+                clamp(int(ancho_total * 0.58), 520, 920),
+                clamp(int(ancho_total * 0.20), 190, 290),
+                clamp(int(ancho_total * 0.14), 120, 190),
             )
-            image_rely = 0.31
+            image_rely = 0.50
 
         self._preview_image_size = (
-            clamp(panel_width - 26, 160, 380),
-            clamp(panel_height - 124, 130, 290),
+            clamp(int(panel_width * 0.97), 220, 390),
+            clamp(int(preview_height * 0.97), 220, 340),
         )
+        self.frame_side_panel.configure(width=panel_width)
         self.frame_img_producto.configure(width=panel_width, height=panel_height)
+        self.frame_preview_producto.configure(height=preview_height)
         self.label_img_producto.place_configure(relx=0.5, rely=image_rely, anchor="center")
-        self.label_oferta_estado.configure(
-            wraplength=max(panel_width - 24, 180),
+        self.label_preview_hint.configure(
+            wraplength=max(panel_width - 28, 220),
+            font=("Segoe UI", 8 if modo_layout == "compact" else 9),
+        )
+        self.label_preview_descripcion.configure(
+            wraplength=max(panel_width - 28, 220),
             font=("Segoe UI", 9 if modo_layout == "compact" else 10, "bold"),
         )
-        self.label_precios_extra_estado.configure(
-            wraplength=max(panel_width - 24, 180),
-            font=("Segoe UI", 9 if modo_layout == "compact" else 10, "bold"),
-        )
+        self.label_preview_codigo.configure(font=("Segoe UI", 8 if modo_layout == "compact" else 9))
+        self.label_preview_precio.configure(font=("Segoe UI", 15 if modo_layout == "compact" else 18, "bold"))
+        self.label_preview_oferta.configure(font=("Segoe UI", 8 if modo_layout == "compact" else 9, "bold"))
+        self.label_oferta_estado.configure(font=("Segoe UI", 9, "bold"))
+        self.label_precios_extra_estado.configure(font=("Segoe UI", 9, "bold"))
         self.dt.configure(height=table_height)
 
         try:
@@ -316,7 +508,6 @@ class ContenidoProducto:
 
         self._reubicar_botones_productos(modo_layout)
         self._mostrar_placeholder_producto()
-        self.frame_table_view.update_idletasks()
 
     def _reubicar_botones_productos(self, modo_layout):
         botones = [
@@ -328,20 +519,30 @@ class ContenidoProducto:
         for button in botones:
             button.grid_forget()
 
-        if modo_layout in ("compact", "standard"):
-            for column in range(2):
-                self.frame_buttons_productos.columnconfigure(column, weight=1)
-            for idx, button in enumerate(botones):
-                row = idx // 2
-                column = idx % 2
-                button.grid(row=row, column=column, padx=BUTTON_PAD_X, pady=BUTTON_PAD_Y, sticky="ew")
+        ancho_real = max(self.frame_producto.winfo_width(), 920)
+        if modo_layout == "compact":
+            ancho_botonera = clamp(int(ancho_real * 0.22), 220, 280)
+        elif modo_layout == "standard":
+            ancho_botonera = clamp(int(ancho_real * 0.20), 230, 300)
         else:
-            for column in range(4):
-                self.frame_buttons_productos.columnconfigure(column, weight=1)
-            for idx, button in enumerate(botones):
-                button.grid(row=0, column=idx, padx=BUTTON_PAD_X, pady=0, sticky="ew")
+            ancho_botonera = clamp(int(ancho_real * 0.18), 240, 320)
+        self.frame_buttons_inner.configure(width=ancho_botonera)
+        self.frame_buttons_productos.configure(width=ancho_botonera)
+        self.frame_buttons_inner.columnconfigure(0, weight=1)
 
-    def _mostrar_placeholder_producto(self):
+        for idx, button in enumerate(botones):
+            button.grid(
+                row=idx,
+                column=0,
+                padx=0,
+                pady=(0, BUTTON_PAD_Y) if idx == 0 else (0, BUTTON_PAD_Y),
+                sticky="ew",
+            )
+
+    def _mostrar_placeholder_producto(self, reset_resumen=True):
+        if reset_resumen:
+            self._actualizar_resumen_preview()
+        self._ocultar_loader_preview()
         try:
             img = Image.open(PNG_No_Foto())
             img.thumbnail(self._preview_image_size, Image.Resampling.LANCZOS)
@@ -350,6 +551,23 @@ class ContenidoProducto:
             self.label_img_producto.image = img_tk
         except Exception:
             self.label_img_producto.config(image="", text="Sin imagen")
+
+    def _preparar_imagen_para_preview(self, imagen_pil, size_objetivo):
+        try:
+            if imagen_pil.mode != "RGB":
+                imagen_pil = imagen_pil.convert("RGB")
+
+            fondo = Image.new("RGB", imagen_pil.size, (255, 255, 255))
+            diferencia = ImageChops.difference(imagen_pil, fondo)
+            bbox = diferencia.getbbox()
+            if bbox:
+                imagen_pil = imagen_pil.crop(bbox)
+
+            imagen_pil.thumbnail(size_objetivo, Image.Resampling.LANCZOS)
+            return imagen_pil
+        except Exception:
+            imagen_pil.thumbnail(size_objetivo, Image.Resampling.LANCZOS)
+            return imagen_pil
         
         
     def actualizar_barra(self, progreso, total):            
@@ -1177,6 +1395,7 @@ class ContenidoProducto:
                     if len(valores) > 1 and str(valores[1]) == codigo_seleccionado:
                         self.dt.view.selection_set(item_id)
                         self.dt.view.see(item_id)
+                        self.mostrar_imagen_producto(None)
                         break
             self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
             self.button_transmitir_datos.config(state=NORMAL)
@@ -1194,29 +1413,56 @@ class ContenidoProducto:
         """Función para obtener y mostrar la imagen almacenada en la base de datos."""
         seleccion = self.dt.view.selection()  # Obtener selección
         if not seleccion:
+            self._mostrar_placeholder_producto()
             return
 
-        item = self.dt.view.item(seleccion)  # Obtener datos de la fila seleccionada
+        item = self.dt.view.item(seleccion[0])  # Obtener datos de la fila seleccionada
+        descripcion_producto = str(item["values"][0]).strip() if len(item["values"]) > 0 else ""
         codigo_producto = str(item["values"][1]).strip() if len(item["values"]) > 1 else ""
+        precio_producto = item["values"][2] if len(item["values"]) > 2 else "$0.00"
+        oferta = self._obtener_oferta_producto(codigo_producto)
+        self._actualizar_resumen_preview(descripcion_producto, codigo_producto, precio_producto, oferta=oferta)
         self._actualizar_estado_precios_adicionales(codigo_producto)
-        self._actualizar_estado_oferta(codigo_producto)
+        self._actualizar_estado_oferta(codigo_producto, oferta=oferta)
+        self._image_request_id += 1
+        request_id = self._image_request_id
+        self._mostrar_loader_preview()
+        self.label_img_producto.config(image="", text="")
+        self.label_img_producto.image = None
 
-        try:
-            img_base64, _ = self._obtener_imagen_producto(codigo_producto)
-            if not img_base64:
-                self._mostrar_placeholder_producto()
-                return
+        def worker():
+            try:
+                img_base64, _ = self._obtener_imagen_producto(codigo_producto)
+                error = None
+            except Exception as e:
+                img_base64 = None
+                error = e
 
-            imagen_bytes = base64.b64decode(img_base64)
-            imagen_pil = Image.open(BytesIO(imagen_bytes))
-            imagen_pil.thumbnail(self._preview_image_size, Image.Resampling.LANCZOS)
-            imagen_tk = ImageTk.PhotoImage(imagen_pil)
-            self.label_img_producto.image = imagen_tk
-            self.label_img_producto.config(image=imagen_tk)
+            def apply_result():
+                if request_id != self._image_request_id:
+                    return
+                self._ocultar_loader_preview()
+                if error:
+                    print(f"Error al recuperar la imagen desde la base de datos: {error}")
+                    self._mostrar_placeholder_producto(reset_resumen=False)
+                    return
+                if not img_base64:
+                    self._mostrar_placeholder_producto(reset_resumen=False)
+                    return
+                try:
+                    imagen_bytes = base64.b64decode(img_base64)
+                    imagen_pil = Image.open(BytesIO(imagen_bytes))
+                    imagen_pil = self._preparar_imagen_para_preview(imagen_pil, self._preview_image_size)
+                    imagen_tk = ImageTk.PhotoImage(imagen_pil)
+                    self.label_img_producto.image = imagen_tk
+                    self.label_img_producto.config(image=imagen_tk, text="")
+                except Exception as e:
+                    print(f"Error al renderizar imagen del producto: {e}")
+                    self._mostrar_placeholder_producto(reset_resumen=False)
 
-        except Exception as e:
-            print(f"Error al recuperar la imagen desde la base de datos: {e}")
-            self._mostrar_placeholder_producto()
+            self._run_en_ui(apply_result)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _obtener_imagen_producto(self, codigo_producto):
         consulta = "SELECT img_base64, formato_imagen FROM productos WHERE codigo = ?"
@@ -1292,9 +1538,9 @@ class ContenidoProducto:
             "oferta_dto": float(oferta_dto or 0) if oferta_dto is not None else None,
         }
 
-    def _actualizar_estado_oferta(self, codigo_producto):
+    def _actualizar_estado_oferta(self, codigo_producto, oferta=None):
         try:
-            oferta = self._obtener_oferta_producto(codigo_producto)
+            oferta = oferta if oferta is not None else self._obtener_oferta_producto(codigo_producto)
             if oferta and oferta.get("tiene_oferta"):
                 precio_txt = f"${float(oferta.get('precio_oferta') or 0):,.2f}"
                 texto = f"Oferta activa: SI ({precio_txt})"
@@ -1320,7 +1566,7 @@ class ContenidoProducto:
         if not seleccion:
             return
 
-        item = self.dt.view.item(seleccion)  # Obtener datos de la fila seleccionada
+        item = self.dt.view.item(seleccion[0])  # Obtener datos de la fila seleccionada
         codigo_producto = str(item["values"][1]).strip() if len(item["values"]) > 1 else ""
         descripcion_producto = item["values"][0]  # Descripción del producto
         precio_producto = item["values"][2]  # Precio del producto
@@ -1330,42 +1576,75 @@ class ContenidoProducto:
         top.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         self.top_level_abierto = top  # Guardar referencia al Toplevel
         top.title(f"Detalle del producto {codigo_producto}")
-        fit_toplevel_to_workarea(top, 760, 470, min_width=700, min_height=430)
+        fit_toplevel_to_workarea(top, 860, 560, min_width=820, min_height=520)
         top.resizable(False, False)
         top.place_window_center()
 
         # Frame para organizar elementos
-        frame_info = ttk.Frame(top, width=730, height=430)
-        frame_info.pack(fill="both", padx=10, pady=10, expand=True)
+        frame_info = ttk.Frame(top, width=820, height=500)
+        frame_info.pack(fill="both", padx=14, pady=14, expand=True)
         frame_info.pack_propagate(False)
         frame_info.grid_propagate(False)
-        frame_info.columnconfigure(1, minsize=320)
-        frame_info.columnconfigure(2, minsize=220)
+        frame_info.columnconfigure(0, weight=1, minsize=500)
+        frame_info.columnconfigure(1, weight=0, minsize=280)
+        frame_info.rowconfigure(0, weight=0)
+        frame_info.rowconfigure(1, weight=1)
 
         # Función para crear un Entry en modo readonly con un Label
         def crear_entry(frame, texto, valor, fila):
-            ttk.Label(frame, text=texto).grid(row=fila, column=0, sticky="w", padx=5, pady=5)
-            entry = ttk.Entry(frame, state="normal", width=50)  # Más ancho para mayor visibilidad
-            entry.grid(row=fila, column=1, padx=5, pady=5, sticky="ew")
+            ttk.Label(frame, text=texto).grid(row=fila, column=0, sticky="w", padx=(0, 10), pady=6)
+            entry = ttk.Entry(frame, state="normal", width=50)
+            entry.grid(row=fila, column=1, padx=0, pady=6, sticky="ew")
             entry.insert(0, valor)
-            entry.config(state="readonly")  # Bloquear edición
+            entry.config(state="readonly")
             return entry
 
-        # Crear los campos con sus valores
-        entry_codigo = crear_entry(frame_info, "Código:", codigo_producto, 0)
-        entry_descripcion = crear_entry(frame_info, "Descripción:", descripcion_producto, 1)
-        entry_precio = crear_entry(frame_info, "Precio:", precio_producto, 2)
+        frame_datos = ttk.Labelframe(frame_info, text="Datos del producto", bootstyle="primary", padding=(12, 10))
+        frame_datos.grid(row=0, column=0, sticky="ew", padx=(0, 14), pady=(0, 12))
+        frame_datos.columnconfigure(1, weight=1)
+
+        entry_codigo = crear_entry(frame_datos, "Código:", codigo_producto, 0)
+        entry_descripcion = crear_entry(frame_datos, "Descripción:", descripcion_producto, 1)
+        ttk.Label(frame_datos, text="NPVP1:").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=6)
+        frame_precio_principal = ttk.Frame(frame_datos, bootstyle="success")
+        frame_precio_principal.grid(row=2, column=1, sticky="ew", pady=6)
+        frame_precio_principal.columnconfigure(0, weight=1)
+        ttk.Label(
+            frame_precio_principal,
+            text=precio_producto,
+            font=("Segoe UI", 18, "bold"),
+            bootstyle="inverse-success",
+            anchor="w",
+            padding=(12, 10),
+        ).grid(row=0, column=0, sticky="ew")
         oferta = self._obtener_oferta_producto(codigo_producto)
 
-        # Frame para la imagen
+        frame_visual = ttk.Labelframe(frame_info, text="Vista previa", bootstyle="primary", padding=(12, 10))
+        frame_visual.grid(row=0, column=1, rowspan=2, sticky="nsew", pady=(0, 0))
+        frame_visual.columnconfigure(0, weight=1)
+        frame_visual.rowconfigure(0, weight=0)
+        frame_visual.rowconfigure(1, weight=0)
+        frame_visual.rowconfigure(2, weight=0)
+        frame_visual.rowconfigure(3, weight=1)
+
         frame_img = ttk.Frame(
-            frame_info,
-            width=self.DETAIL_IMAGE_SIZE[0],
-            height=self.DETAIL_IMAGE_SIZE[1],
+            frame_visual,
+            width=240,
+            height=240,
+            bootstyle="light",
         )
-        frame_img.grid(row=0, column=2, rowspan=3, padx=10, pady=5, sticky="n")
+        frame_img.grid(row=1, column=0, padx=0, pady=(4, 10), sticky="n")
         frame_img.grid_propagate(False)
         frame_img.pack_propagate(False)
+
+        ttk.Label(
+            frame_visual,
+            text=descripcion_producto,
+            font=("Segoe UI", 11, "bold"),
+            anchor="center",
+            justify="center",
+            wraplength=240,
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 8))
 
         label_img = ttk.Label(frame_img, anchor="center")
         label_img.place(relx=0.5, rely=0.5, anchor="center")
@@ -1381,7 +1660,7 @@ class ContenidoProducto:
             try:
                 imagen_bytes = base64.b64decode(img_base64)
                 imagen_pil = Image.open(BytesIO(imagen_bytes))
-                imagen_pil = imagen_pil.resize(self.DETAIL_IMAGE_SIZE)
+                imagen_pil.thumbnail((220, 220), Image.Resampling.LANCZOS)
                 imagen_tk = ImageTk.PhotoImage(imagen_pil)
                 label_img.config(image=imagen_tk, text="")
                 label_img.image = imagen_tk
@@ -1427,7 +1706,7 @@ class ContenidoProducto:
             """Carga una imagen por defecto si no hay imagen en la base de datos."""
             try:
                 img = Image.open(PNG_No_Foto())  # Función que retorna la ruta de la imagen por defecto
-                img = img.resize(self.DETAIL_IMAGE_SIZE)
+                img.thumbnail((220, 220), Image.Resampling.LANCZOS)
                 img_tk = ImageTk.PhotoImage(img)
                 label_img.config(image=img_tk, text="")
                 label_img.image = img_tk
@@ -1438,26 +1717,26 @@ class ContenidoProducto:
         cargar_imagen_desde_db()
 
         # Función para seleccionar y guardar nueva imagen en la BD
-        ttk.Label(
+        frame_precios = ttk.Labelframe(
             frame_info,
             text="Precios adicionales (SQLite local)",
-            font=("Segoe UI", 10, "bold"),
-        ).grid(row=4, column=0, columnspan=3, sticky="w", padx=5, pady=(18, 6))
-
-        frame_precios = ttk.Frame(frame_info)
-        frame_precios.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=5, pady=(0, 8))
+            bootstyle="primary",
+            padding=(10, 10),
+        )
+        frame_precios.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 0))
         frame_precios.columnconfigure(0, weight=1)
+        frame_precios.rowconfigure(0, weight=1)
 
         columnas = ("titulo", "cantidad", "categoria", "precio")
-        tree_precios = ttk.Treeview(frame_precios, columns=columnas, show="headings", height=6)
+        tree_precios = ttk.Treeview(frame_precios, columns=columnas, show="headings", height=10)
         tree_precios.heading("titulo", text="Titulo")
         tree_precios.heading("cantidad", text="Cantidad")
         tree_precios.heading("categoria", text="Categoria")
         tree_precios.heading("precio", text="Precio")
-        tree_precios.column("titulo", width=310, anchor="w")
+        tree_precios.column("titulo", width=290, anchor="w")
         tree_precios.column("cantidad", width=90, anchor="center")
-        tree_precios.column("categoria", width=120, anchor="center")
-        tree_precios.column("precio", width=120, anchor="e")
+        tree_precios.column("categoria", width=110, anchor="center")
+        tree_precios.column("precio", width=110, anchor="e")
 
         scroll_precios = ttk.Scrollbar(frame_precios, orient="vertical", command=tree_precios.yview)
         tree_precios.configure(yscrollcommand=scroll_precios.set)
@@ -1498,21 +1777,17 @@ class ContenidoProducto:
                     print(f"Error al guardar la imagen en la base de datos: {e}")
 
         # Botón para cargar nueva imagen
-        btn_cargar_img = ttk.Button(frame_info, text="Cargar Imagen", command=seleccionar_imagen)
-        btn_cargar_img.grid(row=3, column=2, padx=5, pady=5)
+        btn_cargar_img = ttk.Button(frame_visual, text="Cargar Imagen", command=seleccionar_imagen, bootstyle="primary")
+        btn_cargar_img.grid(row=2, column=0, padx=0, pady=(0, 12), sticky="ew")
 
-        ttk.Label(
-            frame_info,
+        frame_oferta = ttk.Labelframe(
+            frame_visual,
             text="Oferta activa (SQLite local)",
-            font=("Segoe UI", 10, "bold"),
-        ).grid(row=6, column=0, columnspan=3, sticky="w", padx=5, pady=(12, 6))
-
-        frame_oferta = ttk.Frame(frame_info)
-        frame_oferta.grid(row=7, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 6))
+            bootstyle="warning",
+            padding=(10, 10),
+        )
+        frame_oferta.grid(row=3, column=0, sticky="ew")
         frame_oferta.columnconfigure(0, weight=1)
-        frame_oferta.columnconfigure(1, weight=1)
-        frame_oferta.columnconfigure(2, weight=1)
-        frame_oferta.columnconfigure(3, weight=1)
 
         oferta_activa = bool(oferta and oferta.get("tiene_oferta"))
         precio_oferta = f"${float(oferta.get('precio_oferta') or 0):,.2f}" if oferta_activa else "-"
@@ -1521,20 +1796,30 @@ class ContenidoProducto:
         oferta_origen = str((oferta or {}).get("oferta_origen") or "-")
         oferta_ccoddiv = str((oferta or {}).get("oferta_ccoddiv") or "-")
 
-        ttk.Label(frame_oferta, text="Activa").grid(row=0, column=0, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text="Precio oferta").grid(row=0, column=1, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text="Desde").grid(row=0, column=2, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text="Hasta").grid(row=0, column=3, sticky="w", padx=4, pady=2)
+        texto_estado_oferta = "Oferta activa" if oferta_activa else "Sin oferta activa"
+        estilo_estado_oferta = "warning" if oferta_activa else "secondary"
+        precio_oferta_estilo = "success" if oferta_activa else "secondary"
+        detalle_desde = f"Desde: {oferta_desde}" if oferta_activa else "Desde: -"
+        detalle_hasta = f"Hasta: {oferta_hasta}" if oferta_activa else "Hasta: -"
+        detalle_origen = f"Origen: {oferta_origen}" if oferta_activa else "Origen: -"
+        detalle_ccoddiv = f"CCODDIV: {oferta_ccoddiv}" if oferta_activa else "CCODDIV: -"
+
         ttk.Label(
             frame_oferta,
-            text="SI" if oferta_activa else "NO",
-            bootstyle="warning" if oferta_activa else "secondary",
-        ).grid(row=1, column=0, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text=precio_oferta).grid(row=1, column=1, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text=oferta_desde).grid(row=1, column=2, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text=oferta_hasta).grid(row=1, column=3, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text=f"Origen: {oferta_origen}").grid(row=2, column=0, columnspan=2, sticky="w", padx=4, pady=2)
-        ttk.Label(frame_oferta, text=f"CCODDIV: {oferta_ccoddiv}").grid(row=2, column=2, columnspan=2, sticky="w", padx=4, pady=2)
+            text=texto_estado_oferta,
+            bootstyle=estilo_estado_oferta,
+            font=("Segoe UI", 11, "bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(
+            frame_oferta,
+            text=precio_oferta,
+            font=("Segoe UI", 15, "bold"),
+            bootstyle=precio_oferta_estilo,
+        ).grid(row=1, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(frame_oferta, text=detalle_desde, bootstyle="secondary").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Label(frame_oferta, text=detalle_hasta, bootstyle="secondary").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Label(frame_oferta, text=detalle_origen, bootstyle="secondary").grid(row=4, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(frame_oferta, text=detalle_ccoddiv, bootstyle="secondary").grid(row=5, column=0, sticky="w", pady=2)
 
     def registrar_cambio_producto(self, codigo_producto):
             """Registra que un producto ha sido modificado."""

@@ -75,10 +75,10 @@ class ContenidoPublicidad:
 
         frame_principal = self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad")
         self.contenedor_general = ttk.Frame(frame_principal)
-        self.contenedor_general.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(6, 0))
+        self.contenedor_general.pack(fill="both", expand=True, padx=PANEL_PAD_X - 6, pady=(10, 0))
 
         self.frame_resumen = ttk.Frame(self.contenedor_general)
-        self.frame_resumen.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 12))
+        self.frame_resumen.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 14))
 
         self.frame_titulos = ttk.Frame(self.frame_resumen)
         self.frame_titulos.pack(side="left", fill="x", expand=True)
@@ -103,6 +103,7 @@ class ContenidoPublicidad:
             text="Ocultar opciones",
             command=self.toggle_opciones,
             bootstyle="secondary-outline",
+            padding=(12, 8),
         )
         self.btn_opciones.pack(side="right", pady=(4, 0))
 
@@ -115,17 +116,17 @@ class ContenidoPublicidad:
             padx=PANEL_PAD_X,
             pady=PANEL_PAD_Y,
         )
-        self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 14))
+        self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 16))
 
         self.frame_opciones = ttk.Frame(self.panel_opciones, padding=(0, 0))
         self.frame_opciones.pack(fill="x")
 
         self.frame_grupos = ttk.Frame(self.frame_opciones)
-        self.frame_grupos.pack(fill="x", pady=(0, 8))
+        self.frame_grupos.pack(fill="x", pady=(0, 10))
 
         ttk.Label(self.frame_grupos, text="Grupo:", font=FONT_LABEL_BOLD).pack(side="left", padx=(0, 10))
         self.combo_grupos = ttk.Combobox(self.frame_grupos, state="readonly", width=26)
-        self.combo_grupos.pack(side="left", padx=(0, 14), ipady=4)
+        self.combo_grupos.pack(side="left", padx=(0, 16), ipady=5)
         self.combo_grupos.bind("<<ComboboxSelected>>", self.cambiar_grupo_desde_combo)
 
         self.frame_grupos_botones = ttk.Frame(self.frame_grupos)
@@ -135,11 +136,11 @@ class ContenidoPublicidad:
         self.frame_grupos_botones_l2 = ttk.Frame(self.frame_grupos_botones)
 
         self._botones_grupo = [
-            ttk.Button(self.frame_grupos_botones, text="Nuevo Grupo", command=self.crear_grupo, bootstyle="primary-outline"),
-            ttk.Button(self.frame_grupos_botones, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline"),
-            ttk.Button(self.frame_grupos_botones, text="Eliminar Grupo", command=self.eliminar_grupo, bootstyle="danger-outline"),
-            ttk.Button(self.frame_grupos_botones, text="Publicidades Globales", command=self.abrir_globales, bootstyle="dark-outline"),
-            ttk.Button(self.frame_grupos_botones, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="info-outline"),
+            ttk.Button(self.frame_grupos_botones, text="Nuevo Grupo", command=self.crear_grupo, bootstyle="primary-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Eliminar Grupo", command=self.eliminar_grupo, bootstyle="danger-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Publicidades Globales", command=self.abrir_globales, bootstyle="dark-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="info-outline", padding=(12, 8)),
         ]
 
         self.frame_botones = ttk.Frame(self.frame_opciones)
@@ -150,14 +151,14 @@ class ContenidoPublicidad:
         self.frame_botones_accion_l2 = ttk.Frame(self.frame_botones)
 
         self._botones_accion = [
-            ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia, bootstyle="success"),
-            ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="primary"),
-            ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="info"),
-            ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="dark"),
-            ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary"),
-            ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general, bootstyle="dark-outline"),
-            ttk.Button(self.frame_botones, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="dark"),
-            ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="warning"),
+            ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia, bootstyle="success", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="primary", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="info", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="dark", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general, bootstyle="dark-outline", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Panel de Control", command=self.abrir_panel_de_control, bootstyle="dark", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="warning", padding=(12, 8)),
         ]
 
         self.grid_card = tk.Frame(
@@ -169,7 +170,7 @@ class ContenidoPublicidad:
             padx=PANEL_PAD_Y,
             pady=PANEL_PAD_Y,
         )
-        self.grid_card.pack(fill="both", expand=True, padx=PANEL_PAD_X - 8, pady=(0, 10))
+        self.grid_card.pack(fill="both", expand=True, padx=PANEL_PAD_X - 6, pady=(0, 10))
 
         self.contenedor = ttk.Frame(self.grid_card)
         self.contenedor.pack(fill="both", expand=True)
@@ -242,7 +243,7 @@ class ContenidoPublicidad:
         self.frame_botones_accion_l2.pack_forget()
 
         self.frame_grupos_botones_l1.pack(fill="x")
-        self.frame_botones.pack(fill="x", pady=(8, 0))
+        self.frame_botones.pack(fill="x", pady=(10, 0))
         self.frame_botones_accion_l1.pack(fill="x")
 
         grupos_en_bloque = ancho_util < 1460
@@ -280,7 +281,7 @@ class ContenidoPublicidad:
             self.btn_opciones.configure(text="Mostrar opciones")
             self._opciones_visibles = False
         else:
-            self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 8, pady=(0, 14), after=self.frame_resumen)
+            self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 16), after=self.frame_resumen)
             self.btn_opciones.configure(text="Ocultar opciones")
             self._opciones_visibles = True
             self._aplicar_layout_responsivo()
