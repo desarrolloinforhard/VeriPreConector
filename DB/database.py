@@ -2,7 +2,6 @@ import sqlite3
 from pathlib import Path
 
 from core.logging.logger import get_logger
-from core.services.barcode_normalizer import limpiar_codigo, normalizar_codigo_para_envio
 
 logger = get_logger(__name__)
 
@@ -172,9 +171,7 @@ class SQLiteDB:
                 OFERTA_HASTA TEXT,
                 OFERTA_ORIGEN TEXT,
                 OFERTA_CCODDIV TEXT,
-                OFERTA_DTO REAL,
-                CODIGO_ORIGINAL TEXT,
-                CODIGO_NORMALIZADO TEXT
+                OFERTA_DTO REAL
             )
         """
         logger.debug("Creando/verificando tabla SQLite: productos")
@@ -283,13 +280,18 @@ class SQLiteDB:
             "OFERTA_ORIGEN": "TEXT",
             "OFERTA_CCODDIV": "TEXT",
             "OFERTA_DTO": "REAL",
-            "CODIGO_ORIGINAL": "TEXT",
-            "CODIGO_NORMALIZADO": "TEXT",
         }
 
         columnas_actuales = {col.upper() for col in self.obtener_columnas("productos")}
         if not columnas_actuales:
             return
+
+        columnas_obsoletas = {"CODIGO_ORIGINAL", "CODIGO_NORMALIZADO"}
+        if columnas_actuales.intersection(columnas_obsoletas):
+            self._migrar_tabla_productos_sin_codigos_legacy()
+            columnas_actuales = {col.upper() for col in self.obtener_columnas("productos")}
+            if not columnas_actuales:
+                return
 
         for nombre, definicion in columnas_requeridas.items():
             if nombre in columnas_actuales:
@@ -299,38 +301,54 @@ class SQLiteDB:
             logger.info("Agregando columna faltante en productos | columna=%s", nombre)
             self.ejecutar_consulta(sql)
 
-        self._backfill_codigos_productos()
+    def _migrar_tabla_productos_sin_codigos_legacy(self):
+        logger.info("Migrando tabla productos para eliminar columnas legacy de codigo.")
+        try:
+            if not self.conexion_activa():
+                self.conectar()
 
-    def _backfill_codigos_productos(self):
-        sql = """
-        SELECT rowid, codigo, CODIGO_ORIGINAL, CODIGO_NORMALIZADO
-        FROM productos
-        """
-        filas = self.ejecutar_consulta(sql) or []
-        if not filas:
-            return
-
-        parametros = []
-        for rowid, codigo, codigo_original, codigo_normalizado in filas:
-            codigo_base = limpiar_codigo(codigo)
-            original_resuelto = limpiar_codigo(codigo_original) or codigo_base
-            normalizado_resuelto = limpiar_codigo(codigo_normalizado) or normalizar_codigo_para_envio(original_resuelto)
-
-            if codigo_original == original_resuelto and codigo_normalizado == normalizado_resuelto:
-                continue
-
-            parametros.append((original_resuelto, normalizado_resuelto, rowid))
-
-        if not parametros:
-            logger.debug("Backfill de codigos no necesario en productos.")
-            return
-
-        logger.info("Backfill de codigos en productos | registros=%s", len(parametros))
-        self.ejecutar_consultamany(
-            """
-            UPDATE productos
-            SET CODIGO_ORIGINAL = ?, CODIGO_NORMALIZADO = ?
-            WHERE rowid = ?
-            """,
-            parametros,
-        )
+            self.cursor.execute("BEGIN")
+            self.cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS productos_new (
+                    CREF TEXT,
+                    codigo TEXT UNIQUE,
+                    descripcion TEXT,
+                    precio REAL,
+                    img_base64 TEXT,
+                    formato_imagen TEXT,
+                    dFechaU TEXT,
+                    TIENE_OFERTA INTEGER DEFAULT 0,
+                    PRECIO_OFERTA REAL,
+                    OFERTA_DESDE TEXT,
+                    OFERTA_HASTA TEXT,
+                    OFERTA_ORIGEN TEXT,
+                    OFERTA_CCODDIV TEXT,
+                    OFERTA_DTO REAL
+                )
+                """
+            )
+            self.cursor.execute("DELETE FROM productos_new")
+            self.cursor.execute(
+                """
+                INSERT INTO productos_new (
+                    CREF, codigo, descripcion, precio, img_base64, formato_imagen,
+                    dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
+                    OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                )
+                SELECT
+                    CREF, codigo, descripcion, precio, img_base64, formato_imagen,
+                    dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
+                    OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                FROM productos
+                """
+            )
+            self.cursor.execute("DROP TABLE productos")
+            self.cursor.execute("ALTER TABLE productos_new RENAME TO productos")
+            self.connection.commit()
+            logger.info("Migracion de tabla productos completada correctamente.")
+        except sqlite3.Error:
+            if self.connection:
+                self.connection.rollback()
+            logger.exception("Error migrando tabla productos sin columnas legacy.")
+            raise

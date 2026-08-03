@@ -10,7 +10,7 @@ import requests
 
 
 # Configuracion fija para el exe. Los argumentos por consola pueden pisar estos valores.
-IMAGE_DIR = Path(r"F:\Sp\IMAGEN")
+IMAGE_DIR = Path(r"F:\Dba")
 DEFAULT_VERIPRE_INTERNAL = Path(r"F:\Sp\facturap\exes\veripre\_internal")
 HARDCODED_IMAGE_API_URL = "http://190.7.6.80:5000/"
 HARDCODED_GO_UPC_KEY = "ebc6686f13a3431841ee9d0419ae53ce7a8bec130f975dd66beb866e3f0fce75"

@@ -7,6 +7,7 @@ import ttkbootstrap as ttk
 from ttkbootstrap.scrolled import ScrolledFrame
 from core.network.api_client import DispositivoAPIClient
 from core.network.urls_dispositivos import VeriPreDispositivosURLBuilder
+from core.ui.responsive import fit_toplevel_to_workarea
 
 class EnvioDispositivos:
     def __init__(self, conexion_dba, batch_size=1000):
@@ -19,7 +20,7 @@ class EnvioDispositivos:
 
         toplevel = ttk.Toplevel(root)
         toplevel.title("Seleccionar Dispositivos")
-        toplevel.geometry("500x500")
+        fit_toplevel_to_workarea(toplevel, 500, 500, min_width=460, min_height=420)
         toplevel.place_window_center()
         toplevel.grab_set()
 
@@ -73,7 +74,7 @@ class EnvioDispositivos:
         def ventana_estado_envio(urls, nombres):
             top_estado = ttk.Toplevel()
             top_estado.title("Estado de Envío a Dispositivos")
-            top_estado.geometry("600x500")
+            fit_toplevel_to_workarea(top_estado, 600, 500, min_width=520, min_height=420)
             top_estado.place_window_center()
             top_estado.grab_set()
             estado_finalizados = {"count": 0}

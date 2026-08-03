@@ -28,6 +28,8 @@ from GUI.GUI_CONFIG import GUI_CONFIG
 from DB.database import SQLiteDB
 from DB.database_sybase import ConexionSybase
 from core.logging.logger import get_logger
+from core.ui.responsive import clamp, get_size_class, get_workarea_size
+from core.ui.theme_tokens import BUTTON_PAD_X, BUTTON_PAD_Y, FONT_BODY_BOLD, FONT_SUBTITLE, FONT_TITLE_XL
 
 logger = get_logger(__name__)
 ERROR_ALREADY_EXISTS = 183
@@ -182,6 +184,8 @@ class GUI_MAIN:
         self._seccion_publicidad_creada = False
         self._bootstrap_finalizado = False
         self._modulo_inicializando = None
+        self._responsive_after_id = None
+        self._sidebar_render_state = None
 
         logger.debug("Cargando configuraciÃ³n JSON.")
         self.config_data = cargar_config()
@@ -212,6 +216,7 @@ class GUI_MAIN:
         self.ventana_creacion_caja.rowconfigure(0, weight=1)
 
         self.ventana_creacion_caja.protocol("WM_DELETE_WINDOW", self.ocultar_a_bandeja)
+        self.ventana_creacion_caja.bind("<Configure>", self._programar_layout_responsivo, add="+")
 
         self.DICT_WIDGETS.register("GUI_MAIN", "ventana_creacion_caja", self.ventana_creacion_caja)
 
@@ -246,8 +251,8 @@ class GUI_MAIN:
     def _configurar_estilos_gui(self):
         self.style.configure(
             "TButton",
-            padding=(11, 7),
-            font=("Segoe UI", 10, "bold"),
+            padding=(BUTTON_PAD_X + 5, BUTTON_PAD_Y + 3),
+            font=FONT_BODY_BOLD,
         )
         self.sidebar_bg = "#f3f6fa"
         self.sidebar_card = "#f3fbf6"
@@ -260,6 +265,8 @@ class GUI_MAIN:
         self.sidebar_brand = "#149455"
         self.sidebar_expanded_width = 176
         self.sidebar_item_width = 158
+        self.content_padding_x = 20
+        self.content_padding_y = 18
 
     def _iniciar_listener_instancia(self):
         if self._socket_listener_running or self.socket_lock_server is None:
@@ -316,6 +323,159 @@ class GUI_MAIN:
             self.ctk_loader.stop_loader()
         except Exception:
             logger.exception("No se pudo ocultar el loader global.")
+
+    def _programar_layout_responsivo(self, _event=None):
+        if self._responsive_after_id:
+            try:
+                self.ventana_creacion_caja.after_cancel(self._responsive_after_id)
+            except Exception:
+                pass
+        self._responsive_after_id = self.ventana_creacion_caja.after(80, self._aplicar_layout_responsivo)
+
+    def _aplicar_layout_responsivo(self):
+        self._responsive_after_id = None
+        try:
+            work_width, work_height = get_workarea_size(self.ventana_creacion_caja)
+            current_width = self.ventana_creacion_caja.winfo_width()
+            current_height = self.ventana_creacion_caja.winfo_height()
+            window_width = current_width if current_width > 1 else work_width
+            window_height = current_height if current_height > 1 else work_height
+            size_class = get_size_class(window_width, window_height)
+
+            if size_class == "compact":
+                sidebar_width = clamp(int(window_width * 0.122), 148, 160)
+                content_padding_x = 12
+                content_padding_y = 12
+                logo_max_width = sidebar_width - 26
+                logo_max_height = 22
+                menu_item_height = 42
+                menu_font = ("Segoe UI", 9, "bold")
+                icon_size = 24
+                footer_icon_size = 18
+                footer_font = ("Segoe UI", 9, "bold")
+                top_logo_pad = (2, 10)
+                footer_pad_top = 10
+                inicio_pad_top = 20
+            elif size_class == "standard":
+                sidebar_width = clamp(int(window_width * 0.132), 156, 172)
+                content_padding_x = 16
+                content_padding_y = 16
+                logo_max_width = sidebar_width - 22
+                logo_max_height = 26
+                menu_item_height = 44
+                menu_font = ("Segoe UI", 10, "bold")
+                icon_size = 26
+                footer_icon_size = 19
+                footer_font = ("Segoe UI", 10, "bold")
+                top_logo_pad = (2, 12)
+                footer_pad_top = 12
+                inicio_pad_top = 26
+            else:
+                sidebar_width = clamp(int(window_width * 0.136), 164, 182)
+                content_padding_x = 18
+                content_padding_y = 18
+                logo_max_width = sidebar_width - 22
+                logo_max_height = 28
+                menu_item_height = 46
+                menu_font = ("Segoe UI", 10, "bold")
+                icon_size = 28
+                footer_icon_size = 20
+                footer_font = ("Segoe UI", 10, "bold")
+                top_logo_pad = (2, 14)
+                footer_pad_top = 14
+                inicio_pad_top = 30
+
+            item_width = clamp(sidebar_width - 18, 132, 172)
+            self.sidebar_expanded_width = sidebar_width
+            self.sidebar_item_width = item_width
+            self.content_padding_x = content_padding_x
+            self.content_padding_y = content_padding_y
+            self.sidebar_menu_item_height = menu_item_height
+            self.sidebar_menu_font = menu_font
+            self.sidebar_icon_size = icon_size
+            self.sidebar_footer_icon_size = footer_icon_size
+            self.sidebar_footer_font = footer_font
+            self.sidebar_logo_pad = top_logo_pad
+            self.sidebar_footer_pad_top = footer_pad_top
+            self.inicio_pad_top = inicio_pad_top
+
+            self.ventana_creacion_caja.grid_columnconfigure(0, minsize=sidebar_width, weight=0)
+            self.frame_menu.configure(width=sidebar_width)
+            if hasattr(self, "frame_contenido"):
+                self.frame_contenido.configure(padding=(content_padding_x, content_padding_y))
+
+            sidebar_render_state = (
+                sidebar_width,
+                item_width,
+                logo_max_width,
+                logo_max_height,
+                menu_item_height,
+                icon_size,
+                footer_icon_size,
+                menu_font,
+                footer_font,
+                top_logo_pad,
+                footer_pad_top,
+                inicio_pad_top,
+            )
+            should_refresh_sidebar = sidebar_render_state != self._sidebar_render_state
+
+            if should_refresh_sidebar:
+                self.photo_logo = self._cargar_logo_sidebar(
+                    PNG_LOGO_SECUNDARIO(),
+                    max_width=logo_max_width,
+                    max_height=logo_max_height,
+                )
+                self.label_image_logo.configure(image=self.photo_logo)
+                self.label_image_logo.image = self.photo_logo
+                self.label_image_logo.pack_configure(pady=top_logo_pad)
+
+                self.photo_publicidad = READ_IMG(PNG_Publicidad(), icon_size, icon_size)
+                self.photo_productos = READ_IMG(PNG_Productos(), icon_size, icon_size)
+                self.photo_setting = READ_IMG(PNG_Settings(), footer_icon_size, footer_icon_size)
+                self.photo_info = READ_IMG(PNG_Info(), footer_icon_size, footer_icon_size)
+
+                if "productos" in self.menu_cards:
+                    self.menu_cards["productos"]["canvas"].itemconfigure(
+                        self.menu_cards["productos"]["icon_id"],
+                        image=self.photo_productos,
+                    )
+                if "publicidad" in self.menu_cards:
+                    self.menu_cards["publicidad"]["canvas"].itemconfigure(
+                        self.menu_cards["publicidad"]["icon_id"],
+                        image=self.photo_publicidad,
+                    )
+                if hasattr(self, "boton_setting_icon") and self.boton_setting_icon:
+                    self.boton_setting_icon.configure(image=self.photo_setting)
+                    self.boton_setting_icon.image = self.photo_setting
+                if hasattr(self, "boton_info_icon"):
+                    self.boton_info_icon.configure(image=self.photo_info)
+                    self.boton_info_icon.image = self.photo_info
+
+                for canvas_data in self.menu_cards.values():
+                    canvas_data["canvas"].configure(width=item_width, height=menu_item_height)
+                    canvas_data["canvas"].itemconfigure(canvas_data["text_id"], font=menu_font)
+                if hasattr(self, "boton_setting_texto") and self.boton_setting_texto:
+                    self.boton_setting_texto.configure(font=footer_font)
+                if hasattr(self, "boton_info_texto") and self.boton_info_texto:
+                    self.boton_info_texto.configure(font=footer_font)
+                if hasattr(self, "frame_botones_config_info"):
+                    self.frame_botones_config_info.pack_configure(pady=(footer_pad_top, 0))
+                if hasattr(self, "label_inicio"):
+                    self.label_inicio.pack_configure(pady=(inicio_pad_top, 8))
+                self._sidebar_render_state = sidebar_render_state
+
+            if hasattr(self, "label_inicio_subtitulo") and self.label_inicio_subtitulo:
+                self.label_inicio_subtitulo.configure(wraplength=max(window_width - sidebar_width - 120, 320))
+            if hasattr(self, "label_inicio_usuario") and self.label_inicio_usuario:
+                self.label_inicio_usuario.configure(wraplength=max(window_width - sidebar_width - 120, 320))
+            if hasattr(self, "label_inicio_bloqueo") and self.label_inicio_bloqueo:
+                self.label_inicio_bloqueo.configure(wraplength=max(window_width - sidebar_width - 120, 320))
+            self.nav_card.configure(width=item_width)
+            self.footer_card.configure(width=item_width)
+            self.frame_menu.update_idletasks()
+        except Exception:
+            logger.exception("No se pudo aplicar layout responsivo en GUI_MAIN.")
 
     def _iniciar_bootstrap(self):
         pasos = [
@@ -706,8 +866,8 @@ class GUI_MAIN:
         )
         self.nav_card.pack(anchor="n", pady=(2, 0))
 
-        self.photo_publicidad = READ_IMG(PNG_Publicidad(), 28, 28)
-        self.photo_productos = READ_IMG(PNG_Productos(), 28, 28)
+        self.photo_publicidad = READ_IMG(PNG_Publicidad(), getattr(self, "sidebar_icon_size", 28), getattr(self, "sidebar_icon_size", 28))
+        self.photo_productos = READ_IMG(PNG_Productos(), getattr(self, "sidebar_icon_size", 28), getattr(self, "sidebar_icon_size", 28))
         self.menu_cards = {}
         self.frame_boton_productos = None
         self.frame_boton_publicidad = None
@@ -732,7 +892,7 @@ class GUI_MAIN:
 
         self.frame_botones_config_info = tk.Frame(self.frame_menu_inner, bg=self.sidebar_bg)
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_botones_config_info", self.frame_botones_config_info)
-        self.frame_botones_config_info.pack(pady=(14, 0), side="bottom", fill="x")
+        self.frame_botones_config_info.pack(pady=(getattr(self, "sidebar_footer_pad_top", 14), 0), side="bottom", fill="x")
 
         self.footer_card = tk.Frame(
             self.frame_botones_config_info,
@@ -745,7 +905,7 @@ class GUI_MAIN:
         )
         self.footer_card.pack(anchor="s")
 
-        self.photo_setting = READ_IMG(PNG_Settings(), 20, 20)
+        self.photo_setting = READ_IMG(PNG_Settings(), getattr(self, "sidebar_footer_icon_size", 20), getattr(self, "sidebar_footer_icon_size", 20))
         self.boton_setting = None
         self.boton_setting_icon = None
         self.boton_setting_texto = None
@@ -765,7 +925,7 @@ class GUI_MAIN:
                 text="Configuración",
                 bg=self.sidebar_card,
                 fg=self.sidebar_muted,
-                font=("Segoe UI", 10, "bold"),
+                font=getattr(self, "sidebar_footer_font", ("Segoe UI", 10, "bold")),
             )
             self.boton_setting_texto.pack(side="left", padx=(10, 0))
 
@@ -774,7 +934,7 @@ class GUI_MAIN:
                 widget.bind("<Enter>", lambda _e: self._hover_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, True))
                 widget.bind("<Leave>", lambda _e: self._hover_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, False))
 
-        self.photo_info = READ_IMG(PNG_Info(), 20, 20)
+        self.photo_info = READ_IMG(PNG_Info(), getattr(self, "sidebar_footer_icon_size", 20), getattr(self, "sidebar_footer_icon_size", 20))
         self.boton_info = tk.Frame(
             self.footer_card,
             bg=self.sidebar_card,
@@ -790,7 +950,7 @@ class GUI_MAIN:
             text="Acerca de",
             bg=self.sidebar_card,
             fg=self.sidebar_muted,
-            font=("Segoe UI", 10, "bold"),
+            font=getattr(self, "sidebar_footer_font", ("Segoe UI", 10, "bold")),
         )
         self.boton_info_texto.pack(side="left", padx=(10, 0))
 
@@ -821,7 +981,7 @@ class GUI_MAIN:
         canvas = tk.Canvas(
             frame,
             width=self.sidebar_item_width,
-            height=46,
+            height=getattr(self, "sidebar_menu_item_height", 46),
             bg=self.sidebar_bg,
             bd=0,
             highlightthickness=0,
@@ -849,7 +1009,7 @@ class GUI_MAIN:
             23,
             text=text,
             fill=self.sidebar_text,
-            font=("Segoe UI", 10, "bold"),
+            font=getattr(self, "sidebar_menu_font", ("Segoe UI", 10, "bold")),
             anchor="w",
         )
 
@@ -951,8 +1111,12 @@ class GUI_MAIN:
         )
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_contenido", self.frame_contenido)
         self.frame_contenido.grid(row=0, column=1, sticky="NSEW")
+        self.frame_contenido.columnconfigure(0, weight=1)
+        self.frame_contenido.rowconfigure(0, weight=0)
+        self.frame_contenido.rowconfigure(1, weight=1)
 
         self.frame_barra_superior = ttk.Frame(self.frame_contenido)
+        self.frame_barra_superior.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self.photo_back = READ_IMG(PNG_Back(), 30, 30)
         self.boton_back = ttk.Button(
             self.frame_barra_superior,
@@ -961,6 +1125,12 @@ class GUI_MAIN:
             bootstyle="primary-link",
         )
         self.boton_back.pack(side="left")
+
+        self.frame_cuerpo_secciones = ttk.Frame(self.frame_contenido)
+        self.frame_cuerpo_secciones.grid(row=1, column=0, sticky="nsew")
+        self.frame_cuerpo_secciones.columnconfigure(0, weight=1)
+        self.frame_cuerpo_secciones.rowconfigure(0, weight=1)
+        self._aplicar_layout_responsivo()
 
         logger.debug("frameContenido construido correctamente.")
 
@@ -1036,28 +1206,28 @@ class GUI_MAIN:
 
         if self.VIGIA_FRAME == "INICIO":
             self.VIGIA_VOLVER = ["INICIO"]
-            self.frame_seccion_inicio.pack(fill="both", expand=True)
+            self.frame_seccion_inicio.grid()
             if frame_productos:
-                frame_productos.pack_forget()
+                frame_productos.grid_remove()
             if frame_publicidad:
-                frame_publicidad.pack_forget()
-            self.frame_barra_superior.pack_forget()
+                frame_publicidad.grid_remove()
+            self.frame_barra_superior.grid_remove()
 
         elif self.VIGIA_FRAME == "BOTON_PRODUCTOS":
             if frame_publicidad:
-                frame_publicidad.pack_forget()
-            self.frame_seccion_inicio.pack_forget()
-            self.frame_barra_superior.pack(fill="x")
+                frame_publicidad.grid_remove()
+            self.frame_seccion_inicio.grid_remove()
+            self.frame_barra_superior.grid()
             if frame_productos:
-                frame_productos.pack(fill="both", expand=True)
+                frame_productos.grid()
 
         elif self.VIGIA_FRAME == "BOTON_PUBLICIDAD":
             if frame_productos:
-                frame_productos.pack_forget()
-            self.frame_seccion_inicio.pack_forget()
-            self.frame_barra_superior.pack(fill="x")
+                frame_productos.grid_remove()
+            self.frame_seccion_inicio.grid_remove()
+            self.frame_barra_superior.grid()
             if frame_publicidad:
-                frame_publicidad.pack(fill="both", expand=True)
+                frame_publicidad.grid()
 
         if self.VIGIA_VOLVER[-1] != self.VIGIA_FRAME and self.VIGIA_FRAME not in self.VIGIA_VOLVER:
             self.VIGIA_VOLVER.append(self.VIGIA_FRAME)
@@ -1078,37 +1248,45 @@ class GUI_MAIN:
     def seccion_inicio(self):
         logger.debug("Creando widgets de secciÃ³n INICIO.")
 
-        self.frame_seccion_inicio = ttk.Frame(self.frame_contenido)
+        self.frame_seccion_inicio = ttk.Frame(self.frame_cuerpo_secciones)
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_inicio", self.frame_seccion_inicio)
+        self.frame_seccion_inicio.grid(row=0, column=0, sticky="nsew")
+        self.frame_seccion_inicio.columnconfigure(0, weight=1)
 
-        self.label_inicio = ttk.Label(self.frame_seccion_inicio, text="Bienvenidos", font=("Segoe UI", 22, "bold"))
+        self.label_inicio = ttk.Label(self.frame_seccion_inicio, text="Bienvenidos", font=FONT_TITLE_XL)
         self.label_inicio.pack(pady=(30, 8), anchor="w")
-        ttk.Label(
+        self.label_inicio_subtitulo = ttk.Label(
             self.frame_seccion_inicio,
             text="Seleccioná una sección del panel lateral para comenzar.",
             bootstyle="secondary",
-            font=("Segoe UI", 11),
-        ).pack(anchor="w")
-        ttk.Label(
+            font=FONT_SUBTITLE,
+        )
+        self.label_inicio_subtitulo.pack(anchor="w")
+        self.label_inicio_usuario = ttk.Label(
             self.frame_seccion_inicio,
             text=f"Usuario actual: {self.usuario_windows}",
             bootstyle="secondary",
-            font=("Segoe UI", 10),
-        ).pack(anchor="w", pady=(6, 0))
+            font=FONT_SUBTITLE,
+        )
+        self.label_inicio_usuario.pack(anchor="w", pady=(6, 0))
         if not any(self.permisos_usuario.values()):
-            ttk.Label(
+            self.label_inicio_bloqueo = ttk.Label(
                 self.frame_seccion_inicio,
                 text="Acceso pendiente de autorización. Un administrador debe habilitar tus módulos.",
                 bootstyle="warning",
-                font=("Segoe UI", 10, "bold"),
-            ).pack(anchor="w", pady=(10, 0))
+                font=FONT_BODY_BOLD,
+            )
+            self.label_inicio_bloqueo.pack(anchor="w", pady=(10, 0))
+        else:
+            self.label_inicio_bloqueo = None
 
     def seccion_productos(self):
         logger.debug("Creando widgets de secciÃ³n PRODUCTOS.")
 
         if not self._seccion_productos_creada:
-            self.frame_seccion_productos = ttk.Frame(self.frame_contenido)
+            self.frame_seccion_productos = ttk.Frame(self.frame_cuerpo_secciones)
             self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_productos", self.frame_seccion_productos)
+            self.frame_seccion_productos.grid(row=0, column=0, sticky="nsew")
             self.contenido_productos = ContenidoProducto(self.DICT_WIDGETS)
             self._seccion_productos_creada = True
             logger.debug("ContenidoProducto inicializado correctamente.")
@@ -1117,8 +1295,9 @@ class GUI_MAIN:
         logger.debug("Creando widgets de secciÃ³n PUBLICIDAD.")
 
         if not self._seccion_publicidad_creada:
-            self.frame_seccion_publicidad = ttk.Frame(self.frame_contenido)
+            self.frame_seccion_publicidad = ttk.Frame(self.frame_cuerpo_secciones)
             self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_publicidad", self.frame_seccion_publicidad)
+            self.frame_seccion_publicidad.grid(row=0, column=0, sticky="nsew")
             self.contenido_publicidad = ContenidoPublicidad(self.DICT_WIDGETS)
             self._seccion_publicidad_creada = True
             logger.debug("ContenidoPublicidad inicializado correctamente.")

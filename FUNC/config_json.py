@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 CONFIG_FILENAME = "config.json"
 DB_FILENAME = "veripre.db"
 APP_DIRNAME = "SmartPrice"
+PREFERRED_DATA_DIR = Path(r"F:\Dba")
 ENV_CONFIG_DIR = "SMARTPRICE_CONFIG_DIR"
 CONFIG_LOCK_FILENAME = "config.lock"
 CONFIG_LOCK_TIMEOUT_SECONDS = 12
@@ -52,6 +53,9 @@ def _default_config_dir() -> Path:
     if os.getenv(ENV_CONFIG_DIR):
         return Path(os.getenv(ENV_CONFIG_DIR)).expanduser()
 
+    if PREFERRED_DATA_DIR.anchor and Path(PREFERRED_DATA_DIR.anchor).exists():
+        return PREFERRED_DATA_DIR
+
     if getattr(sys, "frozen", False):
         program_data = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
         return program_data / APP_DIRNAME
@@ -60,9 +64,32 @@ def _default_config_dir() -> Path:
 
 
 def obtener_data_dir() -> Path:
-    data_dir = _default_config_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
+    candidates: list[Path] = []
+    default_dir = _default_config_dir()
+    if default_dir not in candidates:
+        candidates.append(default_dir)
+
+    if getattr(sys, "frozen", False):
+        fallback_dir = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / APP_DIRNAME
+        if fallback_dir not in candidates:
+            candidates.append(fallback_dir)
+
+    project_dir = _project_root()
+    if project_dir not in candidates:
+        candidates.append(project_dir)
+
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            probe_fd, probe_path = tempfile.mkstemp(prefix="sp_", dir=candidate)
+            os.close(probe_fd)
+            os.unlink(probe_path)
+            return candidate
+        except OSError:
+            logger.exception("No se pudo usar directorio de datos | path=%s", candidate)
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    return project_dir
 
 
 def _legacy_db_candidates() -> list[Path]:
@@ -98,9 +125,6 @@ def _legacy_db_candidates() -> list[Path]:
 
 
 def obtener_sqlite_path() -> Path:
-    if not getattr(sys, "frozen", False):
-        return _project_root() / "DB" / DB_FILENAME
-
     data_dir = obtener_data_dir()
     db_path = data_dir / DB_FILENAME
     fallback_path = None

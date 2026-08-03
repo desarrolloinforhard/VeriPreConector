@@ -34,17 +34,52 @@
         "columna": 2,
         "posicion": 7
     },
-    "ubicaciones": {
-        "OUTPUT/ofertas\\OF_ofcanasta_1_OFERTA_VINO_SELECCIONADOS_2x1_20260411_122951_01.png": {
-            "fila": 0,
-            "columna": 0,
-            "posicion": 1
+    "ubicaciones": {},
+    "sincronizacion_automatica": true,
+    "perfiles_usuario": {
+        "default": {
+            "modulos": {
+                "productos": true,
+                "publicidad": true,
+                "configuracion": true
+            }
         },
-        "OUTPUT/ofertas\\OF_ofplu_8_20_EN_VINOS_SELECCIONADOS_20260411_123236_01.png": {
-            "fila": 0,
-            "columna": 1,
-            "posicion": 2
+        "administrador": {
+            "modulos": {
+                "productos": true,
+                "publicidad": true,
+                "configuracion": true
+            }
+        },
+        "pantalla": {
+            "modulos": {
+                "productos": false,
+                "publicidad": true,
+                "configuracion": false
+            }
+        },
+        "op_1111": {
+            "modulos": {
+                "productos": true,
+                "publicidad": true,
+                "configuracion": true
+            },
+            "estado": "activo"
         }
     },
-    "sincronizacion_automatica": true
+    "publicidades": {
+        "grupo_activo": "default",
+        "grupos": {
+            "default": {
+                "nombre": "General",
+                "items": {},
+                "usar_display_index": false,
+                "display_index": 0
+            }
+        },
+        "globales": {},
+        "biblioteca": {},
+        "historial_envios": [],
+        "multipantalla_dispositivos": {}
+    }
 }

@@ -1,5 +1,5 @@
 from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
-from core.services.barcode_normalizer import limpiar_codigo, normalizar_codigo_para_envio
+from core.services.barcode_normalizer import limpiar_codigo
 
 
 class ProductosSyncService:
@@ -103,13 +103,15 @@ class ProductosSyncService:
             if not articulo or len(articulo) < 15:
                 continue
 
+            cref = str(articulo[0]).strip() if articulo[0] is not None else ""
+            if not cref:
+                continue
+
             articulos_normalizados.append(
                 {
-                    "cref": articulo[0],
+                    "cref": cref,
                     "descripcion": articulo[1],
                     "codigo": limpiar_codigo(articulo[2]),
-                    "codigo_original": limpiar_codigo(articulo[2]),
-                    "codigo_normalizado": normalizar_codigo_para_envio(articulo[2]),
                     "ctipoiva": articulo[3],
                     "precios_base": {
                         "npvp1": self._to_float(articulo[4]),
@@ -139,7 +141,10 @@ class ProductosSyncService:
 
         codbarp_dict = {}
         for cref, cdetalle, ccodebar, dfechau in datos_codbarp:
-            codbarp_dict.setdefault(cref, []).append((cdetalle, ccodebar, dfechau))
+            cref_key = str(cref).strip() if cref is not None else ""
+            if not cref_key:
+                continue
+            codbarp_dict.setdefault(cref_key, []).append((cdetalle, ccodebar, dfechau))
 
         total = len(articulos) + len(datos_codbarp)
         total = max(total, 1)
@@ -149,26 +154,22 @@ class ProductosSyncService:
 
         for producto in articulos:
             codigo = limpiar_codigo(producto.get("codigo"))
-            codigo_normalizado = limpiar_codigo(producto.get("codigo_normalizado")) or codigo
-            if codigo and codigo_normalizado not in codigos_agregados:
+            if codigo and codigo not in codigos_agregados:
                 productos_completos.append(producto)
-                codigos_agregados.add(codigo_normalizado)
+                codigos_agregados.add(codigo)
             progreso += 1
             if progreso % 10 == 0:
                 self._notify(progress_callback, None, progreso, total)
 
             for cdetalle_extra, ccodebar_extra, dfechau_extra in codbarp_dict.get(producto["cref"], []):
                 codigo_extra = limpiar_codigo(ccodebar_extra)
-                codigo_extra_normalizado = normalizar_codigo_para_envio(ccodebar_extra)
-                if codigo_extra and codigo_extra_normalizado not in codigos_agregados:
+                if codigo_extra and codigo_extra not in codigos_agregados:
                     producto_extra = dict(producto)
                     producto_extra["descripcion"] = cdetalle_extra
                     producto_extra["codigo"] = codigo_extra
-                    producto_extra["codigo_original"] = codigo_extra
-                    producto_extra["codigo_normalizado"] = codigo_extra_normalizado
                     producto_extra["dfechau"] = dfechau_extra or producto.get("dfechau")
                     productos_completos.append(producto_extra)
-                    codigos_agregados.add(codigo_extra_normalizado)
+                    codigos_agregados.add(codigo_extra)
                 progreso += 1
                 if progreso % 10 == 0:
                     self._notify(progress_callback, None, progreso, total)
@@ -195,9 +196,12 @@ class ProductosSyncService:
         packs_por_cref = {}
 
         for cref, cantidad, nroprecio, nprecio, cdetalle, dfechau in packs:
-            packs_por_cref.setdefault(cref, []).append(
+            cref_key = str(cref).strip() if cref is not None else ""
+            if not cref_key:
+                continue
+            packs_por_cref.setdefault(cref_key, []).append(
                 {
-                    "cref": cref,
+                    "cref": cref_key,
                     "cantidad": self._to_int(cantidad),
                     "nroprecio": self._normalizar_nroprecio(nroprecio),
                     "nprecio": self._to_float(nprecio),
@@ -253,7 +257,7 @@ class ProductosSyncService:
             precios_adicionales = self._resolver_precios_adicionales_producto(
                 producto,
                 precios_finales,
-                packs_por_cref.get(producto["cref"], []),
+                packs_por_cref.get(str(producto["cref"]).strip(), []),
             )
             oferta = ofertas_por_cref.get(str(producto["cref"]).strip()) or {}
 
@@ -262,8 +266,6 @@ class ProductosSyncService:
                     "cref": producto["cref"],
                     "descripcion": producto["descripcion"],
                     "codigo": limpiar_codigo(producto.get("codigo")),
-                    "codigo_original": limpiar_codigo(producto.get("codigo_original") or producto.get("codigo")),
-                    "codigo_normalizado": limpiar_codigo(producto.get("codigo_normalizado")) or normalizar_codigo_para_envio(producto.get("codigo")),
                     "precio_num": precio_principal,
                     "precio": self._format_precio(precio_principal),
                     "dfechau": producto.get("dfechau"),

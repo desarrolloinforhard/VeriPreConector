@@ -1,6 +1,6 @@
 [Setup]
 AppName=SmartPrice
-AppVersion=1.16.26
+AppVersion=1.16.27
 DefaultDirName={pf}\SmartPrice
 DefaultGroupName=SmartPrice
 OutputBaseFilename=Instalador_SmartPrice

@@ -46,6 +46,9 @@ def PNG_Check():
 def PNG_LOGO_PRINCIPAL():
     return os.path.join(path_script, '!!!LOGO_PRINCIPAL!!!.png')
 
+def PNG_LOGO_DISPOSITIVO():
+    return os.path.join(path_script, '!!!LOGO_DISPOSITIVO!!!.png')
+
 def PNG_LOGO_SECUNDARIO():
     return os.path.join(path_script, 'INFORHARD_HORIZONTAL.png')
 

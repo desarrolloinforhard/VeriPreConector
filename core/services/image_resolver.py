@@ -9,7 +9,7 @@ from PIL import Image
 
 
 class ProductImageResolver:
-    IMAGE_DIRS = (r"F:\Sp\IMAGEN", r"S:\Sp\IMAGEN")
+    IMAGE_DIRS = (r"F:\Dba", r"F:\Sp\IMAGEN", r"S:\Sp\IMAGEN")
     FORMAT_PRIORITY = ("webp", "png", "jpg", "jpeg", "gif", "bmp")
     CONTENT_TYPES = {
         "webp": "image/webp",

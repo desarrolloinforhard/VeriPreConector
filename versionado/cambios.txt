@@ -1,3 +1,10 @@
+Version 1.16.27
+- Se elimino el flujo operativo de normalizacion de codigos y SmartPrice vuelve a trabajar con un unico campo `codigo` de punta a punta.
+- La sincronizacion de productos, la persistencia SQLite, la UI de productos y el payload enviado a Android ahora usan el codigo original sin derivar variantes EAN-13.
+- Se mantuvo intacto el soporte para `PACKS_MINI`, precios adicionales y ofertas mientras se simplifico la cadena de productos.
+- Se agrego una migracion automatica de SQLite para limpiar la tabla `productos` y eliminar `CODIGO_ORIGINAL` y `CODIGO_NORMALIZADO` en instalaciones legadas.
+- Se robustecio la rotacion del archivo `veripre.log` para evitar tracebacks por `WinError 32` cuando otro proceso tiene el log abierto.
+
 Version 1.16.26
 - Se agrego normalizacion de codigos legacy de 12 digitos sin digito verificador usando fallback EAN-13 durante la sincronizacion.
 - SQLite ahora guarda `CODIGO_ORIGINAL` y `CODIGO_NORMALIZADO` para mantener trazabilidad del dato fuente y del codigo operativo.

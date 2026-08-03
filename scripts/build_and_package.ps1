@@ -147,26 +147,77 @@ function Add-TclTkDataArgs {
     }
 }
 
+function Get-PythonArchitecture {
+    param([string]$PythonExe)
+
+    $arch = & $PythonExe -c "import struct; print(64 if struct.calcsize('P') * 8 == 64 else 32)" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "No se pudo determinar la arquitectura de Python usando: $PythonExe"
+    }
+
+    return [int]($arch | Select-Object -First 1)
+}
+
+function Get-PeMachine {
+    param([string]$DllPath)
+
+    if (-not (Test-Path $DllPath)) {
+        return $null
+    }
+
+    $bytes = [System.IO.File]::ReadAllBytes($DllPath)
+    $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
+    $machine = [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
+    return $machine
+}
+
 function Resolve-VlcRuntimePath {
-    $candidates = @(
-        $env:VLC_DIR,
-        "C:\Program Files\VideoLAN\VLC",
-        "C:\Program Files (x86)\VideoLAN\VLC"
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    param([string]$PythonExe)
+
+    $pythonArch = Get-PythonArchitecture -PythonExe $PythonExe
+    $preferredCandidates = if ($pythonArch -eq 32) {
+        @(
+            $env:VLC_DIR,
+            "C:\Program Files (x86)\VideoLAN\VLC",
+            "C:\Program Files\VideoLAN\VLC"
+        )
+    }
+    else {
+        @(
+            $env:VLC_DIR,
+            "C:\Program Files\VideoLAN\VLC",
+            "C:\Program Files (x86)\VideoLAN\VLC"
+        )
+    }
+
+    $candidates = $preferredCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
     foreach ($candidate in $candidates) {
-        if ((Test-Path $candidate) -and (Test-Path (Join-Path $candidate "libvlc.dll"))) {
+        if (-not (Test-Path $candidate)) {
+            continue
+        }
+
+        $dllPath = Join-Path $candidate "libvlc.dll"
+        if (-not (Test-Path $dllPath)) {
+            continue
+        }
+
+        $machine = Get-PeMachine -DllPath $dllPath
+        $is32 = $machine -eq 0x14c
+        $is64 = $machine -eq 0x8664
+
+        if (($pythonArch -eq 32 -and $is32) -or ($pythonArch -eq 64 -and $is64)) {
             return (Resolve-Path $candidate).Path
         }
     }
 
-    return $null
+    throw "No se encontro un runtime VLC compatible con Python ${pythonArch}-bit. Revise VLC_DIR o instale VLC con la misma arquitectura."
 }
 
 function Add-VlcRuntimeArgs {
-    param([System.Collections.Generic.List[string]]$ArgsList)
+    param([System.Collections.Generic.List[string]]$ArgsList, [string]$PythonExe)
 
-    $vlcRoot = Resolve-VlcRuntimePath
+    $vlcRoot = Resolve-VlcRuntimePath -PythonExe $PythonExe
     if ([string]::IsNullOrWhiteSpace($vlcRoot)) {
         Write-Warning @"
 No se encontro runtime local de VLC para adjuntar al build.
@@ -494,7 +545,7 @@ if (-not [string]::IsNullOrWhiteSpace($manualArgs)) {
 }
 
 Add-TclTkDataArgs -ArgsList $argsList
-Add-VlcRuntimeArgs -ArgsList $argsList
+Add-VlcRuntimeArgs -ArgsList $argsList -PythonExe $buildPython
 Add-ValueArg $argsList "--additional-hooks-dir" $hooksPath
 Add-ValueArg $argsList "--version-file" $versionFilePath
 Add-ValueArg $argsList "--distpath" $distPath
