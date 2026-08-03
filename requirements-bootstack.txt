@@ -1,0 +1,2 @@
+# Dependencia fijada para el shell experimental Bootstack.
+bootstack==0.1.6
