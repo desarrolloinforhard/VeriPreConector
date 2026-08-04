@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 16, 26, 0),
-    prodvers=(1, 16, 26, 0),
+    filevers=(1, 16, 29, 0),
+    prodvers=(1, 16, 29, 0),
     mask=0x3F,
     flags=0x0,
     OS=0x40004,
@@ -17,11 +17,11 @@ VSVersionInfo(
           [
             StringStruct("CompanyName", "Inforhard Servicios S.R.L"),
             StringStruct("FileDescription", "SmartPrice - VeriPre Connector desktop application"),
-            StringStruct("FileVersion", "1.16.26"),
+            StringStruct("FileVersion", "1.16.29"),
             StringStruct("InternalName", "SmartPrice"),
             StringStruct("OriginalFilename", "SmartPrice.exe"),
             StringStruct("ProductName", "SmartPrice"),
-            StringStruct("ProductVersion", "1.16.26")
+            StringStruct("ProductVersion", "1.16.29")
           ]
         )
       ]

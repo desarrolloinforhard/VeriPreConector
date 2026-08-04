@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.29 - 2026-08-04
+
+- Hardened product DELETE fallback so SmartPrice first tries `/api/veri/batch_productos` and then `/api/veri/ALL_PRODUCTOS` without dropping the `/api` prefix.
+- Added explicit DELETE diagnostics in console and device status UI, including the exact endpoint that succeeded or the HTTP/error detail that failed.
+- Added payload-side protection to omit invalid `img_base64` values before sending to Android, preventing timestamps or other non-image values from being transmitted as product images.
+
 ## 1.16.28 - 2026-08-04
 
 - Added explicit Android configuration delivery for `IMAGES_API_URL` using the same SmartPrice value stored in configuration.

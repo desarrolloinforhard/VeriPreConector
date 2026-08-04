@@ -1,5 +1,8 @@
+import base64
+import binascii
 import json
 import os
+import re
 import requests
 
 from FUNC.config_json import cargar_config
@@ -330,7 +333,7 @@ class DispositivosEnvioService:
             try:
                 actualizar(f"Enviando: {art[0]} - {art[1]}")
                 response = client.enviar_post_json(
-                    [self._producto_payload(art, precios_adicionales_map, ofertas_map)]
+                    [self._producto_payload(art, precios_adicionales_map, ofertas_map, actualizar=actualizar)]
                 )
                 if response is None:
                     raise RuntimeError("sin respuesta OK del dispositivo")
@@ -344,7 +347,7 @@ class DispositivosEnvioService:
             if batch:
                 actualizar(f"Enviando producto de fecha: {batch[0][0]} - {batch[0][1]}")
             response = client.enviar_post_json(
-                [self._producto_payload(art, precios_adicionales_map, ofertas_map) for art in batch]
+                [self._producto_payload(art, precios_adicionales_map, ofertas_map, actualizar=actualizar) for art in batch]
             )
             if response is None:
                 raise RuntimeError("sin respuesta OK del dispositivo")
@@ -354,7 +357,13 @@ class DispositivosEnvioService:
     def _enviar_completo(self, client, datos, actualizar, precios_adicionales_map=None, ofertas_map=None):
         response = client.enviar_delete()
         if response is None:
+            detalle = getattr(client, "ultimo_error", None)
+            if detalle:
+                raise RuntimeError(f"no se pudo limpiar productos en el dispositivo. {detalle}")
             raise RuntimeError("no se pudo limpiar productos en el dispositivo")
+        delete_ok = getattr(client, "ultimo_delete_ok", None)
+        if delete_ok:
+            actualizar(f"Limpieza OK: {delete_ok}")
 
         productos_sin_imagen, productos_con_imagen = self._separar_por_imagen(datos)
         total = len(datos)
@@ -400,7 +409,9 @@ class DispositivosEnvioService:
         return productos_sin_imagen, productos_con_imagen
 
     def _tiene_imagen(self, producto):
-        return len(producto) > 3 and bool(producto[3])
+        if len(producto) <= 3:
+            return False
+        return self._base64_imagen_valida(producto[3])
 
     def _enviar_batches(
         self,
@@ -426,7 +437,7 @@ class DispositivosEnvioService:
             )
             timeout = 120 if etiqueta == "con imagen" else 60
             response = client.enviar_post_json(
-                [self._producto_payload(art, precios_adicionales_map, ofertas_map) for art in batch],
+                [self._producto_payload(art, precios_adicionales_map, ofertas_map, actualizar=actualizar) for art in batch],
                 timeout=timeout,
             )
             if response is None:
@@ -571,14 +582,20 @@ class DispositivosEnvioService:
 
         return ofertas_map
 
-    def _producto_payload(self, art, precios_adicionales_map=None, ofertas_map=None):
+    def _producto_payload(self, art, precios_adicionales_map=None, ofertas_map=None, actualizar=None):
         codigo = str(art[0]).strip() if art[0] is not None else ""
+        img_base64, formato_imagen = self._normalizar_imagen_payload(
+            codigo,
+            art[3] if len(art) > 3 else None,
+            art[4] if len(art) > 4 else None,
+            actualizar=actualizar,
+        )
         payload = {
             "codigo": codigo,
             "descripcion": art[1],
             "precio": art[2],
-            "img_base64": art[3],
-            "formato_imagen": art[4],
+            "img_base64": img_base64,
+            "formato_imagen": formato_imagen,
         }
         precios_adicionales = (precios_adicionales_map or {}).get(codigo) or []
         if precios_adicionales:
@@ -593,6 +610,52 @@ class DispositivosEnvioService:
             payload["oferta_ccoddiv"] = oferta.get("oferta_ccoddiv")
             payload["oferta_dto"] = oferta.get("oferta_dto")
         return payload
+
+    def _normalizar_imagen_payload(self, codigo, img_base64, formato_imagen, actualizar=None):
+        if not img_base64:
+            return None, formato_imagen
+
+        if self._base64_imagen_valida(img_base64):
+            return str(img_base64).strip(), formato_imagen
+
+        if callable(actualizar):
+            actualizar(f"Advertencia: imagen invalida omitida para codigo {codigo}")
+        return None, None
+
+    def _base64_imagen_valida(self, valor):
+        if valor is None:
+            return False
+
+        if not isinstance(valor, str):
+            try:
+                valor = valor.decode("utf-8")
+            except Exception:
+                valor = str(valor)
+
+        valor = valor.strip()
+        if not valor:
+            return False
+
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2}(?:\.\d+)?)?", valor):
+            return False
+
+        try:
+            imagen_bytes = base64.b64decode(valor, validate=True)
+        except (binascii.Error, ValueError):
+            return False
+
+        if len(imagen_bytes) < 8:
+            return False
+
+        firmas_validas = (
+            b"\xff\xd8\xff",      # jpg
+            b"\x89PNG\r\n\x1a\n", # png
+            b"GIF87a",
+            b"GIF89a",
+            b"RIFF",              # webp container
+            b"BM",                # bmp
+        )
+        return any(imagen_bytes.startswith(firma) for firma in firmas_validas)
 
     def _soporta_multimonitor_publicidades(self, url, actualizar):
         try:
