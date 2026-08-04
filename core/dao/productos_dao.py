@@ -130,6 +130,28 @@ class ProductosSQLiteDAO:
         resultado = self.db.ejecutar_consulta(sql, (codigo,)) or []
         return resultado[0] if resultado else None
 
+    def listar_ofertas_por_codigos(self, codigos):
+        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
+        if not codigos:
+            return []
+
+        placeholders = ",".join("?" for _ in codigos)
+        sql = f"""
+        SELECT
+            codigo,
+            TIENE_OFERTA,
+            PRECIO_OFERTA,
+            OFERTA_DESDE,
+            OFERTA_HASTA,
+            OFERTA_ORIGEN,
+            OFERTA_CCODDIV,
+            OFERTA_DTO
+        FROM productos
+        WHERE codigo IN ({placeholders})
+        ORDER BY codigo ASC
+        """
+        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
+
     def limpiar_snapshot_ofertas(self):
         sql = """
         UPDATE productos

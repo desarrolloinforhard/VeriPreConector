@@ -515,8 +515,21 @@ class DispositivosEnvioService:
 
         return validos, omitidos
 
+    def _extraer_codigos_unicos(self, datos):
+        codigos = []
+        vistos = set()
+        for producto in datos:
+            if not producto or producto[0] is None:
+                continue
+            codigo = str(producto[0]).strip()
+            if not codigo or codigo in vistos:
+                continue
+            vistos.add(codigo)
+            codigos.append(codigo)
+        return codigos
+
     def _cargar_precios_adicionales_map(self, datos):
-        codigos = [str(producto[0]).strip() for producto in datos if producto and producto[0] is not None]
+        codigos = self._extraer_codigos_unicos(datos)
         filas = self.productos_sqlite_dao.listar_precios_adicionales_por_codigos(codigos)
         precios_map = {}
 
@@ -540,15 +553,12 @@ class DispositivosEnvioService:
         return precios_map
 
     def _cargar_ofertas_map(self, datos):
-        codigos = [str(producto[0]).strip() for producto in datos if producto and producto[0] is not None]
+        codigos = self._extraer_codigos_unicos(datos)
         ofertas_map = {}
 
-        for codigo in codigos:
-            fila = self.productos_sqlite_dao.obtener_oferta_por_codigo(codigo)
-            if not fila:
-                continue
-
-            _, tiene_oferta, precio_oferta, oferta_desde, oferta_hasta, oferta_origen, oferta_ccoddiv, oferta_dto = fila
+        filas = self.productos_sqlite_dao.listar_ofertas_por_codigos(codigos)
+        for fila in filas:
+            codigo, tiene_oferta, precio_oferta, oferta_desde, oferta_hasta, oferta_origen, oferta_ccoddiv, oferta_dto = fila
             ofertas_map[codigo] = {
                 "tiene_oferta": bool(tiene_oferta),
                 "precio_oferta": format(round(float(precio_oferta or 0), 2), ".2f") if tiene_oferta and precio_oferta is not None else None,
