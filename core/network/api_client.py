@@ -6,6 +6,8 @@ import requests
 class DispositivoAPIClient:
     STATUS_ENDPOINT = "/api/veri/status"
     PLAYER_CONFIG_ENDPOINT = "/api/veri/configuracion_player"
+    GO_UPC_KEY_ENDPOINT = "/api/veri/GO_UPC_KEY"
+    IMAGES_API_URL_ENDPOINT = "/api/veri/IMAGES_API_URL"
 
     def __init__(self, url_base, estado_callback=None):
         self.url_base = url_base
@@ -106,6 +108,56 @@ class DispositivoAPIClient:
             return data if isinstance(data, dict) else None
         except Exception as e:
             self.estado_callback(f"{url_config} -> error guardando config player: {e}")
+            return None
+
+    def set_go_upc_key(self, api_key, timeout=5):
+        url_config = self._base_host() + self.GO_UPC_KEY_ENDPOINT
+        try:
+            response = requests.post(
+                url_config,
+                json={"api_key": api_key},
+                headers={"Content-Type": "application/json"},
+                timeout=timeout,
+            )
+            if response.status_code != 200:
+                self.estado_callback(f"{url_config} -> error HTTP {response.status_code}: {response.text}")
+                return False, f"HTTP {response.status_code}"
+            return True, "API KEY enviada"
+        except Exception as e:
+            self.estado_callback(f"{url_config} -> error enviando GO-UPC key: {e}")
+            return False, f"Error: {e}"
+
+    def set_images_api_url(self, api_imagenes_url, timeout=5):
+        url_config = self._base_host() + self.IMAGES_API_URL_ENDPOINT
+        try:
+            response = requests.post(
+                url_config,
+                json={"url": api_imagenes_url},
+                headers={"Content-Type": "application/json"},
+                timeout=timeout,
+            )
+            if response.status_code == 200:
+                return True, "URL API imagenes enviada"
+            if response.status_code == 404:
+                self.estado_callback(f"{url_config} -> endpoint no disponible HTTP 404")
+                return False, "endpoint no disponible en este APK"
+            self.estado_callback(f"{url_config} -> error HTTP {response.status_code}: {response.text}")
+            return False, f"HTTP {response.status_code}"
+        except Exception as e:
+            self.estado_callback(f"{url_config} -> error enviando IMAGES_API_URL: {e}")
+            return False, f"Error: {e}"
+
+    def get_images_api_url(self, timeout=5):
+        url_config = self._base_host() + self.IMAGES_API_URL_ENDPOINT
+        try:
+            response = requests.get(url_config, timeout=timeout)
+            if response.status_code != 200:
+                self.estado_callback(f"{url_config} -> URL API imagenes no disponible HTTP {response.status_code}")
+                return None
+            data = response.json()
+            return data if isinstance(data, dict) else None
+        except Exception as e:
+            self.estado_callback(f"{url_config} -> error leyendo IMAGES_API_URL: {e}")
             return None
 
     def obtener_json_respuesta(self, response):

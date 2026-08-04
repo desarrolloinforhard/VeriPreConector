@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.28 - 2026-08-04
+
+- Added explicit Android configuration delivery for `IMAGES_API_URL` using the same SmartPrice value stored in configuration.
+- Product and logo configuration sends now push both `GO_UPC_KEY` and `IMAGES_API_URL` before the main payload.
+- Added a manual action in `Configuración > Conexión GO-UPC` to send `GO_UPC_KEY` plus the configured image API URL to the selected device.
+- Device status inspection now also reports the current `IMAGES_API_URL` exposed by the Android endpoint.
+
 ## 1.16.27 - 2026-08-03
 
 - Removed the operational barcode normalization flow and restored SmartPrice to work with a single `codigo` end to end.

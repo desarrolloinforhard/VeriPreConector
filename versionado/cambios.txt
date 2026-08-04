@@ -1,3 +1,9 @@
+Version 1.16.28
+- Se agrego soporte explicito para enviar `IMAGES_API_URL` al Android usando el mismo valor configurado en SmartPrice.
+- El envio de logo y el envio previo de configuracion ahora empujan juntos `GO_UPC_KEY` y `IMAGES_API_URL`.
+- Se agrego en `Configuración > Conexión GO-UPC` un boton manual para enviar esta configuracion al dispositivo seleccionado.
+- El estado del dispositivo ahora muestra tambien la `Images API URL` devuelta por `GET /api/veri/IMAGES_API_URL`.
+
 Pendiente en develop
 - Se rediseño la pantalla `Productos` con layout en dos columnas: listado local a la izquierda y panel lateral de vista previa/acciones a la derecha.
 - La vista previa ahora muestra descripcion, codigo, precio principal (`NPVP1`), estado de oferta y contador de precios adicionales sin abrir la ventana detalle.

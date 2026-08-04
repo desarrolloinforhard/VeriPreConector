@@ -311,16 +311,8 @@ class DispositivosEnvioService:
         try:
             if not api_key:
                 return False, "API KEY vacia"
-
-            host = base_url.split("/api")[0]
-            response = requests.post(
-                host + "/api/veri/GO_UPC_KEY",
-                json={"api_key": api_key},
-                timeout=5,
-            )
-            if response.status_code == 200:
-                return True, "API KEY enviada"
-            return False, f"HTTP {response.status_code}"
+            client = DispositivoAPIClient(base_url)
+            return client.set_go_upc_key(api_key)
         except Exception as e:
             return False, f"Error: {e}"
 
@@ -328,18 +320,8 @@ class DispositivosEnvioService:
         try:
             if not api_imagenes_url:
                 return False, "URL vacia"
-
-            host = base_url.split("/api")[0]
-            response = requests.post(
-                host + "/api/veri/IMAGES_API_URL",
-                json={"url": api_imagenes_url},
-                timeout=5,
-            )
-            if response.status_code == 200:
-                return True, "URL API imagenes enviada"
-            if response.status_code == 404:
-                return False, "endpoint no disponible en este APK"
-            return False, f"HTTP {response.status_code}"
+            client = DispositivoAPIClient(base_url)
+            return client.set_images_api_url(api_imagenes_url)
         except Exception as e:
             return False, f"Error: {e}"
 

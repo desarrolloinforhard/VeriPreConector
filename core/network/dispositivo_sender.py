@@ -393,3 +393,6 @@ class DispositivoSender:
 
     def enviar_go_upc_key(self, base_url, api_key):
         return self.envio_service.enviar_go_upc_key(base_url, api_key)
+
+    def enviar_config_imagenes(self, base_url, estado_callback=None):
+        return self.envio_service.enviar_config_imagenes(base_url, estado_callback=estado_callback)

@@ -1359,6 +1359,14 @@ class GUI_CONFIG:
         )
         self.btn_limpiar_go_upc.pack(side="left", padx=8)
 
+        self.btn_enviar_config_imagenes = ttk.Button(
+            frame_btn,
+            text="Enviar al dispositivo seleccionado",
+            bootstyle="info-outline",
+            command=self.command_enviar_config_imagenes_dispositivo,
+        )
+        self.btn_enviar_config_imagenes.pack(side="right")
+
         self.lbl_estado_go_upc = ttk.Label(self.labelframe_go_upc, text="", bootstyle="secondary", font=FONT_SUBTITLE)
         self.lbl_estado_go_upc.pack(anchor="w", pady=(10, 0))
 
@@ -1405,6 +1413,49 @@ class GUI_CONFIG:
         except Exception as e:
             self.lbl_estado_go_upc.config(text=f"Error guardando API KEY: {e}", bootstyle="danger")
             messagebox.showerror("GO-UPC", f"No se pudo guardar la API KEY.\n\n{e}")
+
+    def command_enviar_config_imagenes_dispositivo(self):
+        nombre, _dispositivo, base_url = self._obtener_dispositivo_seleccionado()
+        if not nombre:
+            messagebox.showwarning(
+                "Configurar dispositivo",
+                "Seleccione un dispositivo en la pestaña Dispositivos antes de enviar la configuración.",
+            )
+            return
+
+        self.btn_enviar_config_imagenes.config(state="disabled", text="Enviando...")
+        self.lbl_estado_go_upc.config(
+            text=f"Enviando GO-UPC + API de imágenes a {nombre}...",
+            bootstyle="info",
+        )
+
+        def tarea():
+            ventana_padre = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
+            sender = DispositivoSender(self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA"), ventana_padre)
+            mensajes = []
+
+            def actualizar(msg):
+                mensajes.append(msg)
+
+            sender.enviar_config_imagenes(base_url, estado_callback=actualizar)
+
+            def finalizar():
+                self.btn_enviar_config_imagenes.config(state="normal", text="Enviar al dispositivo seleccionado")
+                ultimo = mensajes[-1] if mensajes else "Configuración enviada."
+                error = any(str(msg).startswith("Advertencia:") or str(msg).startswith("Error:") for msg in mensajes)
+                self.lbl_estado_go_upc.config(
+                    text=ultimo,
+                    bootstyle="warning" if error else "success",
+                )
+                detalle = "\n".join(mensajes) if mensajes else "Sin detalle devuelto."
+                messagebox.showinfo(
+                    "Config enviada",
+                    f"Se intentó enviar GO-UPC + API de imágenes a {nombre}.\n\n{detalle}",
+                )
+
+            self._run_en_ui(finalizar)
+
+        threading.Thread(target=tarea, daemon=True).start()
 
     def _abrir_config_api_imagenes(self, event=None):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json")
@@ -1477,6 +1528,7 @@ class GUI_CONFIG:
         def tarea():
             client = DispositivoAPIClient(base_url)
             status = client.get_status_dispositivo()
+            images_api = client.get_images_api_url()
 
             def finalizar():
                 self.button_estado.config(state="normal", text="Estado")
@@ -1494,7 +1546,8 @@ class GUI_CONFIG:
                     f"Productos: {status.get('productos', '-')}\n"
                     f"Publicidades: {status.get('publicidades', '-')}\n"
                     f"Logo principal: {status.get('logo_principal', '-')}\n"
-                    f"GO-UPC key: {status.get('go_upc_key', '-')}"
+                    f"GO-UPC key: {status.get('go_upc_key', '-')}\n"
+                    f"Images API URL: {(images_api or {}).get('url', '-')}"
                 )
                 grupos_activos = status.get("grupos_activos") or []
                 if grupos_activos:
