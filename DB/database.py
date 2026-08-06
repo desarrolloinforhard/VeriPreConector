@@ -37,6 +37,9 @@ class SQLiteDB:
             self.crear_tabla_VERIPRE_EQUIPOS()
             self.crear_tabla_VERIPRE_productos()
             self.crear_tabla_VERIPRE_producto_precios()
+            self.crear_tabla_VERIPRE_ofertas_plu()
+            self.crear_tabla_VERIPRE_ofertas_plu_parametros()
+            self.crear_tabla_VERIPRE_ofertas_plu_productos()
             self.crear_tabla_VERIPRE_ad_medias()
             self.crear_tabla_VERIPRE_CONEXION()
             self.crear_tabla_API_KEY()
@@ -198,6 +201,92 @@ class SQLiteDB:
             )
         """
         logger.debug("Creando/verificando tabla SQLite: producto_precios")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_ofertas_plu(self):
+        """Crea la cabecera local de ofertas OFPLU."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ofertas_plu (
+                noferta INTEGER PRIMARY KEY,
+                tipo_oferta TEXT NOT NULL,
+                detalle TEXT,
+                fecha_inicio TEXT,
+                fecha_fin TEXT,
+                habilitada INTEGER DEFAULT 1,
+                ccoddiv TEXT,
+                origen TEXT DEFAULT 'OFPLU',
+                uid TEXT,
+                dFechaU TEXT
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: ofertas_plu")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_ofertas_plu_parametros(self):
+        """Crea la tabla local de parámetros de ofertas OFPLU."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ofertas_plu_parametros (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noferta INTEGER NOT NULL,
+                orden INTEGER NOT NULL,
+                variable TEXT NOT NULL,
+                cparametro0 TEXT,
+                cparametro1 TEXT,
+                cparametro2 TEXT,
+                cparametro3 TEXT,
+                cparametro4 TEXT,
+                cparametro5 TEXT,
+                cparametro6 TEXT,
+                cparametro7 TEXT,
+                cparametro8 TEXT,
+                cparametro9 TEXT,
+                hora_desde TEXT,
+                hora_hasta TEXT,
+                acumulador TEXT,
+                modifica_subtotal TEXT,
+                mixmatch_generico TEXT,
+                deshabilitada INTEGER DEFAULT 0,
+                relacion TEXT,
+                cantidad INTEGER,
+                tipo_valor TEXT,
+                signo TEXT,
+                valor_raw REAL,
+                valor_visible REAL,
+                modo TEXT,
+                detalle TEXT,
+                uid TEXT,
+                dFechaU TEXT,
+                UNIQUE(noferta, orden, variable)
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: ofertas_plu_parametros")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_ofertas_plu_productos(self):
+        """Crea la tabla local de proyección por producto de ofertas OFPLU."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ofertas_plu_productos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noferta INTEGER NOT NULL,
+                cref TEXT NOT NULL,
+                codigo TEXT,
+                descripcion TEXT,
+                precio_oferta REAL,
+                ndto REAL,
+                fecha_inicio TEXT,
+                fecha_fin TEXT,
+                ccoddiv TEXT,
+                cclavec TEXT,
+                cclavea TEXT,
+                nmodop TEXT,
+                nmodod TEXT,
+                detalle TEXT,
+                uid TEXT,
+                dFechaU TEXT,
+                UNIQUE(noferta, cref, ccoddiv, cclavec, cclavea)
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: ofertas_plu_productos")
         self.ejecutar_consulta(consulta)
 
     def crear_tabla_VERIPRE_EQUIPOS(self):

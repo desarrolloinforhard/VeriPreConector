@@ -13,12 +13,14 @@ from PIL import Image, ImageChops, ImageTk
 from ASSETS.path_img import *
 from ttkbootstrap.tableview import Tableview
 from ttkbootstrap.constants import *
+from ttkbootstrap.scrolled import ScrolledFrame
 from core.network.dispositivo_sender import DispositivoSender
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
 from core.services.dispositivos_envio_service import DispositivosEnvioService
 from core.services.device_discovery_service import DeviceDiscoveryService
 from ttkbootstrap.widgets import DateEntry
-from core.dao.productos_dao import ProductosSQLiteDAO
+from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
+from core.dao.ofertas_plu_sqlite_dao import OfertasPLUSQLiteDAO
 from core.ui.responsive import clamp, fit_toplevel_to_workarea
 from core.ui.theme_tokens import BUTTON_PAD_X, BUTTON_PAD_Y, FONT_BODY_BOLD, FONT_SUBTITLE, FONT_TITLE_LG, PANEL_PAD_X, PANEL_PAD_Y
 from core.services.image_resolver import ProductImageResolver
@@ -43,6 +45,13 @@ class ContenidoProducto:
         self._vigia_iniciado = False
         self._actualizacion_en_curso = False
         self._ultima_fecha_remota_procesada = self.config.get("ultima_sincronizacion_automatica_productos")
+        self._ultima_marca_catalogo_procesada = (
+            self.config.get("ultima_marca_catalogo_automatica")
+            or self._ultima_fecha_remota_procesada
+        )
+        self._ultima_marca_catalogo_detectada = None
+        self._marcas_catalogo_procesadas = dict(self.config.get("marcas_catalogo_automaticas") or {})
+        self._marcas_catalogo_detectadas = {}
         self._carga_local_en_curso = False
         self._productos_cargados = False
         self._envio_auto_en_curso = False
@@ -65,6 +74,7 @@ class ContenidoProducto:
         self.frame_header_productos.columnconfigure(1, weight=0)
         self.frame_header_productos.columnconfigure(2, weight=1)
         self.frame_header_productos.columnconfigure(3, weight=1)
+        self.frame_header_productos.columnconfigure(4, weight=1)
 
         self.photo_back_local = READ_IMG(PNG_Back(), 24, 24)
         self.button_back_local = ttk.Button(
@@ -85,13 +95,23 @@ class ContenidoProducto:
 
         self.label_oferta_estado = ttk.Label(
             self.frame_header_productos,
-            text="Oferta activa: -",
+            text="Oferta precio: -",
             anchor="w",
             justify="left",
             font=FONT_BODY_BOLD,
             bootstyle="warning",
         )
         self.label_oferta_estado.grid(row=0, column=2, sticky="e", padx=(16, 10))
+
+        self.label_ofplu_estado = ttk.Label(
+            self.frame_header_productos,
+            text="Oferta OFPLU: -",
+            anchor="w",
+            justify="left",
+            font=FONT_BODY_BOLD,
+            bootstyle="warning",
+        )
+        self.label_ofplu_estado.grid(row=0, column=3, sticky="e", padx=(10, 10))
 
         self.label_precios_extra_estado = ttk.Label(
             self.frame_header_productos,
@@ -101,7 +121,7 @@ class ContenidoProducto:
             font=FONT_BODY_BOLD,
             bootstyle="info",
         )
-        self.label_precios_extra_estado.grid(row=0, column=3, sticky="e", padx=(10, 0))
+        self.label_precios_extra_estado.grid(row=0, column=4, sticky="e", padx=(10, 0))
 
         self.crear_interfaz_table_view()
 
@@ -186,6 +206,9 @@ class ContenidoProducto:
 
     def _crear_productos_sqlite_dao(self, conexion=None):
         return ProductosSQLiteDAO(conexion or self.CONEXIONDBA)
+
+    def _crear_ofertas_plu_sqlite_dao(self, conexion=None):
+        return OfertasPLUSQLiteDAO(conexion or self.CONEXIONDBA)
 
     def _crear_image_resolver(self, estado_callback=None):
         config = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or self.config
@@ -288,13 +311,23 @@ class ContenidoProducto:
 
         self.label_preview_oferta = ttk.Label(
             self.frame_resumen_preview,
-            text="Oferta: NO",
+            text="Oferta precio: NO",
             bootstyle="secondary",
             font=("Segoe UI", 9, "bold"),
             anchor="w",
             justify="left",
         )
         self.label_preview_oferta.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+
+        self.label_preview_ofplu = ttk.Label(
+            self.frame_resumen_preview,
+            text="Oferta OFPLU: NO",
+            bootstyle="secondary",
+            font=("Segoe UI", 9, "bold"),
+            anchor="w",
+            justify="left",
+        )
+        self.label_preview_ofplu.grid(row=4, column=0, sticky="ew", pady=(2, 0))
 
         self.frame_img_producto = ttk.Frame(
             self.frame_side_panel,
@@ -375,15 +408,44 @@ class ContenidoProducto:
         self.label_preview_codigo.configure(text=f"Código: {codigo_txt}")
         self.label_preview_precio.configure(text=precio_txt)
 
+        oferta_simple = None
+        ofertas_plu = []
         if oferta and oferta.get("tiene_oferta"):
-            precio_oferta = f"${float(oferta.get('precio_oferta') or 0):,.2f}"
+            if oferta.get("es_ofplu"):
+                ofertas_plu = oferta.get("ofertas_plu") or []
+            else:
+                oferta_simple = oferta
+
+        if codigo_txt != "-" and not ofertas_plu:
+            try:
+                ofertas_plu = self._obtener_ofertas_plu_producto(codigo_txt)
+            except Exception:
+                ofertas_plu = []
+
+        if oferta_simple:
+            precio_oferta = f"${float(oferta_simple.get('precio_oferta') or 0):,.2f}"
             self.label_preview_oferta.configure(
-                text=f"Oferta: {precio_oferta}",
+                text=f"Oferta precio: {precio_oferta}",
                 bootstyle="warning",
             )
         else:
             self.label_preview_oferta.configure(
-                text="Oferta: NO",
+                text="Oferta precio: NO",
+                bootstyle="secondary",
+            )
+
+        if ofertas_plu:
+            primera = ofertas_plu[0]
+            detalle = primera.get("detalle_oferta") or primera.get("detalle") or "OFPLU"
+            cantidad = len(ofertas_plu)
+            sufijo = f" ({cantidad} promos)" if cantidad > 1 else " (1 promo)"
+            self.label_preview_ofplu.configure(
+                text=f"Oferta OFPLU: {detalle}{sufijo}",
+                bootstyle="warning",
+            )
+        else:
+            self.label_preview_ofplu.configure(
+                text="Oferta OFPLU: NO",
                 bootstyle="secondary",
             )
 
@@ -425,6 +487,7 @@ class ContenidoProducto:
         if not hasattr(self, "frame_buttons_productos") or not hasattr(self, "frame_side_panel"):
             return
         self.label_oferta_estado.configure(wraplength=max(int(ancho_util * 0.22), 180))
+        self.label_ofplu_estado.configure(wraplength=max(int(ancho_util * 0.24), 200))
         self.label_precios_extra_estado.configure(wraplength=max(int(ancho_util * 0.24), 200))
 
         ancho_total = max(ancho_util - (PANEL_PAD_X * 2), 920)
@@ -494,7 +557,9 @@ class ContenidoProducto:
         self.label_preview_codigo.configure(font=("Segoe UI", 8 if modo_layout == "compact" else 9))
         self.label_preview_precio.configure(font=("Segoe UI", 15 if modo_layout == "compact" else 18, "bold"))
         self.label_preview_oferta.configure(font=("Segoe UI", 8 if modo_layout == "compact" else 9, "bold"))
+        self.label_preview_ofplu.configure(font=("Segoe UI", 8 if modo_layout == "compact" else 9, "bold"))
         self.label_oferta_estado.configure(font=("Segoe UI", 9, "bold"))
+        self.label_ofplu_estado.configure(font=("Segoe UI", 9, "bold"))
         self.label_precios_extra_estado.configure(font=("Segoe UI", 9, "bold"))
         self.dt.configure(height=table_height)
 
@@ -1159,12 +1224,25 @@ class ContenidoProducto:
 
     def _registrar_sincronizacion_automatica_procesada(self, resultado):
         fechas = [str(producto[4]) for producto in resultado.get("productos", []) if len(producto) > 4 and producto[4]]
-        if not fechas:
+        if fechas:
+            fecha_procesada = max(fechas)
+            self._ultima_fecha_remota_procesada = fecha_procesada
+            self.config["ultima_sincronizacion_automatica_productos"] = fecha_procesada
+
+        marca_catalogo = self._ultima_marca_catalogo_detectada or self._ultima_marca_catalogo_procesada
+        if marca_catalogo:
+            self._ultima_marca_catalogo_procesada = str(marca_catalogo)
+            self.config["ultima_marca_catalogo_automatica"] = str(marca_catalogo)
+
+        if self._marcas_catalogo_detectadas:
+            for clave, marca in self._marcas_catalogo_detectadas.items():
+                if marca:
+                    self._marcas_catalogo_procesadas[clave] = str(marca)
+            self.config["marcas_catalogo_automaticas"] = dict(self._marcas_catalogo_procesadas)
+
+        if not fechas and not marca_catalogo and not self._marcas_catalogo_detectadas:
             return
 
-        fecha_procesada = max(fechas)
-        self._ultima_fecha_remota_procesada = fecha_procesada
-        self.config["ultima_sincronizacion_automatica_productos"] = fecha_procesada
         try:
             guardar_config(self.config)
         except Exception as e:
@@ -1421,6 +1499,25 @@ class ContenidoProducto:
         codigo_producto = str(item["values"][1]).strip() if len(item["values"]) > 1 else ""
         precio_producto = item["values"][2] if len(item["values"]) > 2 else "$0.00"
         oferta = self._obtener_oferta_producto(codigo_producto)
+        try:
+            fila_oferta_simple = self._crear_productos_sqlite_dao(self.CONEXIONDBA).obtener_oferta_por_codigo(codigo_producto)
+        except Exception:
+            fila_oferta_simple = None
+
+        oferta_simple = None
+        if fila_oferta_simple:
+            _, tiene_oferta_simple, precio_oferta_simple, oferta_simple_desde, oferta_simple_hasta, oferta_simple_origen, oferta_simple_ccoddiv, oferta_simple_dto = fila_oferta_simple
+            if bool(tiene_oferta_simple):
+                oferta_simple = {
+                    "precio_oferta": float(precio_oferta_simple or 0) if precio_oferta_simple is not None else None,
+                    "oferta_desde": oferta_simple_desde,
+                    "oferta_hasta": oferta_simple_hasta,
+                    "oferta_origen": oferta_simple_origen,
+                    "oferta_ccoddiv": oferta_simple_ccoddiv,
+                    "oferta_dto": float(oferta_simple_dto or 0) if oferta_simple_dto is not None else None,
+                }
+
+        ofertas_plu_modal = self._obtener_ofertas_plu_producto(codigo_producto)
         self._actualizar_resumen_preview(descripcion_producto, codigo_producto, precio_producto, oferta=oferta)
         self._actualizar_estado_precios_adicionales(codigo_producto)
         self._actualizar_estado_oferta(codigo_producto, oferta=oferta)
@@ -1517,41 +1614,162 @@ class ContenidoProducto:
             print(f"Error actualizando estado de precios adicionales: {e}")
             self.label_precios_extra_estado.config(text="Precios adicionales: error", bootstyle="danger")
 
-    def _obtener_oferta_producto(self, codigo_producto):
+    def _obtener_oferta_precio_producto(self, codigo_producto):
         try:
             fila = self._crear_productos_sqlite_dao(self.CONEXIONDBA).obtener_oferta_por_codigo(codigo_producto)
         except Exception as e:
             print(f"Error al obtener oferta desde SQLite: {e}")
-            return None
+            fila = None
 
-        if not fila:
-            return None
+        oferta_simple = None
+        if fila:
+            _, tiene_oferta, precio_oferta, oferta_desde, oferta_hasta, oferta_origen, oferta_ccoddiv, oferta_dto = fila
+            oferta_simple = {
+                "tiene_oferta": bool(tiene_oferta),
+                "precio_oferta": float(precio_oferta or 0) if precio_oferta is not None else None,
+                "oferta_desde": oferta_desde,
+                "oferta_hasta": oferta_hasta,
+                "oferta_origen": oferta_origen,
+                "oferta_ccoddiv": oferta_ccoddiv,
+                "oferta_dto": float(oferta_dto or 0) if oferta_dto is not None else None,
+                "es_ofplu": False,
+            }
 
-        _, tiene_oferta, precio_oferta, oferta_desde, oferta_hasta, oferta_origen, oferta_ccoddiv, oferta_dto = fila
-        return {
-            "tiene_oferta": bool(tiene_oferta),
-            "precio_oferta": float(precio_oferta or 0) if precio_oferta is not None else None,
-            "oferta_desde": oferta_desde,
-            "oferta_hasta": oferta_hasta,
-            "oferta_origen": oferta_origen,
-            "oferta_ccoddiv": oferta_ccoddiv,
-            "oferta_dto": float(oferta_dto or 0) if oferta_dto is not None else None,
-        }
+        return oferta_simple
+
+    def _obtener_oferta_producto(self, codigo_producto):
+        return self._obtener_oferta_precio_producto(codigo_producto)
 
     def _actualizar_estado_oferta(self, codigo_producto, oferta=None):
         try:
             oferta = oferta if oferta is not None else self._obtener_oferta_producto(codigo_producto)
-            if oferta and oferta.get("tiene_oferta"):
+            if oferta and oferta.get("tiene_oferta") and not oferta.get("es_ofplu"):
                 precio_txt = f"${float(oferta.get('precio_oferta') or 0):,.2f}"
-                texto = f"Oferta activa: SI ({precio_txt})"
+                texto = f"Oferta precio: SI ({precio_txt})"
                 estilo = "warning"
             else:
-                texto = "Oferta activa: NO"
+                texto = "Oferta precio: NO"
                 estilo = "secondary"
             self.label_oferta_estado.config(text=texto, bootstyle=estilo)
         except Exception as e:
             print(f"Error actualizando estado de oferta: {e}")
-            self.label_oferta_estado.config(text="Oferta activa: error", bootstyle="danger")
+            self.label_oferta_estado.config(text="Oferta precio: error", bootstyle="danger")
+
+        try:
+            ofertas_plu = self._obtener_ofertas_plu_producto(codigo_producto)
+            if ofertas_plu:
+                cantidad = len(ofertas_plu)
+                texto = f"Oferta OFPLU: SI ({cantidad} promo{'s' if cantidad != 1 else ''})"
+                estilo = "warning"
+            else:
+                texto = "Oferta OFPLU: NO"
+                estilo = "secondary"
+            self.label_ofplu_estado.config(text=texto, bootstyle=estilo)
+        except Exception as e:
+            print(f"Error actualizando estado de OFPLU: {e}")
+            self.label_ofplu_estado.config(text="Oferta OFPLU: error", bootstyle="danger")
+
+    def _obtener_ofertas_plu_producto(self, codigo_producto):
+        try:
+            filas = self._crear_ofertas_plu_sqlite_dao(self.CONEXIONDBA).listar_ofertas_por_codigo(codigo_producto)
+        except Exception as e:
+            print(f"Error al obtener OFPLU desde SQLite: {e}")
+            return []
+
+        ofertas = []
+        for fila in filas:
+            (
+                noferta,
+                tipo_oferta,
+                detalle_oferta,
+                fecha_inicio,
+                fecha_fin,
+                habilitada,
+                cref,
+                codigo,
+                descripcion,
+                precio_oferta,
+                ndto,
+                ccoddiv,
+                cclavec,
+                cclavea,
+                nmodop,
+                nmodod,
+                detalle_producto,
+            ) = fila
+
+            if not bool(habilitada):
+                continue
+            if not self._oferta_esta_vigente(fecha_inicio, fecha_fin):
+                continue
+
+            ofertas.append(
+                {
+                    "noferta": self._safe_int(noferta),
+                    "tipo_oferta": (tipo_oferta or "").strip(),
+                    "detalle_oferta": (detalle_oferta or "").strip() or "OFPLU",
+                    "fecha_inicio": fecha_inicio,
+                    "fecha_fin": fecha_fin,
+                    "cref": str(cref).strip() if cref is not None else "",
+                    "codigo": str(codigo).strip() if codigo is not None else "",
+                    "descripcion": (descripcion or "").strip(),
+                    "precio_oferta": self._safe_float(precio_oferta),
+                    "ndto": self._safe_float(ndto),
+                    "ccoddiv": (ccoddiv or "").strip() if ccoddiv is not None else None,
+                    "cclavec": (cclavec or "").strip() if cclavec is not None else None,
+                    "cclavea": (cclavea or "").strip() if cclavea is not None else None,
+                    "nmodop": nmodop,
+                    "nmodod": nmodod,
+                    "detalle_producto": (detalle_producto or "").strip() or None,
+                    "habilitada": True,
+                }
+            )
+
+        return ofertas
+
+    def _oferta_esta_vigente(self, fecha_inicio, fecha_fin):
+        hoy = date.today()
+        desde = self._parse_fecha_local(fecha_inicio)
+        hasta = self._parse_fecha_local(fecha_fin)
+        if desde and hoy < desde:
+            return False
+        if hasta and hoy > hasta:
+            return False
+        return True
+
+    def _parse_fecha_local(self, valor):
+        if not valor:
+            return None
+        texto = str(valor).strip()
+        formatos = (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d",
+            "%d/%m/%Y",
+            "%d/%m/%y",
+        )
+        for formato in formatos:
+            try:
+                return datetime.strptime(texto, formato).date()
+            except ValueError:
+                continue
+        return None
+
+    def _safe_float(self, valor):
+        try:
+            if valor in (None, ""):
+                return None
+            return float(valor)
+        except (TypeError, ValueError):
+            return None
+
+    def _safe_int(self, valor):
+        try:
+            if valor in (None, ""):
+                return None
+            return int(valor)
+        except (TypeError, ValueError):
+            return None
 
 
             
@@ -1576,17 +1794,17 @@ class ContenidoProducto:
         top.transient(self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"))
         self.top_level_abierto = top  # Guardar referencia al Toplevel
         top.title(f"Detalle del producto {codigo_producto}")
-        fit_toplevel_to_workarea(top, 860, 560, min_width=820, min_height=520)
+        fit_toplevel_to_workarea(top, 1040, 700, min_width=980, min_height=660)
         top.resizable(False, False)
         top.place_window_center()
 
         # Frame para organizar elementos
-        frame_info = ttk.Frame(top, width=820, height=500)
+        frame_info = ttk.Frame(top, width=980, height=620)
         frame_info.pack(fill="both", padx=14, pady=14, expand=True)
         frame_info.pack_propagate(False)
         frame_info.grid_propagate(False)
-        frame_info.columnconfigure(0, weight=1, minsize=500)
-        frame_info.columnconfigure(1, weight=0, minsize=280)
+        frame_info.columnconfigure(0, weight=1, minsize=560)
+        frame_info.columnconfigure(1, weight=0, minsize=340)
         frame_info.rowconfigure(0, weight=0)
         frame_info.rowconfigure(1, weight=1)
 
@@ -1617,7 +1835,9 @@ class ContenidoProducto:
             anchor="w",
             padding=(12, 10),
         ).grid(row=0, column=0, sticky="ew")
-        oferta = self._obtener_oferta_producto(codigo_producto)
+
+        oferta_simple = self._obtener_oferta_precio_producto(codigo_producto)
+        ofertas_plu_modal = self._obtener_ofertas_plu_producto(codigo_producto)
 
         frame_visual = ttk.Labelframe(frame_info, text="Vista previa", bootstyle="primary", padding=(12, 10))
         frame_visual.grid(row=0, column=1, rowspan=2, sticky="nsew", pady=(0, 0))
@@ -1643,7 +1863,7 @@ class ContenidoProducto:
             font=("Segoe UI", 11, "bold"),
             anchor="center",
             justify="center",
-            wraplength=240,
+            wraplength=300,
         ).grid(row=0, column=0, sticky="ew", pady=(0, 8))
 
         label_img = ttk.Label(frame_img, anchor="center")
@@ -1780,46 +2000,111 @@ class ContenidoProducto:
         btn_cargar_img = ttk.Button(frame_visual, text="Cargar Imagen", command=seleccionar_imagen, bootstyle="primary")
         btn_cargar_img.grid(row=2, column=0, padx=0, pady=(0, 12), sticky="ew")
 
-        frame_oferta = ttk.Labelframe(
+        frame_ofertas_scroll = ScrolledFrame(
             frame_visual,
-            text="Oferta activa (SQLite local)",
-            bootstyle="warning",
-            padding=(10, 10),
+            autohide=True,
+            bootstyle="light",
+            height=220,
         )
-        frame_oferta.grid(row=3, column=0, sticky="ew")
-        frame_oferta.columnconfigure(0, weight=1)
+        frame_ofertas_scroll.grid(row=3, column=0, sticky="nsew")
+        frame_ofertas_scroll.container.configure(height=220)
+        frame_ofertas_scroll.container.grid_propagate(False)
+        frame_ofertas_inner = frame_ofertas_scroll
+        frame_ofertas_inner.columnconfigure(0, weight=1)
 
-        oferta_activa = bool(oferta and oferta.get("tiene_oferta"))
-        precio_oferta = f"${float(oferta.get('precio_oferta') or 0):,.2f}" if oferta_activa else "-"
-        oferta_desde = str((oferta or {}).get("oferta_desde") or "-")
-        oferta_hasta = str((oferta or {}).get("oferta_hasta") or "-")
-        oferta_origen = str((oferta or {}).get("oferta_origen") or "-")
-        oferta_ccoddiv = str((oferta or {}).get("oferta_ccoddiv") or "-")
+        frame_oferta_precio = ttk.Labelframe(
+            frame_ofertas_inner,
+            text="Oferta precio (SQLite local)",
+            bootstyle="warning",
+            padding=(8, 8),
+        )
+        frame_oferta_precio.grid(row=0, column=0, sticky="ew")
+        frame_oferta_precio.columnconfigure(0, weight=1)
 
-        texto_estado_oferta = "Oferta activa" if oferta_activa else "Sin oferta activa"
-        estilo_estado_oferta = "warning" if oferta_activa else "secondary"
-        precio_oferta_estilo = "success" if oferta_activa else "secondary"
-        detalle_desde = f"Desde: {oferta_desde}" if oferta_activa else "Desde: -"
-        detalle_hasta = f"Hasta: {oferta_hasta}" if oferta_activa else "Hasta: -"
-        detalle_origen = f"Origen: {oferta_origen}" if oferta_activa else "Origen: -"
-        detalle_ccoddiv = f"CCODDIV: {oferta_ccoddiv}" if oferta_activa else "CCODDIV: -"
+        if oferta_simple:
+            ttk.Label(
+                frame_oferta_precio,
+                text="Oferta precio activa",
+                bootstyle="warning",
+                font=("Segoe UI", 10, "bold"),
+            ).grid(row=0, column=0, sticky="w", pady=(0, 4))
+            ttk.Label(
+                frame_oferta_precio,
+                text=f"Precio oferta: ${float(oferta_simple.get('precio_oferta') or 0):,.2f}",
+                font=("Segoe UI", 14, "bold"),
+                bootstyle="success",
+            ).grid(row=1, column=0, sticky="w", pady=(0, 6))
+            ttk.Label(frame_oferta_precio, text=f"Desde: {oferta_simple.get('oferta_desde') or '-'}", bootstyle="secondary").grid(row=2, column=0, sticky="w", pady=2)
+            ttk.Label(frame_oferta_precio, text=f"Hasta: {oferta_simple.get('oferta_hasta') or '-'}", bootstyle="secondary").grid(row=3, column=0, sticky="w", pady=2)
+            ttk.Label(frame_oferta_precio, text=f"Origen: {oferta_simple.get('oferta_origen') or '-'}", bootstyle="secondary").grid(row=4, column=0, sticky="w", pady=(4, 2))
+            ttk.Label(frame_oferta_precio, text=f"CCODDIV: {oferta_simple.get('oferta_ccoddiv') or '-'}", bootstyle="secondary").grid(row=5, column=0, sticky="w", pady=2)
+        else:
+            ttk.Label(
+                frame_oferta_precio,
+                text="NO",
+                bootstyle="secondary",
+                font=("Segoe UI", 14, "bold"),
+            ).grid(row=0, column=0, sticky="w")
+            ttk.Label(
+                frame_oferta_precio,
+                text="Sin oferta precio activa",
+                bootstyle="secondary",
+            ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        ttk.Label(
-            frame_oferta,
-            text=texto_estado_oferta,
-            bootstyle=estilo_estado_oferta,
-            font=("Segoe UI", 11, "bold"),
-        ).grid(row=0, column=0, sticky="w", pady=(0, 6))
-        ttk.Label(
-            frame_oferta,
-            text=precio_oferta,
-            font=("Segoe UI", 15, "bold"),
-            bootstyle=precio_oferta_estilo,
-        ).grid(row=1, column=0, sticky="w", pady=(0, 8))
-        ttk.Label(frame_oferta, text=detalle_desde, bootstyle="secondary").grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Label(frame_oferta, text=detalle_hasta, bootstyle="secondary").grid(row=3, column=0, sticky="w", pady=2)
-        ttk.Label(frame_oferta, text=detalle_origen, bootstyle="secondary").grid(row=4, column=0, sticky="w", pady=(6, 2))
-        ttk.Label(frame_oferta, text=detalle_ccoddiv, bootstyle="secondary").grid(row=5, column=0, sticky="w", pady=2)
+        frame_ofplu = ttk.Labelframe(
+            frame_ofertas_inner,
+            text="Oferta OFPLU (SQLite local)",
+            bootstyle="info",
+            padding=(8, 8),
+        )
+        frame_ofplu.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        frame_ofplu.columnconfigure(0, weight=1)
+
+        if ofertas_plu_modal:
+            primera_ofplu = ofertas_plu_modal[0]
+            detalle_ofplu = primera_ofplu.get("detalle_oferta") or primera_ofplu.get("detalle") or "-"
+            cantidad_ofplu = len(ofertas_plu_modal)
+            precio_ofplu = primera_ofplu.get("precio_oferta")
+            ttk.Label(
+                frame_ofplu,
+                text="Oferta OFPLU activa",
+                bootstyle="info",
+                font=("Segoe UI", 10, "bold"),
+            ).grid(row=0, column=0, sticky="w", pady=(0, 4))
+            if precio_ofplu is not None:
+                ttk.Label(
+                    frame_ofplu,
+                    text=f"Precio OFPLU: ${float(precio_ofplu or 0):,.2f}",
+                    font=("Segoe UI", 14, "bold"),
+                    bootstyle="success",
+                ).grid(row=1, column=0, sticky="w", pady=(0, 6))
+                fila_ofplu = 2
+            else:
+                fila_ofplu = 1
+            ttk.Label(
+                frame_ofplu,
+                text=f"Detalle: {detalle_ofplu}",
+                bootstyle="secondary",
+                wraplength=220,
+                justify="left",
+            ).grid(row=fila_ofplu, column=0, sticky="w", pady=2)
+            ttk.Label(frame_ofplu, text=f"Promociones activas: {cantidad_ofplu}", bootstyle="secondary").grid(row=fila_ofplu + 1, column=0, sticky="w", pady=2)
+            ttk.Label(frame_ofplu, text=f"Desde: {primera_ofplu.get('fecha_inicio') or '-'}", bootstyle="secondary").grid(row=fila_ofplu + 2, column=0, sticky="w", pady=2)
+            ttk.Label(frame_ofplu, text=f"Hasta: {primera_ofplu.get('fecha_fin') or '-'}", bootstyle="secondary").grid(row=fila_ofplu + 3, column=0, sticky="w", pady=2)
+            ttk.Label(frame_ofplu, text=f"Origen: {primera_ofplu.get('origen') or 'OFPLU'}", bootstyle="secondary").grid(row=fila_ofplu + 4, column=0, sticky="w", pady=(4, 2))
+            ttk.Label(frame_ofplu, text=f"CCODDIV: {primera_ofplu.get('ccoddiv') or '-'}", bootstyle="secondary").grid(row=fila_ofplu + 5, column=0, sticky="w", pady=2)
+        else:
+            ttk.Label(
+                frame_ofplu,
+                text="NO",
+                bootstyle="secondary",
+                font=("Segoe UI", 14, "bold"),
+            ).grid(row=0, column=0, sticky="w")
+            ttk.Label(
+                frame_ofplu,
+                text="Sin oferta OFPLU activa",
+                bootstyle="secondary",
+            ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
     def registrar_cambio_producto(self, codigo_producto):
             """Registra que un producto ha sido modificado."""
@@ -1911,6 +2196,8 @@ class ContenidoProducto:
                     time.sleep(5)
                     continue
 
+                nueva_sqlite = None
+                nueva_sybase = None
                 try:
                     print(f"\rRevisión en progreso{puntos[anim_index % 4]}   ", end="")
                     anim_index += 1
@@ -1929,25 +2216,34 @@ class ContenidoProducto:
                         password=self.CONEXIONDBA_SYBASE.contrasena,
                         dsn=self.CONEXIONDBA_SYBASE.dsn_name
                     )
-                    sql_sybase = """
-                    SELECT MAX(dFechaU) FROM ARTICULO 
-                    WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
-                    """
-                    res_sybase = nueva_sybase.ejecutar_consulta(sql_sybase)
-                    fecha_remota = res_sybase[0][0] if res_sybase else None
+                    dao_sybase = ProductosSybaseDAO(nueva_sybase)
+                    marcas_remotas = dao_sybase.obtener_marcas_remotas_catalogo()
+                    marca_remota = max((str(marca) for marca in marcas_remotas.values() if marca), default=None)
 
-                    if fecha_remota:
+                    if marca_remota:
                         fmt = "%Y-%m-%d %H:%M:%S"
                         f_local = datetime.strptime(str(fecha_local), fmt)
-                        f_remota = datetime.strptime(str(fecha_remota), fmt)
+                        f_remota = datetime.strptime(str(marca_remota), fmt)
 
-                        fecha_remota_key = str(fecha_remota)
-                        if f_remota > f_local and fecha_remota_key != self._ultima_fecha_remota_procesada:
-                            self._ultima_fecha_remota_procesada = fecha_remota_key
-                            print("🟡 Nueva actualización detectada. Ejecutando actualización...")
+                        marca_remota_key = str(marca_remota)
+                        if f_remota > f_local and marca_remota_key != self._ultima_marca_catalogo_procesada:
+                            bloques_cambiados = []
+                            for clave, marca in marcas_remotas.items():
+                                marca_str = str(marca) if marca else None
+                                if marca_str and marca_str != self._marcas_catalogo_procesadas.get(clave):
+                                    bloques_cambiados.append(clave)
+
+                            self._ultima_marca_catalogo_detectada = marca_remota_key
+                            self._marcas_catalogo_detectadas = {
+                                clave: str(marca)
+                                for clave, marca in marcas_remotas.items()
+                                if marca and clave in bloques_cambiados
+                            }
+                            detalle_bloques = ", ".join(bloques_cambiados) if bloques_cambiados else "catalogo"
+                            print(f"🟡 Nueva actualización detectada en: {detalle_bloques}. Ejecutando actualización...")
                             self._notificar_sistema(
                                 "Actualizacion automatica",
-                                "Se detectaron cambios en productos. Actualizando catalogo...",
+                                f"Se detectaron cambios en {detalle_bloques}. Actualizando datos...",
                             )
                             self._run_en_ui(self.command_actualizar_datos, True)
                             continue

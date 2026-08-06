@@ -1,8 +1,22 @@
+Version 1.16.30
+- La sincronizacion automatica ahora detecta cambios no solo en `ARTICULO`, sino tambien en `CODBARP`, `PACKS_MINI`, `ATIPICAS`, `OFERTAT` y `OFERTAL`.
+- El vigia automatico registra en consola que bloque del catalogo/promociones disparo la actualizacion: productos, codigos, packs, ofertas de precio u OFPLU.
+- La UI de productos separa claramente `Oferta precio` y `Oferta OFPLU` para que puedan convivir sin mezclarse.
+- La ventana detalle del producto replica esa separacion, agrega scroll solo en el panel de ofertas y gana ancho para mejorar la lectura.
+
 Version 1.16.28
 - Se agrego soporte explicito para enviar `IMAGES_API_URL` al Android usando el mismo valor configurado en SmartPrice.
 - El envio de logo y el envio previo de configuracion ahora empujan juntos `GO_UPC_KEY` y `IMAGES_API_URL`.
 - Se agrego en `Configuración > Conexión GO-UPC` un boton manual para enviar esta configuracion al dispositivo seleccionado.
 - El estado del dispositivo ahora muestra tambien la `Images API URL` devuelta por `GET /api/veri/IMAGES_API_URL`.
+
+Nota funcional 2026-08-05 - Ofertas por precio
+- SmartPrice hoy toma la oferta activa desde `ATIPICAS`, y esa sigue siendo la fuente operativa actual para sincronizacion y envio.
+- En el sistema origen, la oferta de precio por producto se arma tomando como base `ARTICULO.NPVP5`.
+- El ejecutable de gestion de ofertas (`cbABMoferta_WS.exe` / `dbabmoferta_nn.exe`) usa `NPVP5` al configurar ofertas por producto dentro de `OD.Precios`.
+- Cuando la oferta se confirma con vigencia (`desde` / `hasta`) y demas parametros, el dato efectivo queda persistido en `ATIPICAS`.
+- Restriccion observada en el sistema origen: si `NPVP5` ya esta ocupado en `PACKS_MINI`, el ABM de ofertas no deja crear esa oferta.
+- Implicancia para futuras fases: `ATIPICAS` sigue siendo la fuente de verdad para detectar oferta activa, pero `NPVP5` debe considerarse como origen funcional del precio de oferta al definir integracion con Android y futuras validaciones.
 
 Pendiente en develop
 - Se rediseño la pantalla `Productos` con layout en dos columnas: listado local a la izquierda y panel lateral de vista previa/acciones a la derecha.

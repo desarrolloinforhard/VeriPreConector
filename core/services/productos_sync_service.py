@@ -1,5 +1,10 @@
 from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
+from core.logging.logger import get_logger
 from core.services.barcode_normalizer import limpiar_codigo
+from core.services.ofertas_plu_sync_service import OfertasPLUSyncService
+
+
+logger = get_logger(__name__)
 
 
 class ProductosSyncService:
@@ -23,6 +28,7 @@ class ProductosSyncService:
         self.sybase_db = sybase_db
         self.sqlite_dao = ProductosSQLiteDAO(sqlite_db)
         self.sybase_dao = ProductosSybaseDAO(sybase_db)
+        self.ofertas_plu_sync_service = OfertasPLUSyncService(sqlite_db, sybase_db)
 
     def obtener_productos_locales(self):
         return self.sqlite_dao.listar_todos()
@@ -50,6 +56,7 @@ class ProductosSyncService:
 
         articulos_normalizados = self._normalizar_articulos(articulos)
         ofertas_por_cref = self._buscar_ofertas_activas(progress_callback)
+        snapshot_ofplu = self._sync_ofertas_plu_snapshot(progress_callback)
 
         if not articulos_normalizados:
             self._sync_snapshot_ofertas(ofertas_por_cref, progress_callback)
@@ -61,6 +68,7 @@ class ProductosSyncService:
                 "codigos": [],
                 "precios_adicionales": [],
                 "ofertas_activas": list(ofertas_por_cref.values()),
+                "ofertas_plu": snapshot_ofplu,
                 "total": 0,
             }
 
@@ -79,6 +87,7 @@ class ProductosSyncService:
             "codigos": [producto["codigo"] for producto in productos_resueltos],
             "precios_adicionales": self._flatten_precios_adicionales(productos_resueltos),
             "ofertas_activas": list(ofertas_por_cref.values()),
+            "ofertas_plu": snapshot_ofplu,
             "total": total,
         }
 
@@ -223,14 +232,17 @@ class ProductosSyncService:
             if not cref or cref in ofertas_por_cref:
                 continue
 
+            oferta_ccoddiv_txt = str(oferta_ccoddiv).strip() if oferta_ccoddiv is not None else None
+            oferta_origen = "ATIPICAS_PSO" if oferta_ccoddiv_txt == "PSO" else "ATIPICAS"
+
             ofertas_por_cref[cref] = {
                 "cref": cref,
                 "tiene_oferta": True,
                 "precio_oferta": round(self._to_float(precio_oferta), 2),
                 "oferta_desde": oferta_desde,
                 "oferta_hasta": oferta_hasta,
-                "oferta_origen": "ATIPICAS",
-                "oferta_ccoddiv": str(oferta_ccoddiv).strip() if oferta_ccoddiv is not None else None,
+                "oferta_origen": oferta_origen,
+                "oferta_ccoddiv": oferta_ccoddiv_txt,
                 "oferta_dto": self._to_float(oferta_dto),
                 "cclavec": str(cclavec).strip() if cclavec is not None else None,
             }
@@ -388,6 +400,14 @@ class ProductosSyncService:
         self.sqlite_dao.limpiar_snapshot_ofertas()
         self.sqlite_dao.aplicar_snapshot_ofertas_por_cref(list(ofertas_por_cref.values()))
         self._notify(progress_callback, f"Snapshot local de ofertas actualizado: {len(ofertas_por_cref)} activas.", 100, 100)
+
+    def _sync_ofertas_plu_snapshot(self, progress_callback=None):
+        try:
+            return self.ofertas_plu_sync_service.sincronizar(progress_callback=progress_callback)
+        except Exception:
+            logger.exception("Error sincronizando snapshot OFPLU")
+            self._notify(progress_callback, "Advertencia: no se pudo sincronizar snapshot OFPLU.", 100, 100)
+            return {"ofertas": [], "parametros": [], "productos": [], "total_ofertas": 0}
 
     def _normalizar_nroprecio(self, nroprecio):
         if nroprecio is None:

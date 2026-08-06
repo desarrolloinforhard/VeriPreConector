@@ -277,6 +277,47 @@ class ProductosSybaseDAO:
     def __init__(self, db):
         self.db = db
 
+    def obtener_marcas_remotas_catalogo(self):
+        consultas = {
+            "productos": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.ARTICULO
+                WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
+            """,
+            "codigos": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.CODBARP
+            """,
+            "packs": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.PACKS_MINI
+            """,
+            "ofertas_precio": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.ATIPICAS
+                WHERE CCLAVEC = 'O'
+            """,
+            "ofertas_plu_detalle": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.OFERTAT
+            """,
+            "ofertas_plu_config": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.OFERTAL
+            """,
+        }
+        marcas = {}
+        for clave, sql in consultas.items():
+            resultado = self.db.ejecutar_consulta(sql) or []
+            marcas[clave] = resultado[0][0] if resultado and resultado[0] else None
+        return marcas
+
+    def obtener_marca_remota_catalogo(self):
+        marcas = [marca for marca in self.obtener_marcas_remotas_catalogo().values() if marca]
+        if not marcas:
+            return None
+        return max(str(marca) for marca in marcas)
+
     def listar_articulos_completos(self):
         sql = """
         SELECT
@@ -411,6 +452,11 @@ class ProductosSybaseDAO:
             a.CCLAVEC
         FROM DBA.ATIPICAS a
         WHERE a.CCLAVEC = 'O'
+          AND (
+                RTRIM(a.CCODDIV) = 'PSO'
+                OR a.CCLAVEA IS NULL
+                OR RTRIM(a.CCLAVEA) <> 'P'
+              )
           AND DATE(a.DFECINI) <= CURRENT DATE
           AND (a.DFECFIN IS NULL OR DATE(a.DFECFIN) >= CURRENT DATE)
         ORDER BY a.CREF ASC, a.DFECINI DESC, a.DFECFIN DESC, a.NPRECIO ASC

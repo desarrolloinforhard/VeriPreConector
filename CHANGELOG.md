@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.30 - 2026-08-06
+
+- Extended automatic synchronization so the background watcher now detects changes in products, secondary barcodes, packs, price offers, and OFPLU data instead of only `ARTICULO`.
+- Added block-level diagnostics for automatic sync, reporting whether the change came from products, codes, packs, price offers, or OFPLU structures.
+- Split product offer handling in SmartPrice into `Oferta precio` and `Oferta OFPLU`, allowing both to coexist without visual or payload collisions.
+- Updated the product detail modal to mirror the new offer separation, add scoped scrolling for the offer panel, and widen the layout for better readability.
+
 ## 1.16.29 - 2026-08-04
 
 - Hardened product DELETE fallback so SmartPrice first tries `/api/veri/batch_productos` and then `/api/veri/ALL_PRODUCTOS` without dropping the `/api` prefix.
