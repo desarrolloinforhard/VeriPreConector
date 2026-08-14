@@ -1,5 +1,10 @@
 from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
-from core.services.barcode_normalizer import limpiar_codigo, normalizar_codigo_para_envio
+from core.logging.logger import get_logger
+from core.services.barcode_normalizer import limpiar_codigo
+from core.services.ofertas_plu_sync_service import OfertasPLUSyncService
+
+
+logger = get_logger(__name__)
 
 
 class ProductosSyncService:
@@ -23,6 +28,7 @@ class ProductosSyncService:
         self.sybase_db = sybase_db
         self.sqlite_dao = ProductosSQLiteDAO(sqlite_db)
         self.sybase_dao = ProductosSybaseDAO(sybase_db)
+        self.ofertas_plu_sync_service = OfertasPLUSyncService(sqlite_db, sybase_db)
 
     def obtener_productos_locales(self):
         return self.sqlite_dao.listar_todos()
@@ -50,6 +56,7 @@ class ProductosSyncService:
 
         articulos_normalizados = self._normalizar_articulos(articulos)
         ofertas_por_cref = self._buscar_ofertas_activas(progress_callback)
+        snapshot_ofplu = self._sync_ofertas_plu_snapshot(progress_callback)
 
         if not articulos_normalizados:
             self._sync_snapshot_ofertas(ofertas_por_cref, progress_callback)
@@ -61,6 +68,7 @@ class ProductosSyncService:
                 "codigos": [],
                 "precios_adicionales": [],
                 "ofertas_activas": list(ofertas_por_cref.values()),
+                "ofertas_plu": snapshot_ofplu,
                 "total": 0,
             }
 
@@ -79,6 +87,7 @@ class ProductosSyncService:
             "codigos": [producto["codigo"] for producto in productos_resueltos],
             "precios_adicionales": self._flatten_precios_adicionales(productos_resueltos),
             "ofertas_activas": list(ofertas_por_cref.values()),
+            "ofertas_plu": snapshot_ofplu,
             "total": total,
         }
 
@@ -103,13 +112,15 @@ class ProductosSyncService:
             if not articulo or len(articulo) < 15:
                 continue
 
+            cref = str(articulo[0]).strip() if articulo[0] is not None else ""
+            if not cref:
+                continue
+
             articulos_normalizados.append(
                 {
-                    "cref": articulo[0],
+                    "cref": cref,
                     "descripcion": articulo[1],
                     "codigo": limpiar_codigo(articulo[2]),
-                    "codigo_original": limpiar_codigo(articulo[2]),
-                    "codigo_normalizado": normalizar_codigo_para_envio(articulo[2]),
                     "ctipoiva": articulo[3],
                     "precios_base": {
                         "npvp1": self._to_float(articulo[4]),
@@ -139,7 +150,10 @@ class ProductosSyncService:
 
         codbarp_dict = {}
         for cref, cdetalle, ccodebar, dfechau in datos_codbarp:
-            codbarp_dict.setdefault(cref, []).append((cdetalle, ccodebar, dfechau))
+            cref_key = str(cref).strip() if cref is not None else ""
+            if not cref_key:
+                continue
+            codbarp_dict.setdefault(cref_key, []).append((cdetalle, ccodebar, dfechau))
 
         total = len(articulos) + len(datos_codbarp)
         total = max(total, 1)
@@ -149,26 +163,22 @@ class ProductosSyncService:
 
         for producto in articulos:
             codigo = limpiar_codigo(producto.get("codigo"))
-            codigo_normalizado = limpiar_codigo(producto.get("codigo_normalizado")) or codigo
-            if codigo and codigo_normalizado not in codigos_agregados:
+            if codigo and codigo not in codigos_agregados:
                 productos_completos.append(producto)
-                codigos_agregados.add(codigo_normalizado)
+                codigos_agregados.add(codigo)
             progreso += 1
             if progreso % 10 == 0:
                 self._notify(progress_callback, None, progreso, total)
 
             for cdetalle_extra, ccodebar_extra, dfechau_extra in codbarp_dict.get(producto["cref"], []):
                 codigo_extra = limpiar_codigo(ccodebar_extra)
-                codigo_extra_normalizado = normalizar_codigo_para_envio(ccodebar_extra)
-                if codigo_extra and codigo_extra_normalizado not in codigos_agregados:
+                if codigo_extra and codigo_extra not in codigos_agregados:
                     producto_extra = dict(producto)
                     producto_extra["descripcion"] = cdetalle_extra
                     producto_extra["codigo"] = codigo_extra
-                    producto_extra["codigo_original"] = codigo_extra
-                    producto_extra["codigo_normalizado"] = codigo_extra_normalizado
                     producto_extra["dfechau"] = dfechau_extra or producto.get("dfechau")
                     productos_completos.append(producto_extra)
-                    codigos_agregados.add(codigo_extra_normalizado)
+                    codigos_agregados.add(codigo_extra)
                 progreso += 1
                 if progreso % 10 == 0:
                     self._notify(progress_callback, None, progreso, total)
@@ -195,9 +205,12 @@ class ProductosSyncService:
         packs_por_cref = {}
 
         for cref, cantidad, nroprecio, nprecio, cdetalle, dfechau in packs:
-            packs_por_cref.setdefault(cref, []).append(
+            cref_key = str(cref).strip() if cref is not None else ""
+            if not cref_key:
+                continue
+            packs_por_cref.setdefault(cref_key, []).append(
                 {
-                    "cref": cref,
+                    "cref": cref_key,
                     "cantidad": self._to_int(cantidad),
                     "nroprecio": self._normalizar_nroprecio(nroprecio),
                     "nprecio": self._to_float(nprecio),
@@ -219,14 +232,17 @@ class ProductosSyncService:
             if not cref or cref in ofertas_por_cref:
                 continue
 
+            oferta_ccoddiv_txt = str(oferta_ccoddiv).strip() if oferta_ccoddiv is not None else None
+            oferta_origen = "ATIPICAS_PSO" if oferta_ccoddiv_txt == "PSO" else "ATIPICAS"
+
             ofertas_por_cref[cref] = {
                 "cref": cref,
                 "tiene_oferta": True,
                 "precio_oferta": round(self._to_float(precio_oferta), 2),
                 "oferta_desde": oferta_desde,
                 "oferta_hasta": oferta_hasta,
-                "oferta_origen": "ATIPICAS",
-                "oferta_ccoddiv": str(oferta_ccoddiv).strip() if oferta_ccoddiv is not None else None,
+                "oferta_origen": oferta_origen,
+                "oferta_ccoddiv": oferta_ccoddiv_txt,
                 "oferta_dto": self._to_float(oferta_dto),
                 "cclavec": str(cclavec).strip() if cclavec is not None else None,
             }
@@ -253,7 +269,7 @@ class ProductosSyncService:
             precios_adicionales = self._resolver_precios_adicionales_producto(
                 producto,
                 precios_finales,
-                packs_por_cref.get(producto["cref"], []),
+                packs_por_cref.get(str(producto["cref"]).strip(), []),
             )
             oferta = ofertas_por_cref.get(str(producto["cref"]).strip()) or {}
 
@@ -262,8 +278,6 @@ class ProductosSyncService:
                     "cref": producto["cref"],
                     "descripcion": producto["descripcion"],
                     "codigo": limpiar_codigo(producto.get("codigo")),
-                    "codigo_original": limpiar_codigo(producto.get("codigo_original") or producto.get("codigo")),
-                    "codigo_normalizado": limpiar_codigo(producto.get("codigo_normalizado")) or normalizar_codigo_para_envio(producto.get("codigo")),
                     "precio_num": precio_principal,
                     "precio": self._format_precio(precio_principal),
                     "dfechau": producto.get("dfechau"),
@@ -386,6 +400,14 @@ class ProductosSyncService:
         self.sqlite_dao.limpiar_snapshot_ofertas()
         self.sqlite_dao.aplicar_snapshot_ofertas_por_cref(list(ofertas_por_cref.values()))
         self._notify(progress_callback, f"Snapshot local de ofertas actualizado: {len(ofertas_por_cref)} activas.", 100, 100)
+
+    def _sync_ofertas_plu_snapshot(self, progress_callback=None):
+        try:
+            return self.ofertas_plu_sync_service.sincronizar(progress_callback=progress_callback)
+        except Exception:
+            logger.exception("Error sincronizando snapshot OFPLU")
+            self._notify(progress_callback, "Advertencia: no se pudo sincronizar snapshot OFPLU.", 100, 100)
+            return {"ofertas": [], "parametros": [], "productos": [], "total_ofertas": 0}
 
     def _normalizar_nroprecio(self, nroprecio):
         if nroprecio is None:

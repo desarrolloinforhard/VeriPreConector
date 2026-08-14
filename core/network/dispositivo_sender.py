@@ -8,6 +8,7 @@ from core.dao.dispositivos_dao import DispositivosDAO
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
 from core.services.device_discovery_service import DeviceDiscoveryService
 from core.services.dispositivos_envio_service import DispositivosEnvioService
+from core.ui.responsive import fit_toplevel_to_workarea
 
 
 class DispositivoSender:
@@ -35,7 +36,7 @@ class DispositivoSender:
         resultado = []
         top = ttk.Toplevel(self.parent_tk)
         top.title("Seleccionar Dispositivos")
-        top.geometry("560x560")
+        fit_toplevel_to_workarea(top, 560, 560, min_width=500, min_height=460)
         top.place_window_center()
         top.grab_set()
 
@@ -279,7 +280,7 @@ class DispositivoSender:
     def _ventana_estado_envio(self, urls, url_a_nombre):
         top = ttk.Toplevel(self.parent_tk)
         top.title("Estado de Envio a Dispositivos")
-        top.geometry("600x500")
+        fit_toplevel_to_workarea(top, 600, 500, min_width=520, min_height=420)
         top.place_window_center()
         top.grab_set()
 
@@ -392,3 +393,6 @@ class DispositivoSender:
 
     def enviar_go_upc_key(self, base_url, api_key):
         return self.envio_service.enviar_go_upc_key(base_url, api_key)
+
+    def enviar_config_imagenes(self, base_url, estado_callback=None):
+        return self.envio_service.enviar_config_imagenes(base_url, estado_callback=estado_callback)

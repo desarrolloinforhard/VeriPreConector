@@ -16,9 +16,7 @@ class ProductosSQLiteDAO:
             OFERTA_HASTA,
             OFERTA_ORIGEN,
             OFERTA_CCODDIV,
-            OFERTA_DTO,
-            CODIGO_ORIGINAL,
-            CODIGO_NORMALIZADO
+            OFERTA_DTO
         FROM productos
         ORDER BY descripcion
         """
@@ -41,10 +39,9 @@ class ProductosSQLiteDAO:
         INSERT OR REPLACE INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
             TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
-            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -53,10 +50,9 @@ class ProductosSQLiteDAO:
         INSERT INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
             TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO,
-            CODIGO_ORIGINAL, CODIGO_NORMALIZADO
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(codigo) DO UPDATE SET
             CREF = excluded.CREF,
             descripcion = excluded.descripcion,
@@ -68,9 +64,7 @@ class ProductosSQLiteDAO:
             OFERTA_HASTA = excluded.OFERTA_HASTA,
             OFERTA_ORIGEN = excluded.OFERTA_ORIGEN,
             OFERTA_CCODDIV = excluded.OFERTA_CCODDIV,
-            OFERTA_DTO = excluded.OFERTA_DTO,
-            CODIGO_ORIGINAL = excluded.CODIGO_ORIGINAL,
-            CODIGO_NORMALIZADO = excluded.CODIGO_NORMALIZADO
+            OFERTA_DTO = excluded.OFERTA_DTO
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
@@ -119,19 +113,6 @@ class ProductosSQLiteDAO:
         """
         return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
-    def listar_codigos_normalizados_por_codigos(self, codigos):
-        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
-        if not codigos:
-            return []
-
-        placeholders = ",".join("?" for _ in codigos)
-        sql = f"""
-        SELECT codigo, CODIGO_NORMALIZADO
-        FROM productos
-        WHERE codigo IN ({placeholders})
-        """
-        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
-
     def obtener_oferta_por_codigo(self, codigo):
         sql = """
         SELECT
@@ -148,6 +129,28 @@ class ProductosSQLiteDAO:
         """
         resultado = self.db.ejecutar_consulta(sql, (codigo,)) or []
         return resultado[0] if resultado else None
+
+    def listar_ofertas_por_codigos(self, codigos):
+        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
+        if not codigos:
+            return []
+
+        placeholders = ",".join("?" for _ in codigos)
+        sql = f"""
+        SELECT
+            codigo,
+            TIENE_OFERTA,
+            PRECIO_OFERTA,
+            OFERTA_DESDE,
+            OFERTA_HASTA,
+            OFERTA_ORIGEN,
+            OFERTA_CCODDIV,
+            OFERTA_DTO
+        FROM productos
+        WHERE codigo IN ({placeholders})
+        ORDER BY codigo ASC
+        """
+        return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
     def limpiar_snapshot_ofertas(self):
         sql = """
@@ -228,8 +231,6 @@ class ProductosSQLiteDAO:
                         producto.get("oferta_origen"),
                         producto.get("oferta_ccoddiv"),
                         producto.get("oferta_dto"),
-                        producto.get("codigo_original"),
-                        producto.get("codigo_normalizado"),
                     )
                 )
             else:
@@ -247,8 +248,6 @@ class ProductosSQLiteDAO:
                         None,
                         None,
                         None,
-                        producto[2],
-                        producto[2],
                     )
                 )
 
@@ -278,6 +277,47 @@ class ProductosSybaseDAO:
     def __init__(self, db):
         self.db = db
 
+    def obtener_marcas_remotas_catalogo(self):
+        consultas = {
+            "productos": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.ARTICULO
+                WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
+            """,
+            "codigos": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.CODBARP
+            """,
+            "packs": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.PACKS_MINI
+            """,
+            "ofertas_precio": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.ATIPICAS
+                WHERE CCLAVEC = 'O'
+            """,
+            "ofertas_plu_detalle": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.OFERTAT
+            """,
+            "ofertas_plu_config": """
+                SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))
+                FROM DBA.OFERTAL
+            """,
+        }
+        marcas = {}
+        for clave, sql in consultas.items():
+            resultado = self.db.ejecutar_consulta(sql) or []
+            marcas[clave] = resultado[0][0] if resultado and resultado[0] else None
+        return marcas
+
+    def obtener_marca_remota_catalogo(self):
+        marcas = [marca for marca in self.obtener_marcas_remotas_catalogo().values() if marca]
+        if not marcas:
+            return None
+        return max(str(marca) for marca in marcas)
+
     def listar_articulos_completos(self):
         sql = """
         SELECT
@@ -296,7 +336,7 @@ class ProductosSybaseDAO:
             NPREMAYOR4,
             NPREMAYOR5,
             CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-        FROM ARTICULO
+        FROM DBA.ARTICULO
         WHERE CCODEBAR IS NOT NULL AND CCODEBAR <> ''
         ORDER BY dFechaU ASC
         """
@@ -320,7 +360,7 @@ class ProductosSybaseDAO:
             NPREMAYOR4,
             NPREMAYOR5,
             CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-        FROM ARTICULO
+        FROM DBA.ARTICULO
         WHERE CCODEBAR IS NOT NULL
         AND CCODEBAR <> ''
         AND CONVERT(DATE, dFechaU) = CONVERT(DATE, GETDATE())
@@ -348,7 +388,7 @@ class ProductosSybaseDAO:
             NPREMAYOR4,
             NPREMAYOR5,
             CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-        FROM ARTICULO
+        FROM DBA.ARTICULO
         WHERE CCODEBAR IS NOT NULL
         AND CCODEBAR <> ''
         AND CONVERT(VARCHAR, dFechaU, 120) {} '{}'
@@ -366,7 +406,7 @@ class ProductosSybaseDAO:
             valores = ",".join(f"'{cref}'" for cref in chunk_escapado)
             sql = f"""
             SELECT CREF, CDETALLE, CCODEBAR, CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-            FROM CODBARP
+            FROM DBA.CODBARP
             WHERE CREF IN ({valores})
             AND CCODEBAR IS NOT NULL
             AND CCODEBAR <> ''
@@ -392,7 +432,7 @@ class ProductosSybaseDAO:
                 NPRECIO,
                 CDETALLE,
                 CONVERT(VARCHAR, dFechaU, 120) AS DFECHAU
-            FROM PACKS_MINI
+            FROM DBA.PACKS_MINI
             WHERE CREF IN ({valores})
             ORDER BY CREF ASC, dFechaU ASC
             """
@@ -412,6 +452,11 @@ class ProductosSybaseDAO:
             a.CCLAVEC
         FROM DBA.ATIPICAS a
         WHERE a.CCLAVEC = 'O'
+          AND (
+                RTRIM(a.CCODDIV) = 'PSO'
+                OR a.CCLAVEA IS NULL
+                OR RTRIM(a.CCLAVEA) <> 'P'
+              )
           AND DATE(a.DFECINI) <= CURRENT DATE
           AND (a.DFECFIN IS NULL OR DATE(a.DFECFIN) >= CURRENT DATE)
         ORDER BY a.CREF ASC, a.DFECINI DESC, a.DFECFIN DESC, a.NPRECIO ASC
@@ -419,4 +464,4 @@ class ProductosSybaseDAO:
         return self.db.ejecutar_consulta(sql) or []
 
     def listar_ivas(self):
-        return self.db.ejecutar_consulta("SELECT * FROM IVAS") or []
+        return self.db.ejecutar_consulta("SELECT * FROM DBA.IVAS") or []

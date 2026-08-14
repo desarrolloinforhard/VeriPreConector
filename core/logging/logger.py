@@ -6,6 +6,35 @@ from pathlib import Path
 from typing import Optional
 
 
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """
+    RotatingFileHandler tolerante a multi-proceso.
+
+    Si otro proceso tiene tomado el archivo durante la rotación, se reabre
+    el stream actual y continúa escribiendo sin interrumpir la aplicación.
+    """
+
+    def doRollover(self) -> None:
+        try:
+            super().doRollover()
+        except PermissionError:
+            self._reopen_stream()
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == 32:
+                self._reopen_stream()
+            else:
+                raise
+
+    def _reopen_stream(self) -> None:
+        try:
+            if self.stream:
+                self.stream.close()
+        except OSError:
+            pass
+        finally:
+            self.stream = self._open()
+
+
 class ProjectLogger:
     """
     Logger centralizado del proyecto.
@@ -50,7 +79,7 @@ class ProjectLogger:
         )
 
         # Handler de archivo con rotación
-        file_handler = RotatingFileHandler(
+        file_handler = SafeRotatingFileHandler(
             cls._log_dir / log_file,
             maxBytes=max_bytes,
             backupCount=backup_count,

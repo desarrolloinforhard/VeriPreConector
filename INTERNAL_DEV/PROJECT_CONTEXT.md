@@ -1,6 +1,6 @@
 ﻿# Project Context
 
-Version actual: `1.16.26`
+Version actual: `1.16.27`
 
 ## 1. Objetivo del sistema
 
@@ -45,7 +45,7 @@ Modos:
   - `dispositivos_envio_service.py`: logica de envio de productos/publicidades/logo/config.
   - `headless_envio_service.py`: modo CLI sin GUI.
   - `headless_progress_window.py`: ventana de progreso en modo headless.
-  - `image_resolver.py`: resolucion/caching de imagenes del lado Python, con normalizacion automatica de imagenes de producto antes de persistirlas.
+  - `image_resolver.py`: resolucion/caching de imagenes del lado Python, con normalizacion automatica y busqueda concurrente entre carpeta local, API propia y GO-UPC para la vista previa de productos.
   - `productos_sync_service.py`: sync de productos y deteccion de cambios.
   - `ofertas_service.py`: soporte a generacion de ofertas.
   - linea pendiente VPC-F3: snapshot local de ofertas activas desde `ATIPICAS` para integracion futura con verificador.
@@ -63,8 +63,8 @@ Modos:
 4. `dispositivos_envio_service.py` envia productos al Android por lotes.
 5. El selector manual y el autoenvio pueden descubrir verificadores por red local si no hay equipos online registrados.
 6. Antes de enviar, tambien puede empujar GO-UPC key y URL de API propia de imagenes.
-7. La siguiente fase prevista agrega columnas locales de oferta por producto (`TIENE_OFERTA`, `PRECIO_OFERTA`, vigencias y origen) para que la SQLite refleje promociones activas provenientes de `DBA.ATIPICAS`.
-8. La siguiente linea abierta `VPC-F4` debe resolver clientes legacy que guardan `CCODEBAR` con `12` digitos sin check digit, conservando codigo original y codigo normalizado antes del envio al verificador.
+7. La UI de `Productos` ahora trabaja con layout de dos columnas: listado a la izquierda y panel lateral de preview/acciones a la derecha, con refresco en vivo del producto seleccionado.
+8. La siguiente fase prevista agrega columnas locales de oferta por producto (`TIENE_OFERTA`, `PRECIO_OFERTA`, vigencias y origen) para que la SQLite refleje promociones activas provenientes de `DBA.ATIPICAS`.
 
 ### Publicidades
 1. `CONTENIDO_PUBLICIDAD` mantiene grupos y globales en config.

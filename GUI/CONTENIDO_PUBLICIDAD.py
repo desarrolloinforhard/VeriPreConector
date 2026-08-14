@@ -19,6 +19,8 @@ from core.network.api_client import DispositivoAPIClient
 from core.network.dispositivo_sender import DispositivoSender
 from GUI.OFERTAS_GENERADOR import GeneradorOfertasToplevel
 from core.logging.logger import get_logger
+from core.ui.responsive import center_toplevel_in_workarea, fit_toplevel_to_workarea, clamp
+from core.ui.theme_tokens import FONT_LABEL_BOLD, FONT_SUBTITLE, FONT_TITLE_XL, PANEL_PAD_X, PANEL_PAD_Y
 from FUNC.config_json import cargar_config, guardar_config, obtener_data_dir
 
 # from core.network.selector_envio_dispositivos import EnvioDispositivos
@@ -54,6 +56,9 @@ class ContenidoPublicidad:
         self._clic_pos = None
         self._cargando_grupo = False
         self._opciones_visibles = False
+        self._layout_after_id = None
+        self._botones_grupo = []
+        self._botones_accion = []
         self.grupo_activo_id = "default"
         self.publicidades_storage_dir = obtener_data_dir() / "publicidades"
         self.publicidades_storage_dir.mkdir(parents=True, exist_ok=True)
@@ -70,10 +75,10 @@ class ContenidoPublicidad:
 
         frame_principal = self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad")
         self.contenedor_general = ttk.Frame(frame_principal)
-        self.contenedor_general.pack(fill="both", expand=True, padx=10, pady=(6, 0))
+        self.contenedor_general.pack(fill="both", expand=True, padx=PANEL_PAD_X - 6, pady=(10, 0))
 
         self.frame_resumen = ttk.Frame(self.contenedor_general)
-        self.frame_resumen.pack(fill="x", padx=10, pady=(0, 12))
+        self.frame_resumen.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 14))
 
         self.frame_titulos = ttk.Frame(self.frame_resumen)
         self.frame_titulos.pack(side="left", fill="x", expand=True)
@@ -81,14 +86,14 @@ class ContenidoPublicidad:
         self.lbl_titulo = ttk.Label(
             self.frame_titulos,
             text="Publicidad",
-            font=("Segoe UI", 22, "bold"),
+            font=FONT_TITLE_XL,
         )
         self.lbl_titulo.pack(anchor="w")
 
         self.lbl_resumen_grupo = ttk.Label(
             self.frame_titulos,
             text="Grupo: General | 0 publicidades",
-            font=("Segoe UI", 11),
+            font=FONT_SUBTITLE,
             bootstyle="secondary",
         )
         self.lbl_resumen_grupo.pack(anchor="w", pady=(4, 0))
@@ -98,6 +103,7 @@ class ContenidoPublicidad:
             text="Ocultar opciones",
             command=self.toggle_opciones,
             bootstyle="secondary-outline",
+            padding=(12, 8),
         )
         self.btn_opciones.pack(side="right", pady=(4, 0))
 
@@ -107,39 +113,53 @@ class ContenidoPublicidad:
             highlightthickness=1,
             highlightbackground=self.CARD_BORDER,
             bd=0,
-            padx=18,
-            pady=16,
+            padx=PANEL_PAD_X,
+            pady=PANEL_PAD_Y,
         )
-        self.panel_opciones.pack(fill="x", padx=10, pady=(0, 14))
+        self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 16))
 
         self.frame_opciones = ttk.Frame(self.panel_opciones, padding=(0, 0))
         self.frame_opciones.pack(fill="x")
 
         self.frame_grupos = ttk.Frame(self.frame_opciones)
-        self.frame_grupos.pack(fill="x", pady=(0, 8))
+        self.frame_grupos.pack(fill="x", pady=(0, 10))
 
-        ttk.Label(self.frame_grupos, text="Grupo:", font=("Segoe UI", 12, "bold")).pack(side="left", padx=(0, 10))
+        ttk.Label(self.frame_grupos, text="Grupo:", font=FONT_LABEL_BOLD).pack(side="left", padx=(0, 10))
         self.combo_grupos = ttk.Combobox(self.frame_grupos, state="readonly", width=26)
-        self.combo_grupos.pack(side="left", padx=(0, 14), ipady=4)
+        self.combo_grupos.pack(side="left", padx=(0, 16), ipady=5)
         self.combo_grupos.bind("<<ComboboxSelected>>", self.cambiar_grupo_desde_combo)
 
-        ttk.Button(self.frame_grupos, text="Nuevo Grupo", command=self.crear_grupo, bootstyle="primary-outline").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_grupos, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_grupos, text="Eliminar Grupo", command=self.eliminar_grupo, bootstyle="danger-outline").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_grupos, text="Publicidades Globales", command=self.abrir_globales, bootstyle="dark-outline").pack(side="left", padx=(6, 8))
-        ttk.Button(self.frame_grupos, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="info-outline").pack(side="left")
+        self.frame_grupos_botones = ttk.Frame(self.frame_grupos)
+        self.frame_grupos_botones.pack(side="left", fill="x", expand=True)
+        self.frame_grupos_botones_l1 = ttk.Frame(self.frame_grupos_botones)
+        self.frame_grupos_botones_l1.pack(fill="x")
+        self.frame_grupos_botones_l2 = ttk.Frame(self.frame_grupos_botones)
+
+        self._botones_grupo = [
+            ttk.Button(self.frame_grupos_botones, text="Nuevo Grupo", command=self.crear_grupo, bootstyle="primary-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Eliminar Grupo", command=self.eliminar_grupo, bootstyle="danger-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Publicidades Globales", command=self.abrir_globales, bootstyle="dark-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="info-outline", padding=(12, 8)),
+        ]
 
         self.frame_botones = ttk.Frame(self.frame_opciones)
         self.frame_botones.pack(fill="x")
 
-        ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia, bootstyle="success").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="primary").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="info").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="dark").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general, bootstyle="dark-outline").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="dark").pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="warning").pack(side="left")
+        self.frame_botones_accion_l1 = ttk.Frame(self.frame_botones)
+        self.frame_botones_accion_l1.pack(fill="x")
+        self.frame_botones_accion_l2 = ttk.Frame(self.frame_botones)
+
+        self._botones_accion = [
+            ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia, bootstyle="success", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="primary", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="info", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="dark", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general, bootstyle="dark-outline", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Panel de Control", command=self.abrir_panel_de_control, bootstyle="dark", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="warning", padding=(12, 8)),
+        ]
 
         self.grid_card = tk.Frame(
             self.contenedor_general,
@@ -147,10 +167,10 @@ class ContenidoPublicidad:
             highlightthickness=1,
             highlightbackground=self.CARD_BORDER,
             bd=0,
-            padx=12,
-            pady=12,
+            padx=PANEL_PAD_Y,
+            pady=PANEL_PAD_Y,
         )
-        self.grid_card.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.grid_card.pack(fill="both", expand=True, padx=PANEL_PAD_X - 6, pady=(0, 10))
 
         self.contenedor = ttk.Frame(self.grid_card)
         self.contenedor.pack(fill="both", expand=True)
@@ -162,8 +182,10 @@ class ContenidoPublicidad:
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", self.redimensionar_celdas)
         self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
+        frame_principal.bind("<Configure>", self._programar_layout_responsivo, add="+")
 
         self._opciones_visibles = True
+        self._aplicar_layout_responsivo()
         frame_principal.after(100, self.inicializar_grupos_publicidad)
 
         logger.debug("Interfaz de ContenidoPublicidad creada correctamente.")
@@ -177,15 +199,92 @@ class ContenidoPublicidad:
         except Exception:
             logger.exception("Error al redimensionar celdas.")
 
+    def _programar_layout_responsivo(self, _event=None):
+        root = self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja")
+        if self._layout_after_id:
+            try:
+                root.after_cancel(self._layout_after_id)
+            except Exception:
+                pass
+        self._layout_after_id = root.after(70, self._aplicar_layout_responsivo)
+
+    def _aplicar_layout_responsivo(self):
+        self._layout_after_id = None
+        try:
+            frame_principal = self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad")
+            ancho_real = max(frame_principal.winfo_width(), 1080)
+            ancho_util = min(ancho_real, 1540)
+            padding_lateral = max(int((ancho_real - ancho_util) / 2), PANEL_PAD_X - 8)
+            panel_interno = clamp(int(ancho_util * 0.012), 10, 18)
+
+            self.contenedor_general.pack_configure(padx=padding_lateral)
+            self.frame_resumen.pack_configure(padx=padding_lateral)
+            if self._opciones_visibles:
+                self.panel_opciones.pack_configure(padx=padding_lateral)
+            self.grid_card.pack_configure(padx=padding_lateral)
+            self.panel_opciones.configure(padx=panel_interno, pady=PANEL_PAD_Y)
+            self.grid_card.configure(padx=panel_interno, pady=PANEL_PAD_Y)
+            self.combo_grupos.configure(width=22 if ancho_util < 1360 else 26 if ancho_util < 1540 else 30)
+            self.lbl_resumen_grupo.configure(wraplength=max(ancho_util - 240, 360))
+            self.btn_opciones.configure(text="Opciones" if ancho_util < 1320 else ("Mostrar opciones" if not self._opciones_visibles else "Ocultar opciones"))
+            self._reorganizar_botoneras(ancho_util)
+            self.redimensionar_celdas()
+        except Exception:
+            logger.exception("Error aplicando layout responsivo en Publicidad.")
+
+    def _reorganizar_botoneras(self, ancho_util):
+        for widget in self._botones_grupo:
+            widget.pack_forget()
+        for widget in self._botones_accion:
+            widget.pack_forget()
+        self.frame_grupos_botones_l1.pack_forget()
+        self.frame_grupos_botones_l2.pack_forget()
+        self.frame_botones_accion_l1.pack_forget()
+        self.frame_botones_accion_l2.pack_forget()
+
+        self.frame_grupos_botones_l1.pack(fill="x")
+        self.frame_botones.pack(fill="x", pady=(10, 0))
+        self.frame_botones_accion_l1.pack(fill="x")
+
+        grupos_en_bloque = ancho_util < 1460
+        acciones_en_bloque = ancho_util < 1500
+
+        if grupos_en_bloque:
+            self.frame_grupos_botones_l2.pack(fill="x", pady=(8, 0))
+            for idx, widget in enumerate(self._botones_grupo[:3]):
+                padx = (0, 8) if idx < 2 else (0, 0)
+                widget.pack(in_=self.frame_grupos_botones_l1, side="left", padx=padx)
+            for idx, widget in enumerate(self._botones_grupo[3:]):
+                padx = (0, 8) if idx == 0 else (0, 0)
+                widget.pack(in_=self.frame_grupos_botones_l2, side="left", padx=padx)
+        else:
+            for idx, widget in enumerate(self._botones_grupo):
+                padx = (0, 8) if idx < 3 else ((6, 8) if idx == 3 else (0, 0))
+                widget.pack(in_=self.frame_grupos_botones_l1, side="left", padx=padx)
+
+        if acciones_en_bloque:
+            self.frame_botones_accion_l2.pack(fill="x", pady=(8, 0))
+            for idx, widget in enumerate(self._botones_accion[:4]):
+                padx = (0, 8) if idx < 3 else (0, 0)
+                widget.pack(in_=self.frame_botones_accion_l1, side="left", padx=padx)
+            for idx, widget in enumerate(self._botones_accion[4:]):
+                padx = (0, 8) if idx < 3 else (0, 0)
+                widget.pack(in_=self.frame_botones_accion_l2, side="left", padx=padx)
+        else:
+            for idx, widget in enumerate(self._botones_accion):
+                padx = (0, 8) if idx < len(self._botones_accion) - 1 else (0, 0)
+                widget.pack(in_=self.frame_botones_accion_l1, side="left", padx=padx)
+
     def toggle_opciones(self):
         if self._opciones_visibles:
             self.panel_opciones.pack_forget()
             self.btn_opciones.configure(text="Mostrar opciones")
             self._opciones_visibles = False
         else:
-            self.panel_opciones.pack(fill="x", padx=10, pady=(0, 14), after=self.frame_resumen)
+            self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 16), after=self.frame_resumen)
             self.btn_opciones.configure(text="Ocultar opciones")
             self._opciones_visibles = True
+            self._aplicar_layout_responsivo()
 
     def actualizar_resumen_grupo(self):
         try:
@@ -637,7 +736,7 @@ class ContenidoPublicidad:
             self.refrescar_biblioteca_metadata()
             top = ttk.Toplevel(self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad"))
             top.title("Biblioteca de Publicidades")
-            top.geometry("1080x420")
+            fit_toplevel_to_workarea(top, 1080, 420, min_width=920, min_height=360)
             top.place_window_center()
             top.grab_set()
 
@@ -698,7 +797,7 @@ class ContenidoPublicidad:
 
             top = ttk.Toplevel(self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad"))
             top.title("Historial de Envio de Publicidades")
-            top.geometry("980x360")
+            fit_toplevel_to_workarea(top, 980, 360, min_width=860, min_height=320)
             top.place_window_center()
             top.grab_set()
 
@@ -873,7 +972,7 @@ class ContenidoPublicidad:
             self.refrescar_config_compartida()
             top = ttk.Toplevel(self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad"))
             top.title("Publicidades Globales")
-            top.geometry("680x360")
+            fit_toplevel_to_workarea(top, 680, 360, min_width=620, min_height=320)
             top.place_window_center()
             top.grab_set()
 
@@ -963,7 +1062,7 @@ class ContenidoPublicidad:
 
             top = ttk.Toplevel(self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad"))
             top.title("Pantalla del grupo")
-            top.geometry("420x220")
+            fit_toplevel_to_workarea(top, 420, 220, min_width=400, min_height=210)
             top.place_window_center()
             top.grab_set()
 
@@ -2263,7 +2362,7 @@ class ContenidoPublicidad:
 
             top = ttk.Toplevel(self.widgets.get_widget("GUI_MAIN", "frame_seccion_publicidad"))
             top.title("Configuracion multipantalla")
-            top.geometry("760x520")
+            fit_toplevel_to_workarea(top, 760, 520, min_width=700, min_height=460)
             top.place_window_center()
             top.grab_set()
 
@@ -2620,12 +2719,8 @@ class ContenidoPublicidad:
 
     def centrar_ventana(self, ventana, ancho, alto):
         try:
-            pantalla_ancho = ventana.winfo_screenwidth()
-            pantalla_alto = ventana.winfo_screenheight()
-            x = (pantalla_ancho - ancho) // 2
-            y = (pantalla_alto - alto) // 2
-            ventana.geometry(f"{ancho}x{alto}+{x}+{y}")
-            logger.debug("Ventana centrada | ancho=%s | alto=%s | x=%s | y=%s", ancho, alto, x, y)
+            center_toplevel_in_workarea(ventana, ancho, alto)
+            logger.debug("Ventana centrada | ancho=%s | alto=%s", ancho, alto)
         except Exception:
             logger.exception("Error al centrar ventana.")
 

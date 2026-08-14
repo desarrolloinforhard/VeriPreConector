@@ -1,3 +1,37 @@
+Version 1.16.30
+- La sincronizacion automatica ahora detecta cambios no solo en `ARTICULO`, sino tambien en `CODBARP`, `PACKS_MINI`, `ATIPICAS`, `OFERTAT` y `OFERTAL`.
+- El vigia automatico registra en consola que bloque del catalogo/promociones disparo la actualizacion: productos, codigos, packs, ofertas de precio u OFPLU.
+- La UI de productos separa claramente `Oferta precio` y `Oferta OFPLU` para que puedan convivir sin mezclarse.
+- La ventana detalle del producto replica esa separacion, agrega scroll solo en el panel de ofertas y gana ancho para mejorar la lectura.
+
+Version 1.16.28
+- Se agrego soporte explicito para enviar `IMAGES_API_URL` al Android usando el mismo valor configurado en SmartPrice.
+- El envio de logo y el envio previo de configuracion ahora empujan juntos `GO_UPC_KEY` y `IMAGES_API_URL`.
+- Se agrego en `Configuración > Conexión GO-UPC` un boton manual para enviar esta configuracion al dispositivo seleccionado.
+- El estado del dispositivo ahora muestra tambien la `Images API URL` devuelta por `GET /api/veri/IMAGES_API_URL`.
+
+Nota funcional 2026-08-05 - Ofertas por precio
+- SmartPrice hoy toma la oferta activa desde `ATIPICAS`, y esa sigue siendo la fuente operativa actual para sincronizacion y envio.
+- En el sistema origen, la oferta de precio por producto se arma tomando como base `ARTICULO.NPVP5`.
+- El ejecutable de gestion de ofertas (`cbABMoferta_WS.exe` / `dbabmoferta_nn.exe`) usa `NPVP5` al configurar ofertas por producto dentro de `OD.Precios`.
+- Cuando la oferta se confirma con vigencia (`desde` / `hasta`) y demas parametros, el dato efectivo queda persistido en `ATIPICAS`.
+- Restriccion observada en el sistema origen: si `NPVP5` ya esta ocupado en `PACKS_MINI`, el ABM de ofertas no deja crear esa oferta.
+- Implicancia para futuras fases: `ATIPICAS` sigue siendo la fuente de verdad para detectar oferta activa, pero `NPVP5` debe considerarse como origen funcional del precio de oferta al definir integracion con Android y futuras validaciones.
+
+Pendiente en develop
+- Se rediseño la pantalla `Productos` con layout en dos columnas: listado local a la izquierda y panel lateral de vista previa/acciones a la derecha.
+- La vista previa ahora muestra descripcion, codigo, precio principal (`NPVP1`), estado de oferta y contador de precios adicionales sin abrir la ventana detalle.
+- La carga de imagenes del preview ahora es asincronica y muestra loader local sobre el frame de imagen para evitar congelamientos de UI.
+- `image_resolver.py` vuelve a priorizar resolucion concurrente entre carpeta local, API propia y GO-UPC para el preview de productos, usando por defecto `http://inforhardserver.ddns.net:5000` como API propia configurable.
+- Se corrigio la sincronizacion visual entre seleccion de la tabla y panel lateral para que el resumen se refresque al seleccionar o recargar productos.
+
+Version 1.16.27
+- Se elimino el flujo operativo de normalizacion de codigos y SmartPrice vuelve a trabajar con un unico campo `codigo` de punta a punta.
+- La sincronizacion de productos, la persistencia SQLite, la UI de productos y el payload enviado a Android ahora usan el codigo original sin derivar variantes EAN-13.
+- Se mantuvo intacto el soporte para `PACKS_MINI`, precios adicionales y ofertas mientras se simplifico la cadena de productos.
+- Se agrego una migracion automatica de SQLite para limpiar la tabla `productos` y eliminar `CODIGO_ORIGINAL` y `CODIGO_NORMALIZADO` en instalaciones legadas.
+- Se robustecio la rotacion del archivo `veripre.log` para evitar tracebacks por `WinError 32` cuando otro proceso tiene el log abierto.
+
 Version 1.16.26
 - Se agrego normalizacion de codigos legacy de 12 digitos sin digito verificador usando fallback EAN-13 durante la sincronizacion.
 - SQLite ahora guarda `CODIGO_ORIGINAL` y `CODIGO_NORMALIZADO` para mantener trazabilidad del dato fuente y del codigo operativo.

@@ -1,6 +1,9 @@
 ENDPOINT_PRODUCTOS_BATCH = "/api/veri/batch_productos"
 ENDPOINT_STATUS = "/api/veri/status"
 ENDPOINT_CONFIGURACION_PLAYER = "/api/veri/configuracion_player"
+ENDPOINT_GO_UPC_KEY = "/api/veri/GO_UPC_KEY"
+ENDPOINT_IMAGES_API_URL = "/api/veri/IMAGES_API_URL"
+ENDPOINT_LOGO_PRINCIPAL = "/api/veri/LOGO_PRINCIPAL"
 
 
 class VeriPreDispositivosURLBuilder:

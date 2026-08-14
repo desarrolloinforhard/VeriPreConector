@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.16.30 - 2026-08-06
+
+- Extended automatic synchronization so the background watcher now detects changes in products, secondary barcodes, packs, price offers, and OFPLU data instead of only `ARTICULO`.
+- Added block-level diagnostics for automatic sync, reporting whether the change came from products, codes, packs, price offers, or OFPLU structures.
+- Split product offer handling in SmartPrice into `Oferta precio` and `Oferta OFPLU`, allowing both to coexist without visual or payload collisions.
+- Updated the product detail modal to mirror the new offer separation, add scoped scrolling for the offer panel, and widen the layout for better readability.
+
+## 1.16.29 - 2026-08-04
+
+- Hardened product DELETE fallback so SmartPrice first tries `/api/veri/batch_productos` and then `/api/veri/ALL_PRODUCTOS` without dropping the `/api` prefix.
+- Added explicit DELETE diagnostics in console and device status UI, including the exact endpoint that succeeded or the HTTP/error detail that failed.
+- Added payload-side protection to omit invalid `img_base64` values before sending to Android, preventing timestamps or other non-image values from being transmitted as product images.
+
+## 1.16.28 - 2026-08-04
+
+- Added explicit Android configuration delivery for `IMAGES_API_URL` using the same SmartPrice value stored in configuration.
+- Product and logo configuration sends now push both `GO_UPC_KEY` and `IMAGES_API_URL` before the main payload.
+- Added a manual action in `Configuración > Conexión GO-UPC` to send `GO_UPC_KEY` plus the configured image API URL to the selected device.
+- Device status inspection now also reports the current `IMAGES_API_URL` exposed by the Android endpoint.
+
+## 1.16.27 - 2026-08-03
+
+- Removed the operational barcode normalization flow and restored SmartPrice to work with a single `codigo` end to end.
+- Product synchronization, local SQLite persistence, product UI, and Android payloads now use the original product code without deriving EAN-13 variants.
+- Preserved `PACKS_MINI`, additional prices, and offer synchronization while simplifying the product pipeline.
+- Added an automatic SQLite migration for legacy installations so the `productos` table drops `CODIGO_ORIGINAL` and `CODIGO_NORMALIZADO` on next schema verification.
+- Hardened file log rotation with a safe rotating handler to avoid `WinError 32` tracebacks when another process holds `veripre.log`.
+
 ## 1.16.26 - 2026-07-31
 
 - Added legacy barcode normalization support for clients that store `CCODEBAR` with 12 numeric digits and no check digit.

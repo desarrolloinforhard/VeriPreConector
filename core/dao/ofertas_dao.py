@@ -27,6 +27,92 @@ class OfertasDAO:
         """
         return self._exec(sql)
 
+    def listar_ofplu_cabeceras(self, limit=500):
+        limit = int(limit)
+        sql = f"""
+        SELECT TOP {limit}
+            ot.NOFERTA,
+            RTRIM(ot.CTIPOOFERTA) AS CTIPOOFERTA,
+            COALESCE(ot.CDETALLE_A, ot.CDETALLE) AS TITULO,
+            CONVERT(VARCHAR, ot.DFECHAI, 120) AS DFECHAI,
+            CONVERT(VARCHAR, ot.DFECHAF, 120) AS DFECHAF,
+            RTRIM(ot.uid) AS uid,
+            CONVERT(VARCHAR, ot.dFechaU, 120) AS DFECHAU
+        FROM DBA.OFERTAT ot
+        WHERE RTRIM(ot.CTIPOOFERTA) = 'OFPLU'
+        ORDER BY ot.NOFERTA ASC;
+        """
+        return self._exec(sql)
+
+    def listar_ofplu_parametros(self, nofertas):
+        nofertas = self._int_list(nofertas)
+        if not nofertas:
+            return []
+
+        valores = ",".join(str(n) for n in nofertas)
+        sql = f"""
+        SELECT
+            RTRIM(ol.CTPOOFERTA) AS CTPOOFERTA,
+            ol.NOFERTA,
+            ol.NORDEN,
+            RTRIM(ol.CVARIABLE) AS CVARIABLE,
+            ol.CPARAMETRO0,
+            ol.CPARAMETRO1,
+            ol.CPARAMETRO2,
+            ol.CPARAMETRO3,
+            ol.CPARAMETRO4,
+            ol.CPARAMETRO5,
+            ol.CPARAMETRO6,
+            ol.CPARAMETRO7,
+            ol.CPARAMETRO8,
+            ol.CPARAMETRO9,
+            ol.CDETALLE,
+            RTRIM(ol.uid) AS uid,
+            CONVERT(VARCHAR, ol.dFechaU, 120) AS DFECHAU
+        FROM DBA.OFERTAL ol
+        WHERE RTRIM(ol.CTPOOFERTA) = 'ofplu'
+          AND ol.NOFERTA IN ({valores})
+        ORDER BY ol.NOFERTA ASC, ol.NORDEN ASC;
+        """
+        return self._exec(sql)
+
+    def listar_ofplu_proyecciones_atipicas(self, nofertas):
+        nofertas = self._int_list(nofertas)
+        if not nofertas:
+            return []
+
+        variantes = []
+        for noferta in nofertas:
+            variantes.extend([str(noferta), str(noferta).zfill(3)])
+        variantes = sorted(set(variantes))
+        valores = ",".join(f"'{v}'" for v in variantes)
+
+        sql = f"""
+        SELECT
+            a.CREF,
+            RTRIM(ar.CCODEBAR) AS CODIGO,
+            ar.CDETALLE AS DESCRIPCION,
+            a.NPRECIO AS PRECIO_OFERTA,
+            a.NDTO,
+            CONVERT(VARCHAR, a.DFECINI, 120) AS DFECHAI,
+            CONVERT(VARCHAR, a.DFECFIN, 120) AS DFECHAF,
+            RTRIM(a.CCODDIV) AS CCODDIV,
+            RTRIM(a.CCLAVEC) AS CCLAVEC,
+            RTRIM(a.CCLAVEA) AS CCLAVEA,
+            a.NMODOP,
+            a.NMODOD,
+            a.CDETALLE,
+            RTRIM(a.uid) AS uid,
+            CONVERT(VARCHAR, a.dFechaU, 120) AS DFECHAU
+        FROM DBA.ATIPICAS a
+        JOIN DBA.ARTICULO ar ON ar.CREF = a.CREF
+        WHERE a.CCLAVEC = 'O'
+          AND a.CCLAVEA = 'P'
+          AND RTRIM(a.CCODDIV) IN ({valores})
+        ORDER BY a.CREF ASC, a.dFechaU DESC;
+        """
+        return self._exec(sql)
+
     # ==========================================================
     # ATIPICAS - Productos OFPLU (por CCODDIV)
     # ==========================================================
@@ -107,3 +193,12 @@ class OfertasDAO:
             print("SQL ejecutado:")
             print(sql)
             return []
+
+    def _int_list(self, values):
+        resultado = []
+        for value in values or []:
+            try:
+                resultado.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        return resultado

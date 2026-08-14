@@ -2,7 +2,6 @@ import sqlite3
 from pathlib import Path
 
 from core.logging.logger import get_logger
-from core.services.barcode_normalizer import limpiar_codigo, normalizar_codigo_para_envio
 
 logger = get_logger(__name__)
 
@@ -38,6 +37,9 @@ class SQLiteDB:
             self.crear_tabla_VERIPRE_EQUIPOS()
             self.crear_tabla_VERIPRE_productos()
             self.crear_tabla_VERIPRE_producto_precios()
+            self.crear_tabla_VERIPRE_ofertas_plu()
+            self.crear_tabla_VERIPRE_ofertas_plu_parametros()
+            self.crear_tabla_VERIPRE_ofertas_plu_productos()
             self.crear_tabla_VERIPRE_ad_medias()
             self.crear_tabla_VERIPRE_CONEXION()
             self.crear_tabla_API_KEY()
@@ -172,9 +174,7 @@ class SQLiteDB:
                 OFERTA_HASTA TEXT,
                 OFERTA_ORIGEN TEXT,
                 OFERTA_CCODDIV TEXT,
-                OFERTA_DTO REAL,
-                CODIGO_ORIGINAL TEXT,
-                CODIGO_NORMALIZADO TEXT
+                OFERTA_DTO REAL
             )
         """
         logger.debug("Creando/verificando tabla SQLite: productos")
@@ -201,6 +201,92 @@ class SQLiteDB:
             )
         """
         logger.debug("Creando/verificando tabla SQLite: producto_precios")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_ofertas_plu(self):
+        """Crea la cabecera local de ofertas OFPLU."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ofertas_plu (
+                noferta INTEGER PRIMARY KEY,
+                tipo_oferta TEXT NOT NULL,
+                detalle TEXT,
+                fecha_inicio TEXT,
+                fecha_fin TEXT,
+                habilitada INTEGER DEFAULT 1,
+                ccoddiv TEXT,
+                origen TEXT DEFAULT 'OFPLU',
+                uid TEXT,
+                dFechaU TEXT
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: ofertas_plu")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_ofertas_plu_parametros(self):
+        """Crea la tabla local de parámetros de ofertas OFPLU."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ofertas_plu_parametros (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noferta INTEGER NOT NULL,
+                orden INTEGER NOT NULL,
+                variable TEXT NOT NULL,
+                cparametro0 TEXT,
+                cparametro1 TEXT,
+                cparametro2 TEXT,
+                cparametro3 TEXT,
+                cparametro4 TEXT,
+                cparametro5 TEXT,
+                cparametro6 TEXT,
+                cparametro7 TEXT,
+                cparametro8 TEXT,
+                cparametro9 TEXT,
+                hora_desde TEXT,
+                hora_hasta TEXT,
+                acumulador TEXT,
+                modifica_subtotal TEXT,
+                mixmatch_generico TEXT,
+                deshabilitada INTEGER DEFAULT 0,
+                relacion TEXT,
+                cantidad INTEGER,
+                tipo_valor TEXT,
+                signo TEXT,
+                valor_raw REAL,
+                valor_visible REAL,
+                modo TEXT,
+                detalle TEXT,
+                uid TEXT,
+                dFechaU TEXT,
+                UNIQUE(noferta, orden, variable)
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: ofertas_plu_parametros")
+        self.ejecutar_consulta(consulta)
+
+    def crear_tabla_VERIPRE_ofertas_plu_productos(self):
+        """Crea la tabla local de proyección por producto de ofertas OFPLU."""
+        consulta = """
+            CREATE TABLE IF NOT EXISTS ofertas_plu_productos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noferta INTEGER NOT NULL,
+                cref TEXT NOT NULL,
+                codigo TEXT,
+                descripcion TEXT,
+                precio_oferta REAL,
+                ndto REAL,
+                fecha_inicio TEXT,
+                fecha_fin TEXT,
+                ccoddiv TEXT,
+                cclavec TEXT,
+                cclavea TEXT,
+                nmodop TEXT,
+                nmodod TEXT,
+                detalle TEXT,
+                uid TEXT,
+                dFechaU TEXT,
+                UNIQUE(noferta, cref, ccoddiv, cclavec, cclavea)
+            )
+        """
+        logger.debug("Creando/verificando tabla SQLite: ofertas_plu_productos")
         self.ejecutar_consulta(consulta)
 
     def crear_tabla_VERIPRE_EQUIPOS(self):
@@ -283,13 +369,18 @@ class SQLiteDB:
             "OFERTA_ORIGEN": "TEXT",
             "OFERTA_CCODDIV": "TEXT",
             "OFERTA_DTO": "REAL",
-            "CODIGO_ORIGINAL": "TEXT",
-            "CODIGO_NORMALIZADO": "TEXT",
         }
 
         columnas_actuales = {col.upper() for col in self.obtener_columnas("productos")}
         if not columnas_actuales:
             return
+
+        columnas_obsoletas = {"CODIGO_ORIGINAL", "CODIGO_NORMALIZADO"}
+        if columnas_actuales.intersection(columnas_obsoletas):
+            self._migrar_tabla_productos_sin_codigos_legacy()
+            columnas_actuales = {col.upper() for col in self.obtener_columnas("productos")}
+            if not columnas_actuales:
+                return
 
         for nombre, definicion in columnas_requeridas.items():
             if nombre in columnas_actuales:
@@ -299,38 +390,54 @@ class SQLiteDB:
             logger.info("Agregando columna faltante en productos | columna=%s", nombre)
             self.ejecutar_consulta(sql)
 
-        self._backfill_codigos_productos()
+    def _migrar_tabla_productos_sin_codigos_legacy(self):
+        logger.info("Migrando tabla productos para eliminar columnas legacy de codigo.")
+        try:
+            if not self.conexion_activa():
+                self.conectar()
 
-    def _backfill_codigos_productos(self):
-        sql = """
-        SELECT rowid, codigo, CODIGO_ORIGINAL, CODIGO_NORMALIZADO
-        FROM productos
-        """
-        filas = self.ejecutar_consulta(sql) or []
-        if not filas:
-            return
-
-        parametros = []
-        for rowid, codigo, codigo_original, codigo_normalizado in filas:
-            codigo_base = limpiar_codigo(codigo)
-            original_resuelto = limpiar_codigo(codigo_original) or codigo_base
-            normalizado_resuelto = limpiar_codigo(codigo_normalizado) or normalizar_codigo_para_envio(original_resuelto)
-
-            if codigo_original == original_resuelto and codigo_normalizado == normalizado_resuelto:
-                continue
-
-            parametros.append((original_resuelto, normalizado_resuelto, rowid))
-
-        if not parametros:
-            logger.debug("Backfill de codigos no necesario en productos.")
-            return
-
-        logger.info("Backfill de codigos en productos | registros=%s", len(parametros))
-        self.ejecutar_consultamany(
-            """
-            UPDATE productos
-            SET CODIGO_ORIGINAL = ?, CODIGO_NORMALIZADO = ?
-            WHERE rowid = ?
-            """,
-            parametros,
-        )
+            self.cursor.execute("BEGIN")
+            self.cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS productos_new (
+                    CREF TEXT,
+                    codigo TEXT UNIQUE,
+                    descripcion TEXT,
+                    precio REAL,
+                    img_base64 TEXT,
+                    formato_imagen TEXT,
+                    dFechaU TEXT,
+                    TIENE_OFERTA INTEGER DEFAULT 0,
+                    PRECIO_OFERTA REAL,
+                    OFERTA_DESDE TEXT,
+                    OFERTA_HASTA TEXT,
+                    OFERTA_ORIGEN TEXT,
+                    OFERTA_CCODDIV TEXT,
+                    OFERTA_DTO REAL
+                )
+                """
+            )
+            self.cursor.execute("DELETE FROM productos_new")
+            self.cursor.execute(
+                """
+                INSERT INTO productos_new (
+                    CREF, codigo, descripcion, precio, img_base64, formato_imagen,
+                    dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
+                    OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                )
+                SELECT
+                    CREF, codigo, descripcion, precio, img_base64, formato_imagen,
+                    dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
+                    OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                FROM productos
+                """
+            )
+            self.cursor.execute("DROP TABLE productos")
+            self.cursor.execute("ALTER TABLE productos_new RENAME TO productos")
+            self.connection.commit()
+            logger.info("Migracion de tabla productos completada correctamente.")
+        except sqlite3.Error:
+            if self.connection:
+                self.connection.rollback()
+            logger.exception("Error migrando tabla productos sin columnas legacy.")
+            raise

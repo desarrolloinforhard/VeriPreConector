@@ -15,6 +15,20 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
   - `--sin-ventana-progreso`
 - Agregada ventana de progreso para modo headless.
 - Mejorado envio a dispositivos con resumen y estado por equipo.
+- La pantalla `Productos` se reorganizo en layout de dos columnas:
+  - listado y busqueda a la izquierda,
+  - preview/resumen/acciones a la derecha.
+- El panel lateral ahora refleja la seleccion actual mostrando:
+  - descripcion,
+  - codigo,
+  - precio principal,
+  - estado de oferta,
+  - contador de precios adicionales.
+- La ventana de detalle del producto tambien se rediseño con mejor separacion entre:
+  - datos base,
+  - precios adicionales,
+  - preview,
+  - bloque de oferta activa.
 
 ## Imagenes
 
@@ -31,6 +45,9 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
   - conversion a `JPEG`,
   - compresion para intentar quedar por debajo de `700 KB`.
 - `image_resolver.py` ahora aplica la misma normalizacion automatica a imagenes que entran desde carpetas locales, API propia y GO-UPC antes de persistirlas en SQLite/carpeta.
+- El preview lateral de productos ahora usa carga asincronica con loader local sobre el frame de imagen.
+- La API propia de imagenes queda con fallback operativo por defecto en `http://inforhardserver.ddns.net:5000`, pero sigue siendo configurable desde `Configuracion`.
+- El preview ya no espera a una sola fuente lineal: si SQLite no resuelve, dispara busqueda concurrente entre carpeta, API propia y GO-UPC y toma la primera valida.
 
 ## Publicidades
 
