@@ -11,14 +11,11 @@ from plyer import notification
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageChops, ImageTk
 from ASSETS.path_img import *
-from ttkbootstrap.tableview import Tableview
 from ttkbootstrap.constants import *
-from ttkbootstrap.scrolled import ScrolledFrame
 from core.network.dispositivo_sender import DispositivoSender
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
 from core.services.dispositivos_envio_service import DispositivosEnvioService
 from core.services.device_discovery_service import DeviceDiscoveryService
-from ttkbootstrap.widgets import DateEntry
 from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
 from core.dao.ofertas_plu_sqlite_dao import OfertasPLUSQLiteDAO
 from core.ui.responsive import clamp, fit_toplevel_to_workarea
@@ -244,7 +241,7 @@ class ContenidoProducto:
         self.frame_tabla_producto.columnconfigure(0, weight=1)
         self.frame_tabla_producto.rowconfigure(0, weight=1)
 
-        self.dt = Tableview(
+        self.dt = ttk.Tableview(
             master=self.frame_tabla_producto,
             coldata=coldata,
             paginated=True,
@@ -1071,13 +1068,13 @@ class ContenidoProducto:
         today = date.today().strftime("%Y-%m-%d")
 
         ttk.Label(top, text="Fecha desde:").pack(pady=(10, 0))
-        date_desde = DateEntry(top, bootstyle="info", width=20, dateformat="%Y-%m-%d", firstweekday=0)
+        date_desde = ttk.DateEntry(top, bootstyle="info", width=20, dateformat="%Y-%m-%d", firstweekday=0)
         date_desde.entry.delete(0, "end")
         date_desde.entry.insert(0, today)
         date_desde.pack()
 
         ttk.Label(top, text="Fecha hasta:").pack(pady=(10, 0))
-        date_hasta = DateEntry(top, bootstyle="info", width=20, dateformat="%Y-%m-%d", firstweekday=0)
+        date_hasta = ttk.DateEntry(top, bootstyle="info", width=20, dateformat="%Y-%m-%d", firstweekday=0)
         date_hasta.entry.delete(0, "end")
         date_hasta.entry.insert(0, today)
         date_hasta.pack()
@@ -2000,7 +1997,7 @@ class ContenidoProducto:
         btn_cargar_img = ttk.Button(frame_visual, text="Cargar Imagen", command=seleccionar_imagen, bootstyle="primary")
         btn_cargar_img.grid(row=2, column=0, padx=0, pady=(0, 12), sticky="ew")
 
-        frame_ofertas_scroll = ScrolledFrame(
+        frame_ofertas_scroll = ttk.ScrolledFrame(
             frame_visual,
             autohide=True,
             bootstyle="light",

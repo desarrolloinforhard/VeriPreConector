@@ -11,7 +11,6 @@ from pathlib import Path
 from datetime import datetime
 from tkinter import filedialog, messagebox, simpledialog
 from ttkbootstrap.constants import *
-from ttkbootstrap.scrolled import ScrolledFrame
 from PIL import Image, ImageTk, ImageDraw
 
 from ASSETS.path_img import READ_IMG, PNG_Check
@@ -175,7 +174,7 @@ class ContenidoPublicidad:
         self.contenedor = ttk.Frame(self.grid_card)
         self.contenedor.pack(fill="both", expand=True)
 
-        frame_canvas = ScrolledFrame(self.contenedor, autohide=True)
+        frame_canvas = ttk.ScrolledFrame(self.contenedor, autohide=True)
         frame_canvas.pack(fill="both", expand=True)
 
         self.canvas = tk.Canvas(frame_canvas, bg=self.PAGE_BG, highlightthickness=0, bd=0)

@@ -1,0 +1,2 @@
+# Dependencia fijada para la migracion controlada de la UI actual.
+ttkbootstrap==2.2.1

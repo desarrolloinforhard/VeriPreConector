@@ -2,10 +2,14 @@ import queue
 import threading
 
 import ttkbootstrap as ttk
-from ttkbootstrap.widgets import Floodgauge
 
 from core.services.headless_envio_service import HeadlessEnvioService
 from core.ui.responsive import fit_toplevel_to_workarea
+from core.ui.ttk_theme import (
+    SMARTPRICE_DARK_THEME,
+    SMARTPRICE_LIGHT_THEME,
+    registrar_tema_smartprice,
+)
 
 
 class HeadlessProgressWindow:
@@ -15,7 +19,12 @@ class HeadlessProgressWindow:
         self._cola = queue.Queue()
         self._finalizado = False
 
-        self.root = ttk.Window(themename="flatly")
+        registrar_tema_smartprice()
+        self.root = ttk.Window(
+            theme=SMARTPRICE_LIGHT_THEME,
+            light_theme=SMARTPRICE_LIGHT_THEME,
+            dark_theme=SMARTPRICE_DARK_THEME,
+        )
         self.root.title("VeriPre Connector - Envio")
         fit_toplevel_to_workarea(self.root, 560, 190, min_width=520, min_height=180)
         self.root.resizable(False, False)
@@ -47,7 +56,7 @@ class HeadlessProgressWindow:
         )
         self.lbl_estado.grid(row=1, column=0, sticky="ew", pady=(12, 8))
 
-        self.progress = Floodgauge(
+        self.progress = ttk.Floodgauge(
             contenedor,
             mode="indeterminate",
             bootstyle="info",

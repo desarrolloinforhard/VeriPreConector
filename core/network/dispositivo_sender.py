@@ -2,7 +2,6 @@ import threading
 
 import requests
 import ttkbootstrap as ttk
-from ttkbootstrap.scrolled import ScrolledFrame
 
 from core.dao.dispositivos_dao import DispositivosDAO
 from core.network.urls_dispositivos import ENDPOINT_STATUS, VeriPreDispositivosURLBuilder
@@ -285,7 +284,7 @@ class DispositivoSender:
         top.grab_set()
 
         ttk.Label(top, text="Estado de transmision por dispositivo", font=("Segoe UI", 12)).pack(pady=10)
-        scrolled = ScrolledFrame(top, autohide=True)
+        scrolled = ttk.ScrolledFrame(top, autohide=True)
         scrolled.pack(fill="both", expand=True, padx=10, pady=10)
 
         barras_estado = {}

@@ -4,7 +4,6 @@ import json
 import requests
 from tkinter import messagebox
 import ttkbootstrap as ttk
-from ttkbootstrap.scrolled import ScrolledFrame
 from core.network.api_client import DispositivoAPIClient
 from core.network.urls_dispositivos import VeriPreDispositivosURLBuilder
 from core.ui.responsive import fit_toplevel_to_workarea
@@ -82,7 +81,7 @@ class EnvioDispositivos:
 
             ttk.Label(top_estado, text="Estado de transmisión por dispositivo", font=("Segoe UI", 12)).pack(pady=10)
 
-            scrolled = ScrolledFrame(top_estado, autohide=True)
+            scrolled = ttk.ScrolledFrame(top_estado, autohide=True)
             scrolled.pack(fill="both", expand=True, padx=10, pady=10)
             inner_frame = scrolled
 
@@ -309,7 +308,7 @@ def seleccionar_dispositivos(self, callback_enviar, datos_a_enviar, modo="comple
             ttk.Label(top_estado, text="Estado de transmisión por dispositivo", font=("Segoe UI", 12)).pack(pady=10)
 
             # Usar ScrolledFrame para scroll vertical automático
-            scrolled = ScrolledFrame(top_estado, autohide=True)
+            scrolled = ttk.ScrolledFrame(top_estado, autohide=True)
             scrolled.pack(fill="both", expand=True, padx=10, pady=10)
 
             inner_frame = scrolled  # ← este es el frame real donde agregás los widgets

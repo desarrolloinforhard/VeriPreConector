@@ -8,7 +8,6 @@ import ttkbootstrap as ttk
 from FUNC.windows_manager import VentanaManager 
 from DB.database_sybase import ConexionSybase, dsn_configurados
 from ttkbootstrap.constants import *
-from ttkbootstrap.tooltip import ToolTip
 from ASSETS.path_img import *
 from core.network.api_client import DispositivoAPIClient
 from core.network.dispositivo_sender import DispositivoSender
@@ -328,16 +327,16 @@ class GUI_CONFIG:
 
         # Creación de botones
         self.button_agregar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_agregar, command=self.command_button_agregar, compound="center" ,bootstyle="success-outline", width=4, padding=(8, 8))
-        ToolTip(self.button_agregar, text="Agregar Dispositivo")
+        ttk.ToolTip(self.button_agregar, text="Agregar Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_agregar", self.button_agregar)
         self.button_editar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_editar, command=self.command_button_editar_dispositivo, compound="center" ,bootstyle="info-outline", width=4, state="disable", padding=(8, 8))
-        ToolTip(self.button_editar, text="Editar datos de Dispositivo")
+        ttk.ToolTip(self.button_editar, text="Editar datos de Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_editar", self.button_editar)
         self.button_eliminar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_eliminar, command=self.command_button_eliminar, compound="center" ,bootstyle="danger-outline", width=4, state="disable", padding=(8, 8))
-        ToolTip(self.button_eliminar, text="Eliminar Dispositivo")
+        ttk.ToolTip(self.button_eliminar, text="Eliminar Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_eliminar", self.button_eliminar)
         self.button_guardar = ttk.Button(self.frame_contenedor_botones, text="", image=self.img_guardar, compound="center" ,bootstyle="primary", width=4, padding=(8, 8))
-        ToolTip(self.button_guardar, text="Guardar configuración de Dispositivo")
+        ttk.ToolTip(self.button_guardar, text="Guardar configuración de Dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_guardar", self.button_guardar)
         self.button_estado = ttk.Button(
             self.frame_contenedor_botones,
@@ -348,7 +347,7 @@ class GUI_CONFIG:
             state="disable",
             padding=(12, 8),
         )
-        ToolTip(self.button_estado, text="Consultar estado del dispositivo")
+        ttk.ToolTip(self.button_estado, text="Consultar estado del dispositivo")
         self.DICT_WIDGETS.register("GUI_CONFIG","button_estado", self.button_estado)
         self.button_player = ttk.Button(
             self.frame_contenedor_botones,
@@ -359,7 +358,7 @@ class GUI_CONFIG:
             state="disable",
             padding=(12, 8),
         )
-        ToolTip(self.button_player, text="Configurar pantalla y parametros del player")
+        ttk.ToolTip(self.button_player, text="Configurar pantalla y parametros del player")
         self.DICT_WIDGETS.register("GUI_CONFIG", "button_player", self.button_player)
         self.button_buscar_red = ttk.Button(
             self.frame_contenedor_botones,
@@ -369,7 +368,7 @@ class GUI_CONFIG:
             width=12,
             padding=(12, 8),
         )
-        ToolTip(self.button_buscar_red, text="Detectar verificadores e InforTV en la red local")
+        ttk.ToolTip(self.button_buscar_red, text="Detectar verificadores e InforTV en la red local")
         self.DICT_WIDGETS.register("GUI_CONFIG", "button_buscar_red", self.button_buscar_red)
 
         # Posicionamiento con grid (alineados al centro)

@@ -17,7 +17,6 @@ from PIL import Image, ImageTk
 
 from ASSETS.path_img import *
 from pystray import Icon as TrayIcon, Menu as TrayMenu, MenuItem
-from FUNC.ctk_components.ctk_components import CTkLoader
 from FUNC.create_widget import WidgetRegistry
 from FUNC.config_json import *
 # from FUNC.config_manager_json import ConfigManager
@@ -28,6 +27,12 @@ from GUI.GUI_CONFIG import GUI_CONFIG
 from DB.database import SQLiteDB
 from DB.database_sybase import ConexionSybase
 from core.logging.logger import get_logger
+from core.ui.loading_overlay import LoadingOverlay
+from core.ui.ttk_theme import (
+    SMARTPRICE_DARK_THEME,
+    SMARTPRICE_LIGHT_THEME,
+    registrar_tema_smartprice,
+)
 from core.ui.responsive import clamp, get_size_class, get_workarea_size
 from core.ui.theme_tokens import BUTTON_PAD_X, BUTTON_PAD_Y, FONT_BODY_BOLD, FONT_SUBTITLE, FONT_TITLE_XL
 
@@ -208,7 +213,13 @@ class GUI_MAIN:
             logger.exception("No se pudo configurar locale 'Spanish_Spain'.")
 
         logger.debug("Creando ventana principal ttkbootstrap.")
-        self.ventana_creacion_caja = ttk.Window(themename="flatly", iconphoto=ICON())
+        registrar_tema_smartprice()
+        self.ventana_creacion_caja = ttk.Window(
+            theme=SMARTPRICE_LIGHT_THEME,
+            light_theme=SMARTPRICE_LIGHT_THEME,
+            dark_theme=SMARTPRICE_DARK_THEME,
+            iconphoto=ICON(),
+        )
         self.ventana_creacion_caja.title(f"VeriPre_Connector, V.{version}")
         self.ventana_creacion_caja.state("zoomed")
         self.style = self.ventana_creacion_caja.style
@@ -232,8 +243,8 @@ class GUI_MAIN:
         logger.debug("Creando sección inicio.")
         self.seccion_inicio()
 
-        logger.debug("Inicializando loader CTk.")
-        self.ctk_loader = CTkLoader(self.ventana_creacion_caja, opacity=0.8, width=40, height=40)
+        logger.debug("Inicializando overlay de carga ttk.")
+        self.ctk_loader = LoadingOverlay(self.ventana_creacion_caja, opacity=0.8, width=40, height=40)
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "start", self.ctk_loader.start_loader)
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "stop", self.ctk_loader.stop_loader)
         self.DICT_WIDGETS.register("CTK_Loader_Frame", "message", self.ctk_loader.set_message)
