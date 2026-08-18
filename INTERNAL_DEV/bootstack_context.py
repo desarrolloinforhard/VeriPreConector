@@ -11,6 +11,7 @@ from core.versioning import obtener_version
 
 MODULOS = ("productos", "publicidad", "configuracion")
 PERMISOS_DEFAULT = {modulo: True for modulo in MODULOS}
+FEATURE_FLAG_ABOUT = "ui_bootstack_about"
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class ContextoBootstack:
     version: str
     permisos: dict[str, bool]
     sincronizacion_automatica: bool
+    piloto_acerca_habilitado: bool
 
 
 def resolver_permisos(
@@ -44,4 +46,5 @@ def cargar_contexto_bootstack() -> ContextoBootstack:
         version=obtener_version(),
         permisos=resolver_permisos(config, usuario),
         sincronizacion_automatica=bool(config.get("sincronizacion_automatica", False)),
+        piloto_acerca_habilitado=bool(config.get(FEATURE_FLAG_ABOUT, False)),
     )

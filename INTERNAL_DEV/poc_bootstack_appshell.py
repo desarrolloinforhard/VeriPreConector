@@ -33,6 +33,7 @@ def construir_shell(
     usuario: str = "demo",
     version: str = "POC",
     sincronizacion_automatica: bool | None = None,
+    solo_acerca: bool = False,
 ) -> bs.AppShell:
     """Construye un shell demostrativo filtrado por permisos efectivos."""
     if usar_tema_marca:
@@ -60,7 +61,7 @@ def construir_shell(
         shell.statusbar.add_text(f"SmartPrice {version} | Bootstack 0.1.6", side="right")
 
         with shell.page_nav() as nav:
-            if permisos.get("productos"):
+            if permisos.get("productos") and not solo_acerca:
                 with nav.add_page(
                     "productos",
                     text="Productos",
@@ -79,7 +80,7 @@ def construir_shell(
                         allow_filter=True,
                     )
 
-            if permisos.get("publicidad"):
+            if permisos.get("publicidad") and not solo_acerca:
                 with nav.add_page(
                     "publicidad",
                     text="Publicidad",
@@ -93,7 +94,7 @@ def construir_shell(
                         bs.Label("Placeholder de biblioteca multimedia")
                         bs.Label("El preview VLC permanece fuera de este POC.")
 
-            if permisos.get("configuracion"):
+            if permisos.get("configuracion") and not solo_acerca:
                 with nav.add_page(
                     "configuracion",
                     text="Configuracion",
@@ -125,15 +126,25 @@ def construir_shell(
                 gap=12,
                 horizontal_items="stretch",
             ):
-                bs.Label("SmartPrice", font="heading-lg")
-                with bs.Card(gap=8, horizontal_items="stretch"):
-                    bs.Label("VeriPre_Connector")
+                bs.Label("SmartPrice", font="heading-lg", accent="primary")
+                bs.Label("Tecnologia para una gestion mas simple", accent="muted")
+                bs.Divider(accent="primary")
+                with bs.Card(gap=12, horizontal_items="start", accent="primary"):
+                    bs.Label("VeriPre_Connector", font="heading-md")
+                    bs.Badge("Piloto Bootstack", accent="primary", variant="pill")
                     bs.Label(f"Version: {version}")
                     bs.Label(f"Usuario Windows: {usuario}")
-                    bs.Label("Shell experimental Bootstack con identidad visual de Inforhard.")
-                    bs.Label("La aplicacion productiva continua usando main.py.")
+                    bs.Label("Interfaz experimental con identidad visual verde y blanca de Inforhard.")
+                with bs.Card(gap=8, horizontal_items="stretch"):
+                    bs.Label("Alcance seguro", font="heading-sm")
+                    bs.Label("Esta vista es informativa y no conecta bases de datos, red ni multimedia.")
+                    bs.Label("La aplicacion productiva continua iniciando exclusivamente desde main.py.")
+                    bs.Label("Desactivar el feature flag devuelve el piloto a estado apagado.", accent="muted")
 
-        pagina_inicial = next((key for key, habilitado in permisos.items() if habilitado), None)
+        pagina_inicial = None if solo_acerca else next(
+            (key for key, habilitado in permisos.items() if habilitado),
+            None,
+        )
         shell.navigate(pagina_inicial or "acerca_de")
 
     return shell
