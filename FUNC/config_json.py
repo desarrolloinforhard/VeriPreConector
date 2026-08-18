@@ -240,13 +240,28 @@ def cargar_config():
 
 def guardar_config(data):
     config_path = obtener_config_path()
-    temp_fd = None
-    temp_path = None
     lock_fd = None
     lock_path = None
 
     try:
         lock_fd, lock_path = _acquire_config_lock(config_path.parent)
+        _guardar_config_atomico(config_path, data)
+        logger.debug("Config guardado correctamente | path=%s", config_path)
+    except OSError:
+        logger.exception("No se pudo guardar config.json | path=%s", config_path)
+        raise
+    except TimeoutError:
+        logger.exception("Timeout esperando lock de config | path=%s", config_path)
+        raise PermissionError(f"No se pudo obtener acceso exclusivo a {config_path}")
+    finally:
+        _release_config_lock(lock_fd, lock_path) if lock_path else None
+
+
+def _guardar_config_atomico(config_path: Path, data: dict):
+    """Reemplaza el JSON atomicamente; el llamador debe poseer el lock."""
+    temp_fd = None
+    temp_path = None
+    try:
         temp_fd, temp_path = tempfile.mkstemp(
             prefix="config_",
             suffix=".tmp",
@@ -268,13 +283,6 @@ def guardar_config(data):
                 time.sleep(CONFIG_REPLACE_RETRY_SECONDS)
         if last_error is not None:
             raise last_error
-        logger.debug("Config guardado correctamente | path=%s", config_path)
-    except OSError:
-        logger.exception("No se pudo guardar config.json | path=%s", config_path)
-        raise
-    except TimeoutError:
-        logger.exception("Timeout esperando lock de config | path=%s", config_path)
-        raise PermissionError(f"No se pudo obtener acceso exclusivo a {config_path}")
     finally:
         if temp_fd is not None:
             try:
@@ -286,4 +294,43 @@ def guardar_config(data):
                 os.remove(temp_path)
             except OSError:
                 pass
+
+
+def actualizar_config_parcial(cambios: dict) -> dict:
+    """Actualiza claves de primer nivel leyendo y escribiendo bajo el mismo lock."""
+    if not isinstance(cambios, dict) or not cambios:
+        raise ValueError("cambios debe ser un diccionario no vacio")
+
+    config_path = obtener_config_path()
+    lock_fd = None
+    lock_path = None
+    try:
+        lock_fd, lock_path = _acquire_config_lock(config_path.parent)
+        if config_path.exists():
+            with config_path.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+            if not isinstance(data, dict):
+                raise ValueError("La configuracion raiz debe ser un objeto JSON")
+        else:
+            data = {}
+
+        data.update(cambios)
+        _guardar_config_atomico(config_path, data)
+        logger.info(
+            "Config actualizado parcialmente | path=%s | claves=%s",
+            config_path,
+            sorted(cambios),
+        )
+        return dict(data)
+    except (OSError, json.JSONDecodeError, ValueError):
+        logger.exception(
+            "No se pudo actualizar parcialmente config.json | path=%s | claves=%s",
+            config_path,
+            sorted(cambios),
+        )
+        raise
+    except TimeoutError:
+        logger.exception("Timeout esperando lock de config | path=%s", config_path)
+        raise PermissionError(f"No se pudo obtener acceso exclusivo a {config_path}")
+    finally:
         _release_config_lock(lock_fd, lock_path) if lock_path else None

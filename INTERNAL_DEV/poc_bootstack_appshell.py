@@ -15,8 +15,10 @@ import bootstack as bs
 
 try:
     from INTERNAL_DEV.bootstack_theme import instalar_tema_smartprice
+    from INTERNAL_DEV.bootstack_settings import guardar_sincronizacion_automatica
 except ModuleNotFoundError:
     from bootstack_theme import instalar_tema_smartprice
+    from bootstack_settings import guardar_sincronizacion_automatica
 
 
 PERMISOS_DEMO = {
@@ -35,6 +37,7 @@ def construir_shell(
     sincronizacion_automatica: bool | None = None,
     solo_acerca: bool = False,
     incluir_config_simple: bool = False,
+    permitir_escritura_sync: bool = False,
 ) -> bs.AppShell:
     """Construye un shell demostrativo filtrado por permisos efectivos."""
     if usar_tema_marca:
@@ -111,14 +114,70 @@ def construir_shell(
                     tabs = bs.Tabs()
                     with tabs.add("general", label="General"):
                         with bs.Card(gap=10, horizontal_items="start", accent="primary"):
-                            bs.Badge("Solo lectura", accent="primary", variant="pill")
+                            modo_config = (
+                                "Escritura controlada" if permitir_escritura_sync else "Solo lectura"
+                            )
+                            bs.Badge(modo_config, accent="primary", variant="pill")
                             bs.Label("Estado general", font="heading-sm")
                             estado_sync = (
                                 "Activada" if sincronizacion_automatica else "Desactivada"
                             ) if sincronizacion_automatica is not None else "Sin conectar"
                             bs.Label(f"Version de SmartPrice: {version}")
                             bs.Label(f"Usuario Windows: {usuario}")
-                            bs.Label(f"Sincronizacion automatica: {estado_sync}")
+                            sync_status_signal = bs.Signal(
+                                f"Sincronizacion automatica: {estado_sync}"
+                            )
+                            bs.Label(textsignal=sync_status_signal)
+                            if permitir_escritura_sync:
+                                sync_signal = bs.Signal(bool(sincronizacion_automatica))
+                                estado_guardado = {"valor": bool(sincronizacion_automatica), "activo": False}
+                                feedback_signal = bs.Signal(
+                                    f"Estado actual: sincronizacion {estado_sync.lower()}."
+                                )
+
+                                def guardar_sync():
+                                    if estado_guardado["activo"]:
+                                        return
+                                    nuevo_valor = bool(sync_signal())
+                                    valor_anterior = estado_guardado["valor"]
+                                    if nuevo_valor == valor_anterior:
+                                        return
+                                    estado_guardado["activo"] = True
+                                    try:
+                                        guardar_sincronizacion_automatica(nuevo_valor)
+                                    except Exception as exc:
+                                        sync_signal.set(valor_anterior)
+                                        estado_anterior = (
+                                            "Activada" if valor_anterior else "Desactivada"
+                                        )
+                                        sync_status_signal.set(
+                                            f"Sincronizacion automatica: {estado_anterior}"
+                                        )
+                                        feedback_signal.set(f"No se pudo guardar: {exc}")
+                                    else:
+                                        estado_guardado["valor"] = nuevo_valor
+                                        estado = "activada" if nuevo_valor else "desactivada"
+                                        sync_status_signal.set(
+                                            f"Sincronizacion automatica: {estado.capitalize()}"
+                                        )
+                                        feedback_signal.set(
+                                            f"Sincronizacion {estado}. Reinicie SmartPrice productivo para aplicar."
+                                        )
+                                    finally:
+                                        estado_guardado["activo"] = False
+
+                                bs.Switch(
+                                    "Permitir sincronizacion automatica",
+                                    signal=sync_signal,
+                                    on_change=guardar_sync,
+                                    accent="primary",
+                                )
+                                bs.Label(textsignal=feedback_signal, accent="muted", wrap_width=520)
+                            else:
+                                bs.Label(
+                                    "Escritura deshabilitada en esta ejecucion.",
+                                    accent="muted",
+                                )
                     with tabs.add("permisos", label="Permisos"):
                         with bs.Card(gap=8, horizontal_items="start"):
                             bs.Label("Permisos efectivos del usuario", font="heading-sm")

@@ -13,6 +13,7 @@ MODULOS = ("productos", "publicidad", "configuracion")
 PERMISOS_DEFAULT = {modulo: True for modulo in MODULOS}
 FEATURE_FLAG_ABOUT = "ui_bootstack_about"
 FEATURE_FLAG_CONFIG_SIMPLE = "ui_bootstack_config_simple"
+FEATURE_FLAG_CONFIG_SYNC_WRITE = "ui_bootstack_config_sync_write"
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class ContextoBootstack:
     sincronizacion_automatica: bool
     piloto_acerca_habilitado: bool
     piloto_config_simple_habilitado: bool
+    piloto_config_sync_write_habilitado: bool
 
 
 def resolver_permisos(
@@ -50,4 +52,7 @@ def cargar_contexto_bootstack() -> ContextoBootstack:
         sincronizacion_automatica=bool(config.get("sincronizacion_automatica", False)),
         piloto_acerca_habilitado=bool(config.get(FEATURE_FLAG_ABOUT, False)),
         piloto_config_simple_habilitado=bool(config.get(FEATURE_FLAG_CONFIG_SIMPLE, False)),
+        piloto_config_sync_write_habilitado=bool(
+            config.get(FEATURE_FLAG_CONFIG_SYNC_WRITE, False)
+        ),
     )

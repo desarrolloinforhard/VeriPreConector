@@ -16,6 +16,7 @@ import argparse
 from INTERNAL_DEV.bootstack_context import (
     FEATURE_FLAG_ABOUT,
     FEATURE_FLAG_CONFIG_SIMPLE,
+    FEATURE_FLAG_CONFIG_SYNC_WRITE,
     cargar_contexto_bootstack,
 )
 from INTERNAL_DEV.bootstack_theme import instalar_tema_smartprice
@@ -35,11 +36,21 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Activa Configuracion informativa solo para esta ejecucion",
     )
+    parser.add_argument(
+        "--config-write-pilot",
+        action="store_true",
+        help="Habilita la escritura controlada de sincronizacion automatica",
+    )
     args = parser.parse_args(argv)
 
     contexto = cargar_contexto_bootstack()
+    config_escritura_habilitada = (
+        contexto.piloto_config_sync_write_habilitado or args.config_write_pilot
+    )
     config_piloto_habilitado = (
-        contexto.piloto_config_simple_habilitado or args.config_pilot
+        contexto.piloto_config_simple_habilitado
+        or args.config_pilot
+        or config_escritura_habilitada
     )
     piloto_habilitado = (
         contexto.piloto_acerca_habilitado
@@ -51,7 +62,7 @@ def main(argv: list[str] | None = None) -> None:
         print(
             "Piloto Bootstack desactivado. Use --about-pilot o habilite "
             f"{FEATURE_FLAG_ABOUT}=true o {FEATURE_FLAG_CONFIG_SIMPLE}=true "
-            "en la configuracion de prueba."
+            f"o {FEATURE_FLAG_CONFIG_SYNC_WRITE}=true en la configuracion de prueba."
         )
         return
 
@@ -64,6 +75,7 @@ def main(argv: list[str] | None = None) -> None:
         sincronizacion_automatica=contexto.sincronizacion_automatica,
         solo_acerca=True,
         incluir_config_simple=config_piloto_habilitado,
+        permitir_escritura_sync=config_escritura_habilitada,
     )
     if args.smoke:
         shell.destroy()
