@@ -89,6 +89,11 @@ class ProjectLogger:
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
 
+        db_level_name = os.getenv("SMARTPRICE_DB_LOG_LEVEL", "INFO").strip().upper()
+        db_level = getattr(logging, db_level_name, logging.INFO)
+        logging.getLogger("veripre.DB.database").setLevel(db_level)
+        logging.getLogger("veripre.DB.database_sybase").setLevel(db_level)
+
         # Handler de consola
         if console:
             console_handler = logging.StreamHandler(sys.stdout)

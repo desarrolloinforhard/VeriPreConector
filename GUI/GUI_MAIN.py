@@ -1200,7 +1200,7 @@ class GUI_MAIN:
             "productos",
             "Cargando módulo Productos...",
             callback_despues=lambda: self.contenido_productos.cargar_productos_locales_con_loader(
-                force=True,
+                force=False,
                 mostrar_sin_datos=True,
             ),
         )

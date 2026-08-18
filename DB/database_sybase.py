@@ -22,7 +22,7 @@ class ConexionSybase:
         self.contrasena = kwargs["password"]
         self.dsn_name = kwargs["dsn"]
 
-        logger.info(
+        logger.debug(
             "ConexionSybase inicializada | dsn=%s | user=%s",
             self.dsn_name,
             self.usuario,
@@ -41,7 +41,7 @@ class ConexionSybase:
             )
             self.cursor = self.conexion.cursor()
 
-            logger.info("Conexion a Sybase establecida correctamente | dsn=%s", self.dsn_name)
+            logger.debug("Conexion a Sybase establecida correctamente | dsn=%s", self.dsn_name)
             return True
 
         except pypyodbc.Error:
@@ -102,7 +102,7 @@ class ConexionSybase:
         try:
             if self.conexion and self.conexion.connected:
                 self.conexion.close()
-                logger.info("Conexion Sybase cerrada correctamente.")
+                logger.debug("Conexion Sybase cerrada correctamente.")
             else:
                 logger.debug("La conexion Sybase ya estaba cerrada.")
         except pypyodbc.Error:

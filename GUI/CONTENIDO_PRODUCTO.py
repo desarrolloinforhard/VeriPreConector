@@ -22,14 +22,17 @@ from core.ui.responsive import clamp, fit_toplevel_to_workarea
 from core.ui.theme_tokens import BUTTON_PAD_X, BUTTON_PAD_Y, FONT_BODY_BOLD, FONT_SUBTITLE, FONT_TITLE_LG, PANEL_PAD_X, PANEL_PAD_Y
 from core.services.image_resolver import ProductImageResolver
 from core.services.productos_sync_service import ProductosSyncService
+from core.logging.logger import get_logger
 from FUNC.config_json import guardar_config
 
 #from core.network.selector_envio_dispositivos import EnvioDispositivos
 
+logger = get_logger(__name__)
 
 
 class ContenidoProducto:
-    AUTO_SYNC_INTERVAL_SECONDS = 5
+    AUTO_SYNC_INTERVAL_SECONDS = 30
+    AUTO_SYNC_PAUSED_INTERVAL_SECONDS = 10
     TABLE_HEIGHT = 24
     IMAGE_PANEL_WIDTH = 420
     IMAGE_PANEL_HEIGHT = 420
@@ -55,6 +58,7 @@ class ContenidoProducto:
         self._layout_after_id = None
         self._preview_image_size = self.PREVIEW_IMAGE_SIZE
         self._image_request_id = 0
+        self._preview_codigo_actual = None
         self.CONEXIONDBA = self.DICT_WIDGETS.get_widget("DATABASE","CONEXIONDBA")
         self.CONEXION_INFORHARD = self.DICT_WIDGETS.get_widget("DATABASE","CONEXION_INFORHARD")
         if self.CONEXION_INFORHARD:
@@ -384,7 +388,14 @@ class ContenidoProducto:
         )
         self.label_preview_loader.grid(row=1, column=0, padx=24, pady=(0, 24))
 
-    def _actualizar_resumen_preview(self, descripcion=None, codigo=None, precio=None, oferta=None):
+    def _actualizar_resumen_preview(
+        self,
+        descripcion=None,
+        codigo=None,
+        precio=None,
+        oferta=None,
+        ofertas_plu=None,
+    ):
         descripcion_txt = str(descripcion).strip() if descripcion else "Sin producto seleccionado"
         codigo_txt = str(codigo).strip() if codigo else "-"
 
@@ -406,14 +417,15 @@ class ContenidoProducto:
         self.label_preview_precio.configure(text=precio_txt)
 
         oferta_simple = None
-        ofertas_plu = []
+        ofertas_plu_proporcionadas = ofertas_plu is not None
+        ofertas_plu = ofertas_plu if ofertas_plu_proporcionadas else []
         if oferta and oferta.get("tiene_oferta"):
             if oferta.get("es_ofplu"):
                 ofertas_plu = oferta.get("ofertas_plu") or []
             else:
                 oferta_simple = oferta
 
-        if codigo_txt != "-" and not ofertas_plu:
+        if codigo_txt != "-" and not ofertas_plu_proporcionadas:
             try:
                 ofertas_plu = self._obtener_ofertas_plu_producto(codigo_txt)
             except Exception:
@@ -603,6 +615,7 @@ class ContenidoProducto:
 
     def _mostrar_placeholder_producto(self, reset_resumen=True):
         if reset_resumen:
+            self._preview_codigo_actual = None
             self._actualizar_resumen_preview()
         self._ocultar_loader_preview()
         try:
@@ -746,10 +759,6 @@ class ContenidoProducto:
             lambda event: self.command_actualizar_datos(),
         )
 
-        if self.config.get("sincronizacion_automatica", True) and not self._vigia_iniciado:
-            self.iniciar_vigia_actualizacion_productos(intervalo=self.AUTO_SYNC_INTERVAL_SECONDS)
-            self._vigia_iniciado = True
-
         try:
             self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "start")()
         except Exception as e:
@@ -769,6 +778,11 @@ class ContenidoProducto:
                         self.datos_PRODUCTOS_COMPLETOS = self.datos_ARTICULOS
                         self.insertar_datos_en_table_view()
                         self._productos_cargados = True
+                        if self.config.get("sincronizacion_automatica", True) and not self._vigia_iniciado:
+                            self.iniciar_vigia_actualizacion_productos(
+                                intervalo=self.AUTO_SYNC_INTERVAL_SECONDS,
+                            )
+                            self._vigia_iniciado = True
                     finally:
                         self._carga_local_en_curso = False
                         self.button_crear_datos.config(
@@ -1499,29 +1513,29 @@ class ContenidoProducto:
         descripcion_producto = str(item["values"][0]).strip() if len(item["values"]) > 0 else ""
         codigo_producto = str(item["values"][1]).strip() if len(item["values"]) > 1 else ""
         precio_producto = item["values"][2] if len(item["values"]) > 2 else "$0.00"
+        if event is not None and codigo_producto == self._preview_codigo_actual:
+            return
+        self._preview_codigo_actual = codigo_producto
+
         oferta = self._obtener_oferta_producto(codigo_producto)
-        try:
-            fila_oferta_simple = self._crear_productos_sqlite_dao(self.CONEXIONDBA).obtener_oferta_por_codigo(codigo_producto)
-        except Exception:
-            fila_oferta_simple = None
-
-        oferta_simple = None
-        if fila_oferta_simple:
-            _, tiene_oferta_simple, precio_oferta_simple, oferta_simple_desde, oferta_simple_hasta, oferta_simple_origen, oferta_simple_ccoddiv, oferta_simple_dto = fila_oferta_simple
-            if bool(tiene_oferta_simple):
-                oferta_simple = {
-                    "precio_oferta": float(precio_oferta_simple or 0) if precio_oferta_simple is not None else None,
-                    "oferta_desde": oferta_simple_desde,
-                    "oferta_hasta": oferta_simple_hasta,
-                    "oferta_origen": oferta_simple_origen,
-                    "oferta_ccoddiv": oferta_simple_ccoddiv,
-                    "oferta_dto": float(oferta_simple_dto or 0) if oferta_simple_dto is not None else None,
-                }
-
-        ofertas_plu_modal = self._obtener_ofertas_plu_producto(codigo_producto)
-        self._actualizar_resumen_preview(descripcion_producto, codigo_producto, precio_producto, oferta=oferta)
-        self._actualizar_estado_precios_adicionales(codigo_producto)
-        self._actualizar_estado_oferta(codigo_producto, oferta=oferta)
+        ofertas_plu = self._obtener_ofertas_plu_producto(codigo_producto)
+        precios_adicionales = self._obtener_precios_adicionales_producto(codigo_producto)
+        self._actualizar_resumen_preview(
+            descripcion_producto,
+            codigo_producto,
+            precio_producto,
+            oferta=oferta,
+            ofertas_plu=ofertas_plu,
+        )
+        self._actualizar_estado_precios_adicionales(
+            codigo_producto,
+            precios_adicionales=precios_adicionales,
+        )
+        self._actualizar_estado_oferta(
+            codigo_producto,
+            oferta=oferta,
+            ofertas_plu=ofertas_plu,
+        )
         self._image_request_id += 1
         request_id = self._image_request_id
         self._mostrar_loader_preview()
@@ -1573,6 +1587,7 @@ class ContenidoProducto:
                 codigo_producto,
                 img_base64,
                 tipo_imagen,
+                consultar_sqlite=False,
             )
         return img_base64, tipo_imagen
 
@@ -1600,9 +1615,10 @@ class ContenidoProducto:
             for fila in filas
         ]
 
-    def _actualizar_estado_precios_adicionales(self, codigo_producto):
+    def _actualizar_estado_precios_adicionales(self, codigo_producto, precios_adicionales=None):
         try:
-            precios_adicionales = self._obtener_precios_adicionales_producto(codigo_producto)
+            if precios_adicionales is None:
+                precios_adicionales = self._obtener_precios_adicionales_producto(codigo_producto)
             cantidad = len(precios_adicionales)
             if cantidad:
                 texto = f"Precios adicionales: SI ({cantidad})"
@@ -1641,7 +1657,7 @@ class ContenidoProducto:
     def _obtener_oferta_producto(self, codigo_producto):
         return self._obtener_oferta_precio_producto(codigo_producto)
 
-    def _actualizar_estado_oferta(self, codigo_producto, oferta=None):
+    def _actualizar_estado_oferta(self, codigo_producto, oferta=None, ofertas_plu=None):
         try:
             oferta = oferta if oferta is not None else self._obtener_oferta_producto(codigo_producto)
             if oferta and oferta.get("tiene_oferta") and not oferta.get("es_ofplu"):
@@ -1657,7 +1673,8 @@ class ContenidoProducto:
             self.label_oferta_estado.config(text="Oferta precio: error", bootstyle="danger")
 
         try:
-            ofertas_plu = self._obtener_ofertas_plu_producto(codigo_producto)
+            if ofertas_plu is None:
+                ofertas_plu = self._obtener_ofertas_plu_producto(codigo_producto)
             if ofertas_plu:
                 cantidad = len(ofertas_plu)
                 texto = f"Oferta OFPLU: SI ({cantidad} promo{'s' if cantidad != 1 else ''})"
@@ -2186,23 +2203,22 @@ class ContenidoProducto:
 
     def iniciar_vigia_actualizacion_productos(self, intervalo=AUTO_SYNC_INTERVAL_SECONDS):
         def vigia():
-            print("🟢 Vigía activado (modo automático)")  # Línea fija que queda
-
-            puntos = ["", ".", "..", "..."]
-            anim_index = 0
+            logger.info("Vigia de productos activado | intervalo_segundos=%s", intervalo)
+            time.sleep(intervalo)
 
             while True:
                 if not self.config.get("sincronizacion_automatica", True):
-                    print("⏸️ Vigía pausado por configuración. Esperando activación...")
-                    time.sleep(5)
+                    time.sleep(self.AUTO_SYNC_PAUSED_INTERVAL_SECONDS)
+                    continue
+
+                if self._actualizacion_en_curso:
+                    logger.debug("Vigia omite revision porque hay una actualizacion en curso.")
+                    time.sleep(intervalo)
                     continue
 
                 nueva_sqlite = None
                 nueva_sybase = None
                 try:
-                    print(f"\rRevisión en progreso{puntos[anim_index % 4]}   ", end="")
-                    anim_index += 1
-
                     # ✅ Nueva conexión SQLite (segura para este hilo)
                     from DB.database import SQLiteDB
                     nueva_sqlite = SQLiteDB(self.CONEXIONDBA.ruta_db)
@@ -2241,16 +2257,18 @@ class ContenidoProducto:
                                 if marca and clave in bloques_cambiados
                             }
                             detalle_bloques = ", ".join(bloques_cambiados) if bloques_cambiados else "catalogo"
-                            print(f"🟡 Nueva actualización detectada en: {detalle_bloques}. Ejecutando actualización...")
+                            logger.info(
+                                "Nueva actualizacion detectada | bloques=%s",
+                                detalle_bloques,
+                            )
                             self._notificar_sistema(
                                 "Actualizacion automatica",
                                 f"Se detectaron cambios en {detalle_bloques}. Actualizando datos...",
                             )
                             self._run_en_ui(self.command_actualizar_datos, True)
-                            continue
 
                 except Exception as e:
-                    print(f"❌ Vigía error: {e}")
+                    logger.exception("Error en vigia automatico de productos: %s", e)
                 finally:
                     if nueva_sqlite:
                         try:

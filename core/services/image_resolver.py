@@ -36,7 +36,7 @@ class ProductImageResolver:
         self.incluir_api_propia = incluir_api_propia
         self.incluir_go_upc = incluir_go_upc
 
-    def resolver(self, codigo, img_base64=None, formato=None):
+    def resolver(self, codigo, img_base64=None, formato=None, consultar_sqlite=True):
         codigo = self._limpiar_codigo(codigo)
         if not codigo:
             return img_base64, formato
@@ -44,9 +44,10 @@ class ProductImageResolver:
         if img_base64:
             return img_base64, formato
 
-        img_base64, formato = self._buscar_en_sqlite(codigo)
-        if img_base64:
-            return img_base64, formato
+        if consultar_sqlite:
+            img_base64, formato = self._buscar_en_sqlite(codigo)
+            if img_base64:
+                return img_base64, formato
 
         imagen = self._buscar_en_fuentes_concurrentes(codigo)
         if imagen:

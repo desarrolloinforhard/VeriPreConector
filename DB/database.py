@@ -14,7 +14,7 @@ class SQLiteDB:
         self.connection = None
         self.cursor = None
 
-        logger.info("SQLiteDB inicializado | db_name=%s", self.db_name)
+        logger.debug("SQLiteDB inicializado | db_name=%s", self.db_name)
 
     def conectar(self):
         """Establece la conexión con la base de datos."""
