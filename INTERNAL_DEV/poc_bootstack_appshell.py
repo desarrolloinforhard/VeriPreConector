@@ -34,6 +34,7 @@ def construir_shell(
     version: str = "POC",
     sincronizacion_automatica: bool | None = None,
     solo_acerca: bool = False,
+    incluir_config_simple: bool = False,
 ) -> bs.AppShell:
     """Construye un shell demostrativo filtrado por permisos efectivos."""
     if usar_tema_marca:
@@ -94,7 +95,7 @@ def construir_shell(
                         bs.Label("Placeholder de biblioteca multimedia")
                         bs.Label("El preview VLC permanece fuera de este POC.")
 
-            if permisos.get("configuracion") and not solo_acerca:
+            if permisos.get("configuracion") and (not solo_acerca or incluir_config_simple):
                 with nav.add_page(
                     "configuracion",
                     text="Configuracion",
@@ -104,18 +105,32 @@ def construir_shell(
                     gap=12,
                     horizontal_items="stretch",
                 ):
-                    bs.Label("Configuracion", font="heading-lg")
+                    bs.Label("Configuracion", font="heading-lg", accent="primary")
+                    bs.Label("Vista informativa del piloto Bootstack", accent="muted")
+                    bs.Divider(accent="primary")
                     tabs = bs.Tabs()
-                    with tabs.add("conexion", label="Conexion"):
-                        with bs.Card(gap=8, horizontal_items="stretch"):
-                            bs.Label("Estado de configuracion (solo lectura)")
+                    with tabs.add("general", label="General"):
+                        with bs.Card(gap=10, horizontal_items="start", accent="primary"):
+                            bs.Badge("Solo lectura", accent="primary", variant="pill")
+                            bs.Label("Estado general", font="heading-sm")
                             estado_sync = (
                                 "Activada" if sincronizacion_automatica else "Desactivada"
                             ) if sincronizacion_automatica is not None else "Sin conectar"
+                            bs.Label(f"Version de SmartPrice: {version}")
+                            bs.Label(f"Usuario Windows: {usuario}")
                             bs.Label(f"Sincronizacion automatica: {estado_sync}")
-                            bs.Label(f"Permisos efectivos: {', '.join(key for key, value in permisos.items() if value) or 'ninguno'}")
-                    with tabs.add("dispositivos", label="Dispositivos"):
-                        bs.Label("La deteccion de red seguira en los servicios existentes.")
+                    with tabs.add("permisos", label="Permisos"):
+                        with bs.Card(gap=8, horizontal_items="start"):
+                            bs.Label("Permisos efectivos del usuario", font="heading-sm")
+                            for modulo in ("productos", "publicidad", "configuracion"):
+                                estado = "Habilitado" if permisos.get(modulo) else "Sin acceso"
+                                bs.Label(f"{modulo.capitalize()}: {estado}")
+                    with tabs.add("alcance", label="Alcance"):
+                        with bs.Card(gap=8, horizontal_items="stretch"):
+                            bs.Label("Datos sensibles fuera de esta fase", font="heading-sm")
+                            bs.Label("No se leen ni modifican DSN, credenciales, API keys o dispositivos.")
+                            bs.Label("No existen botones Guardar, Limpiar o Enviar en este piloto.")
+                            bs.Label("La escritura se habilitara por campo luego de validar esta lectura.", accent="muted")
 
             with nav.add_page(
                 "acerca_de",

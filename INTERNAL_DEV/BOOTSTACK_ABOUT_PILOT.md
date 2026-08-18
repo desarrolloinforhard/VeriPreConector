@@ -10,11 +10,21 @@ No conecta SQLite, Sybase, dispositivos, multimedia ni servicios productivos. Ta
 
 El flag persistente es `ui_bootstack_about` y su valor por defecto efectivo es `false` cuando no existe en la configuracion.
 
+La pagina informativa de Configuracion usa `ui_bootstack_config_simple`, tambien con valor efectivo `false` cuando el flag no existe.
+
 Para una prueba temporal, sin persistir el flag:
 
 ```powershell
 .\.venv\Scripts\python.exe main_bootstack.py --about-pilot
 ```
+
+Para probar Acerca de y Configuracion sin persistir flags:
+
+```powershell
+.\.venv\Scripts\python.exe main_bootstack.py --about-pilot --config-pilot
+```
+
+La pagina Configuracion muestra version, usuario, sincronizacion automatica y permisos efectivos. No lee ni modifica DSN, credenciales, API keys o dispositivos y no presenta acciones de guardado.
 
 Smoke test sin ejecutar el loop visual:
 
@@ -42,6 +52,12 @@ El ejecutable abre directamente el piloto al hacer doble clic. Su smoke test es:
 .\dist\bootstack-about\SmartPrice-Bootstack-About.exe --smoke
 ```
 
+Para activar temporalmente Configuracion en el ejecutable:
+
+```powershell
+.\dist\bootstack-about\SmartPrice-Bootstack-About.exe --config-pilot
+```
+
 Este artefacto es Windows x64. No conecta Sybase, SQLite, VLC, red ni servicios productivos y no se integra a `Script_SmartPrice.iss`.
 
 Ejecutar `main_bootstack.py` sin flag ni argumento debe finalizar sin abrir una ventana e informar que el piloto esta desactivado.
@@ -55,6 +71,8 @@ El rollback consiste en mantener `ui_bootstack_about` ausente o en `false` y con
 - el entry point productivo no cambia;
 - el piloto apagado no abre UI;
 - `--about-pilot` abre solamente `Acerca de`;
+- `--config-pilot` agrega Configuracion solo para usuarios con permiso efectivo;
+- Configuracion no ofrece escrituras ni muestra datos sensibles;
 - se muestran version y usuario Windows reales en modo solo lectura;
 - el tema usa verde institucional y superficies blancas;
 - el smoke test construye y destruye el shell sin errores.

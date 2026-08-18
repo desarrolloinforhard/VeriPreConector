@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import argparse
 
-from INTERNAL_DEV.bootstack_context import FEATURE_FLAG_ABOUT, cargar_contexto_bootstack
+from INTERNAL_DEV.bootstack_context import (
+    FEATURE_FLAG_ABOUT,
+    FEATURE_FLAG_CONFIG_SIMPLE,
+    cargar_contexto_bootstack,
+)
 from INTERNAL_DEV.bootstack_theme import instalar_tema_smartprice
 from INTERNAL_DEV.poc_bootstack_appshell import construir_shell
 
@@ -26,14 +30,28 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Activa el piloto Acerca de solo para esta ejecucion, sin guardar configuracion",
     )
+    parser.add_argument(
+        "--config-pilot",
+        action="store_true",
+        help="Activa Configuracion informativa solo para esta ejecucion",
+    )
     args = parser.parse_args(argv)
 
     contexto = cargar_contexto_bootstack()
-    piloto_habilitado = contexto.piloto_acerca_habilitado or args.about_pilot or args.smoke
+    config_piloto_habilitado = (
+        contexto.piloto_config_simple_habilitado or args.config_pilot
+    )
+    piloto_habilitado = (
+        contexto.piloto_acerca_habilitado
+        or config_piloto_habilitado
+        or args.about_pilot
+        or args.smoke
+    )
     if not piloto_habilitado:
         print(
             "Piloto Bootstack desactivado. Use --about-pilot o habilite "
-            f"{FEATURE_FLAG_ABOUT}=true en la configuracion de prueba."
+            f"{FEATURE_FLAG_ABOUT}=true o {FEATURE_FLAG_CONFIG_SIMPLE}=true "
+            "en la configuracion de prueba."
         )
         return
 
@@ -45,6 +63,7 @@ def main(argv: list[str] | None = None) -> None:
         version=contexto.version,
         sincronizacion_automatica=contexto.sincronizacion_automatica,
         solo_acerca=True,
+        incluir_config_simple=config_piloto_habilitado,
     )
     if args.smoke:
         shell.destroy()
