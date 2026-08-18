@@ -18,7 +18,7 @@ from INTERNAL_DEV.bootstack_theme import instalar_tema_smartprice
 from INTERNAL_DEV.poc_bootstack_appshell import construir_shell
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Shell experimental Bootstack de SmartPrice")
     parser.add_argument("--smoke", action="store_true", help="Construye y cierra la UI sin ejecutar mainloop")
     parser.add_argument(
@@ -26,7 +26,7 @@ def main() -> None:
         action="store_true",
         help="Activa el piloto Acerca de solo para esta ejecucion, sin guardar configuracion",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     contexto = cargar_contexto_bootstack()
     piloto_habilitado = contexto.piloto_acerca_habilitado or args.about_pilot or args.smoke

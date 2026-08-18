@@ -22,6 +22,28 @@ Smoke test sin ejecutar el loop visual:
 .\.venv\Scripts\python.exe main_bootstack.py --smoke
 ```
 
+## Build experimental de 64 bits
+
+El ejecutable se construye en un pipeline separado y no modifica el build ni el instalador productivos:
+
+```powershell
+.\scripts\build_bootstack_about.ps1 -Clean
+```
+
+Salida esperada:
+
+```text
+dist\bootstack-about\SmartPrice-Bootstack-About.exe
+```
+
+El ejecutable abre directamente el piloto al hacer doble clic. Su smoke test es:
+
+```powershell
+.\dist\bootstack-about\SmartPrice-Bootstack-About.exe --smoke
+```
+
+Este artefacto es Windows x64. No conecta Sybase, SQLite, VLC, red ni servicios productivos y no se integra a `Script_SmartPrice.iss`.
+
 Ejecutar `main_bootstack.py` sin flag ni argumento debe finalizar sin abrir una ventana e informar que el piloto esta desactivado.
 
 ## Rollback
