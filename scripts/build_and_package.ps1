@@ -273,7 +273,6 @@ function Test-BuildPython {
         "pypyodbc",
         "pystray",
         "plyer",
-        "customtkinter",
         "cv2",
         "vlc"
     )

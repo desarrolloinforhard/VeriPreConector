@@ -1460,7 +1460,11 @@ class ContenidoProducto:
                 codigo = str(producto[1]).strip() if producto[1] else ""
                 precio = float(producto[3]) if producto[3] else 0.0
                 precio_formateado = f"${precio:,.2f}"
-                self.dt.insert_row("end", [descripcion, codigo, precio_formateado])
+                self.dt.insert_row(
+                    "end",
+                    [descripcion, codigo, precio_formateado],
+                    reload=False,
+                )
             self.dt.load_table_data()
             self.dt.configure(height=self.TABLE_HEIGHT)
             self._fijar_layout_productos()

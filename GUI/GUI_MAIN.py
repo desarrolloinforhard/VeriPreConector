@@ -503,11 +503,11 @@ class GUI_MAIN:
 
     def _iniciar_bootstrap(self):
         pasos = [
-            ("Preparando base local...", self.CONEXIONES_DBA),
-            ("Registrando variables globales...", self.VARIABLES_GLOBALES),
-            ("Preparando módulo inicial...", self._preparar_modulo_inicial),
-            ("Aplicando pantalla inicial...", self._bootstrap_seccion_inicial),
-            ("Inicializando bandeja del sistema...", self.crear_icono_bandeja),
+            ("Preparando base local...", self.CONEXIONES_DBA, True),
+            ("Registrando variables globales...", self.VARIABLES_GLOBALES, False),
+            ("Preparando módulo inicial...", self._preparar_modulo_inicial, False),
+            ("Aplicando pantalla inicial...", self._bootstrap_seccion_inicial, False),
+            ("Inicializando bandeja del sistema...", self.crear_icono_bandeja, False),
         ]
         self._ejecutar_pasos_bootstrap(pasos, 0)
 
@@ -518,25 +518,63 @@ class GUI_MAIN:
             logger.info("Bootstrap inicial completado correctamente.")
             return
 
-        mensaje, accion = pasos[index]
+        mensaje, accion, ejecutar_en_segundo_plano = pasos[index]
         logger.debug("Bootstrap paso %s/%s | %s", index + 1, len(pasos), mensaje)
         self.actualizar_loader_global(mensaje)
 
-        def correr_paso():
+        def continuar():
+            self.ventana_creacion_caja.after(
+                50,
+                lambda: self._ejecutar_pasos_bootstrap(pasos, index + 1),
+            )
+
+        def manejar_error(error):
+            logger.error(
+                "Error en bootstrap inicial | paso=%s",
+                mensaje,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            self.actualizar_loader_global("Ocurrió un error al iniciar la aplicación.")
+            messagebox.showerror(
+                "Error de inicio",
+                f"No se pudo completar el inicio de SmartPrice.\n\nPaso: {mensaje}",
+            )
+            self.ocultar_loader_global()
+
+        if ejecutar_en_segundo_plano:
+            finalizado = threading.Event()
+            resultado = {"error": None}
+
+            def correr_en_segundo_plano():
+                try:
+                    accion()
+                except Exception as error:
+                    resultado["error"] = error
+                finally:
+                    finalizado.set()
+
+            def comprobar_resultado():
+                if not finalizado.is_set():
+                    self.ventana_creacion_caja.after(50, comprobar_resultado)
+                    return
+                if resultado["error"] is not None:
+                    manejar_error(resultado["error"])
+                    return
+                continuar()
+
+            threading.Thread(target=correr_en_segundo_plano, daemon=True).start()
+            self.ventana_creacion_caja.after(50, comprobar_resultado)
+            return
+
+        def correr_en_ui():
             try:
                 accion()
-            except Exception:
-                logger.exception("Error en bootstrap inicial | paso=%s", mensaje)
-                self.actualizar_loader_global("Ocurrió un error al iniciar la aplicación.")
-                messagebox.showerror(
-                    "Error de inicio",
-                    f"No se pudo completar el inicio de SmartPrice.\n\nPaso: {mensaje}",
-                )
-                self.ocultar_loader_global()
+            except Exception as error:
+                manejar_error(error)
                 return
-            self.ventana_creacion_caja.after(50, lambda: self._ejecutar_pasos_bootstrap(pasos, index + 1))
+            continuar()
 
-        self.ventana_creacion_caja.after(20, correr_paso)
+        self.ventana_creacion_caja.after(20, correr_en_ui)
 
     def _bootstrap_seccion_inicial(self):
         self._ajustar_seccion_inicial_por_permisos()

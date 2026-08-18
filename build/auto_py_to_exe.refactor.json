@@ -78,14 +78,6 @@
       "value": "versionado;versionado"
     },
     {
-      "optionDest": "datas",
-      "value": "DB/veripre.db;DB"
-    },
-    {
-      "optionDest": "datas",
-      "value": "FUNC/ctk_components/src;FUNC/ctk_components/src"
-    },
-    {
       "optionDest": "hiddenimports",
       "value": "tkinter"
     },

@@ -1,0 +1,11 @@
+# Runtime Win32 requerido por el DSN Adaptive Server Anywhere 9.0 existente.
+ttkbootstrap==2.2.1
+requests==2.34.2
+pillow==12.0.0
+pypyodbc==1.3.6
+pystray==0.19.5
+plyer==2.1.0
+opencv-python==5.0.0.93
+python-vlc==3.0.21203
+screeninfo==0.8.1
+pyinstaller==6.21.0

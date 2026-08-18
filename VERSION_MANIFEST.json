@@ -24,9 +24,7 @@
     "resource_dirs": [
       "ASSETS",
       "API_GO-UPC",
-      "versionado",
-      "FUNC/ctk_components/src",
-      "DB/veripre.db"
+      "versionado"
     ]
   }
 }
