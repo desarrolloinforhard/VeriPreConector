@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> None:
         usuario=contexto.usuario_windows,
         version=contexto.version,
         sincronizacion_automatica=contexto.sincronizacion_automatica,
+        envio_automatico_novedades=contexto.envio_automatico_novedades,
         solo_acerca=True,
         incluir_config_simple=config_piloto_habilitado,
         permitir_escritura_sync=config_escritura_habilitada,

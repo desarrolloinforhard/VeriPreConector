@@ -22,6 +22,7 @@ class ContextoBootstack:
     version: str
     permisos: dict[str, bool]
     sincronizacion_automatica: bool
+    envio_automatico_novedades: bool
     piloto_acerca_habilitado: bool
     piloto_config_simple_habilitado: bool
     piloto_config_sync_write_habilitado: bool
@@ -50,6 +51,9 @@ def cargar_contexto_bootstack() -> ContextoBootstack:
         version=obtener_version(),
         permisos=resolver_permisos(config, usuario),
         sincronizacion_automatica=bool(config.get("sincronizacion_automatica", False)),
+        envio_automatico_novedades=bool(
+            config.get("envio_automatico_novedades", False)
+        ),
         piloto_acerca_habilitado=bool(config.get(FEATURE_FLAG_ABOUT, False)),
         piloto_config_simple_habilitado=bool(config.get(FEATURE_FLAG_CONFIG_SIMPLE, False)),
         piloto_config_sync_write_habilitado=bool(

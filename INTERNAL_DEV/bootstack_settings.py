@@ -12,3 +12,19 @@ def guardar_sincronizacion_automatica(habilitada: bool) -> dict:
     if not habilitada:
         cambios["envio_automatico_novedades"] = False
     return actualizar_config_parcial(cambios)
+
+
+def guardar_envio_automatico_novedades(habilitado: bool) -> dict:
+    """Persiste el envio automatico solo si la sincronizacion sigue activa."""
+    habilitado = bool(habilitado)
+
+    def validar_sincronizacion(config: dict) -> None:
+        if habilitado and not bool(config.get("sincronizacion_automatica", False)):
+            raise ValueError(
+                "No se puede activar el envio automatico con la sincronizacion desactivada"
+            )
+
+    return actualizar_config_parcial(
+        {"envio_automatico_novedades": habilitado},
+        validar=validar_sincronizacion,
+    )

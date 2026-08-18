@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Callable
 
 from core.logging.logger import get_logger
 
@@ -296,7 +297,10 @@ def _guardar_config_atomico(config_path: Path, data: dict):
                 pass
 
 
-def actualizar_config_parcial(cambios: dict) -> dict:
+def actualizar_config_parcial(
+    cambios: dict,
+    validar: Callable[[dict], None] | None = None,
+) -> dict:
     """Actualiza claves de primer nivel leyendo y escribiendo bajo el mismo lock."""
     if not isinstance(cambios, dict) or not cambios:
         raise ValueError("cambios debe ser un diccionario no vacio")
@@ -314,6 +318,8 @@ def actualizar_config_parcial(cambios: dict) -> dict:
         else:
             data = {}
 
+        if validar is not None:
+            validar(dict(data))
         data.update(cambios)
         _guardar_config_atomico(config_path, data)
         logger.info(

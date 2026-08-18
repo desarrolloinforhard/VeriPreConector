@@ -15,10 +15,16 @@ import bootstack as bs
 
 try:
     from INTERNAL_DEV.bootstack_theme import instalar_tema_smartprice
-    from INTERNAL_DEV.bootstack_settings import guardar_sincronizacion_automatica
+    from INTERNAL_DEV.bootstack_settings import (
+        guardar_envio_automatico_novedades,
+        guardar_sincronizacion_automatica,
+    )
 except ModuleNotFoundError:
     from bootstack_theme import instalar_tema_smartprice
-    from bootstack_settings import guardar_sincronizacion_automatica
+    from bootstack_settings import (
+        guardar_envio_automatico_novedades,
+        guardar_sincronizacion_automatica,
+    )
 
 
 PERMISOS_DEMO = {
@@ -35,6 +41,7 @@ def construir_shell(
     usuario: str = "demo",
     version: str = "POC",
     sincronizacion_automatica: bool | None = None,
+    envio_automatico_novedades: bool = False,
     solo_acerca: bool = False,
     incluir_config_simple: bool = False,
     permitir_escritura_sync: bool = False,
@@ -130,7 +137,16 @@ def construir_shell(
                             bs.Label(textsignal=sync_status_signal)
                             if permitir_escritura_sync:
                                 sync_signal = bs.Signal(bool(sincronizacion_automatica))
+                                envio_signal = bs.Signal(
+                                    bool(sincronizacion_automatica)
+                                    and bool(envio_automatico_novedades)
+                                )
                                 estado_guardado = {"valor": bool(sincronizacion_automatica), "activo": False}
+                                envio_guardado = {
+                                    "valor": bool(sincronizacion_automatica)
+                                    and bool(envio_automatico_novedades),
+                                    "activo": False,
+                                }
                                 feedback_signal = bs.Signal(
                                     f"Estado actual: sincronizacion {estado_sync.lower()}."
                                 )
@@ -156,6 +172,10 @@ def construir_shell(
                                         feedback_signal.set(f"No se pudo guardar: {exc}")
                                     else:
                                         estado_guardado["valor"] = nuevo_valor
+                                        envio_switch.disabled = not nuevo_valor
+                                        if not nuevo_valor:
+                                            envio_signal.set(False)
+                                            envio_guardado["valor"] = False
                                         estado = "activada" if nuevo_valor else "desactivada"
                                         sync_status_signal.set(
                                             f"Sincronizacion automatica: {estado.capitalize()}"
@@ -166,10 +186,39 @@ def construir_shell(
                                     finally:
                                         estado_guardado["activo"] = False
 
+                                def guardar_envio():
+                                    if envio_guardado["activo"]:
+                                        return
+                                    nuevo_valor = bool(envio_signal())
+                                    valor_anterior = envio_guardado["valor"]
+                                    if nuevo_valor == valor_anterior:
+                                        return
+                                    envio_guardado["activo"] = True
+                                    try:
+                                        guardar_envio_automatico_novedades(nuevo_valor)
+                                    except Exception as exc:
+                                        envio_signal.set(valor_anterior)
+                                        feedback_signal.set(f"No se pudo guardar: {exc}")
+                                    else:
+                                        envio_guardado["valor"] = nuevo_valor
+                                        estado = "activado" if nuevo_valor else "desactivado"
+                                        feedback_signal.set(
+                                            f"Envio automatico {estado}. Reinicie SmartPrice productivo para aplicar."
+                                        )
+                                    finally:
+                                        envio_guardado["activo"] = False
+
                                 bs.Switch(
                                     "Permitir sincronizacion automatica",
                                     signal=sync_signal,
                                     on_change=guardar_sync,
+                                    accent="primary",
+                                )
+                                envio_switch = bs.Switch(
+                                    "Enviar novedades automaticamente",
+                                    signal=envio_signal,
+                                    on_change=guardar_envio,
+                                    disabled=not bool(sincronizacion_automatica),
                                     accent="primary",
                                 )
                                 bs.Label(textsignal=feedback_signal, accent="muted", wrap_width=520)

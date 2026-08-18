@@ -34,7 +34,7 @@ Para habilitar temporalmente solo la escritura de sincronizacion automatica:
 .\.venv\Scripts\python.exe main_bootstack.py --config-write-pilot
 ```
 
-Al desactivar la sincronizacion tambien se desactiva `envio_automatico_novedades`, igual que en la pantalla productiva. El cambio se guarda atomicamente bajo el lock existente y se aplica a SmartPrice productivo en el siguiente inicio.
+El piloto permite controlar tambien `envio_automatico_novedades`. Este segundo interruptor solo se habilita cuando la sincronizacion esta activa. Al desactivar la sincronizacion tambien se desactiva el envio automatico, igual que en la pantalla productiva. Los cambios se guardan atomicamente bajo el lock existente y se aplican a SmartPrice productivo en el siguiente inicio.
 
 Smoke test sin ejecutar el loop visual:
 
