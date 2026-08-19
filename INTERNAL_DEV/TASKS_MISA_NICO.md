@@ -47,6 +47,12 @@ Si un cambio cruza ambas lineas, se define contrato primero y luego cada uno imp
    - validar panel lateral de preview/acciones sobre distintas resoluciones
    - estabilizar resolucion concurrente de imagenes con API propia `:5000`
    - mantener contador y detalle de precios adicionales sin romper la seleccion principal
+10. Abrir linea de hardening ODBC / DBA en cliente Novo:
+   - `VPC-F5-001` auditar ciclo de vida de `ConexionSybase` y cierre real de sesion ODBC
+   - `VPC-F5-002` separar conexion global de GUI vs conexiones cortas de workers/sync
+   - `VPC-F5-003` asegurar fin de transaccion de lectura (`commit/rollback` o autocommit controlado)
+   - `VPC-F5-004` cerrar explicitamente Sybase al salir realmente de la app
+   - `VPC-F5-005` validar en logs cliente que no queden sesiones persistentes ni bloqueos sobre DBA
 
 ## Nico - Ownership principal
 
@@ -125,3 +131,55 @@ Notas:
 - La linea de normalizacion de codigos legacy quedo descartada para el flujo operativo actual.
 - SmartPrice vuelve a trabajar solo con `codigo` original de Sybase en sync, SQLite, UI y envio.
 - El pendiente real de esta etapa vuelve a ser `VPC-F3` (ofertas activas) y no una transformacion de barcode.
+
+## Anexo fase VPC-F5
+
+Responsable propuesto: `Misael Ramirez`
+
+Objetivo tecnico:
+- eliminar riesgo de bloqueo/interferencia con otros ejecutables que usan la misma base legacy;
+- acotar el tiempo de vida de las sesiones ODBC;
+- evitar reuse inseguro de una misma conexion Sybase desde GUI y threads.
+
+Hallazgo base:
+- `DB/database_sybase.py` deja una conexion reutilizable de larga vida;
+- la GUI mantiene una instancia global de `ConexionSybase`;
+- la sincronizacion automatica consulta marcas remotas cada `5s`;
+- los `SELECT` no cierran explicitamente la transaccion en el wrapper.
+
+Fases tecnicas sugeridas:
+1. `VPC-F5-001` Relevamiento fino y trazas:
+   - mapear todos los consumidores directos de `ConexionSybase`;
+   - registrar apertura/cierre por hilo y por flujo;
+   - diferenciar GUI, sync automatico, headless y utilitarios.
+2. `VPC-F5-002` Refactor del wrapper:
+   - remover `self.cursor` persistente;
+   - definir estrategia unica de cursores cortos;
+   - forzar cierre limpio de transaccion despues de lectura.
+3. `VPC-F5-003` Refactor de consumo:
+   - evitar que workers reutilicen la instancia global de Sybase;
+   - usar conexiones cortas por tarea de sync/polling.
+4. `VPC-F5-004` Cierre de aplicacion:
+   - cerrar `CONEXIONDBA_SYBASE` en salida real de la app;
+   - revisar impacto de modo bandeja.
+5. `VPC-F5-005` Validacion en cliente:
+   - test con SmartPrice abierto + otros EXE legacy;
+   - revisar logs;
+   - confirmar ausencia de bloqueo residual.
+
+Avance aplicado el `2026-08-14`:
+- `VPC-F5-002` implementado parcialmente:
+  - wrapper con `autocommit=True`,
+  - sin cursor persistente,
+  - lock interno y cierre defensivo ante error.
+- `VPC-F5-003` implementado parcialmente:
+  - cierre de instancia previa al reemplazar la conexion global desde GUI.
+- `VPC-F5-004` implementado parcialmente:
+  - cierre explicito de Sybase al salir realmente de la aplicacion.
+
+Pendiente real para cerrar la fase:
+- ejecutar validacion en cliente con SmartPrice + otros EXE legacy usando la misma base.
+
+Condicion de cierre:
+- no alcanza con que sync siga funcionando;
+- hay que validar especificamente que el resto del ecosistema legacy pueda operar en paralelo sin bloqueo de DBA.

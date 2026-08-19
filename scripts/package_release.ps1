@@ -57,9 +57,33 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 )
 Move-Item -LiteralPath $tempZip -Destination $zipPath -Force
 
-$hash = Get-FileHash -Algorithm SHA256 -Path $zipPath
+$hashValue = $null
+if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+    $hashValue = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash
+} else {
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($zipPath)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+            $hashValue = ([System.BitConverter]::ToString($hashBytes)).Replace("-", "")
+        } finally {
+            $sha256.Dispose()
+        }
+    } finally {
+        if ($stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($hashValue)) {
+    throw "No se pudo calcular el SHA256 para $zipPath"
+}
+
 $hashPath = "$zipPath.sha256.txt"
-"$($hash.Hash)  $zipName" | Set-Content -Path $hashPath -Encoding ASCII
+"$hashValue  $zipName" | Set-Content -Path $hashPath -Encoding ASCII
 
 Write-Host "ZIP creado: $zipPath"
-Write-Host "SHA256: $($hash.Hash)"
+Write-Host "SHA256: $hashValue"

@@ -4,6 +4,8 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 
 ## Productos / Sync / Envios
 
+- Endurecido el acceso a `F:\Dba\veripre.db` para instalaciones compartidas con lock interno por proceso, `busy_timeout`, WAL y eliminacion de `commit()` en lecturas.
+- Registrado el incidente `database is locked` observado en cliente Novo como problema de contencion SQLite local entre polling automatico, UI y escrituras.
 - Corregido loop de sincronizacion automatica que repetia mensajes y recargas.
 - Ajustado refresco de precios y novedades para que tome cambios de costo/precio.
 - Mejorado estado visual durante envio de novedades.
@@ -138,3 +140,32 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
   - analisis de pantallas de datos,
   - roadmap incremental.
 - Se agrega `INTERNAL_DEV/BOOTSTACK_MIGRATION_BASE.md` como documento base de arranque.
+
+## Incidente documentado 2026-08-14 - DBA / ODBC
+
+- En cliente Novo se relevo una posible interferencia entre SmartPrice y otros ejecutables legacy que usan la misma base SQL Anywhere/DBA.
+- La evidencia actual apunta a:
+  - conexion Sybase global registrada en GUI,
+  - proceso persistente en bandeja,
+  - reuse desde sincronizacion automatica,
+  - lecturas `SELECT` sin cierre explicito de transaccion en el wrapper ODBC.
+- Los logs muestran polling recurrente cada `5s` con `SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))` sobre:
+  - `DBA.ARTICULO`
+  - `DBA.CODBARP`
+  - `DBA.PACKS_MINI`
+  - `DBA.ATIPICAS`
+  - `DBA.OFERTAT`
+  - `DBA.OFERTAL`
+- No se encontro evidencia de escrituras directas actuales sobre tablas `DBA.*` como causa primaria.
+- Se abre fase nueva de hardening para refactorizar ciclo de vida de `ConexionSybase`, aislar hilos y validar cierre real de sesiones ODBC.
+
+Mitigacion aplicada en esta misma fecha:
+- `ConexionSybase` pasa a `autocommit=True`.
+- Se elimina `self.cursor` persistente.
+- Se agrega cierre defensivo de conexion ante error y reconexion limpia.
+- `GUI_MAIN` y `GUI_CONFIG` cierran la instancia previa al reemplazar la conexion global.
+- `GUI_MAIN.cerrar_aplicacion()` fuerza cierre explicito de Sybase antes de destruir la ventana.
+
+Estado:
+- `implementado`: hardening basico del wrapper y de los reemplazos/cierre GUI.
+- `pendiente de confirmar`: validacion operativa final en entorno cliente con otros EXE legacy abiertos.

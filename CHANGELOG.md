@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.16.32 - 2026-08-19
+
+- Hardened local SQLite access for shared installations using `F:\Dba\veripre.db`, targeting the `database is locked` failures observed in client `Novo`.
+- Added internal process locking around the SQLite wrapper so background sync polling, UI reads, and local writes no longer reuse the same connection concurrently.
+- Enabled SQLite `busy_timeout`, WAL mode, and safer connection pragmas to reduce transient lock contention on the shared local catalog.
+- Removed unnecessary `commit()` calls after read-only queries, preventing avoidable write-lock escalation during automatic synchronization checks.
+
+## 1.16.31 - 2026-08-14
+
+- Hardened the legacy SQL Anywhere/ODBC lifecycle to reduce interference with other client executables sharing the same DBA.
+- Switched `ConexionSybase` to short-lived cursor usage with connection health checks and defensive reconnection.
+- Enabled `autocommit` in the ODBC wrapper and removed the persistent cursor reference to avoid leaving long-lived read state behind.
+- Added explicit Sybase disconnect on SmartPrice shutdown and before replacing the global ODBC connection from configuration screens.
+- Documented the DBA/ODBC operational incident and the mitigation baseline pending on-site validation in client `Novo`.
+
 ## 1.16.30 - 2026-08-06
 
 - Extended automatic synchronization so the background watcher now detects changes in products, secondary barcodes, packs, price offers, and OFPLU data instead of only `ARTICULO`.
