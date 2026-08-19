@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from pathlib import Path
 
 from core.logging.logger import get_logger
@@ -13,21 +14,34 @@ class SQLiteDB:
         self.ruta_db = db_name
         self.connection = None
         self.cursor = None
+        self._lock = threading.RLock()
 
         logger.info("SQLiteDB inicializado | db_name=%s", self.db_name)
 
     def conectar(self):
         """Establece la conexión con la base de datos."""
-        try:
-            Path(self.db_name).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
-            self.connection = sqlite3.connect(self.db_name, check_same_thread=False)
-            self.cursor = self.connection.cursor()
-            logger.debug("Conexión SQLite abierta | db_name=%s", self.db_name)
-        except sqlite3.Error:
-            self.connection = None
-            self.cursor = None
-            logger.exception("Error al conectar con la base de datos SQLite | db_name=%s", self.db_name)
-            raise
+        with self._lock:
+            try:
+                Path(self.db_name).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+                self.connection = sqlite3.connect(
+                    self.db_name,
+                    check_same_thread=False,
+                    timeout=30.0,
+                )
+                self.connection.execute("PRAGMA busy_timeout = 30000")
+                self.connection.execute("PRAGMA foreign_keys = ON")
+                self.connection.execute("PRAGMA synchronous = NORMAL")
+                try:
+                    self.connection.execute("PRAGMA journal_mode = WAL")
+                except sqlite3.Error:
+                    logger.warning("No se pudo activar WAL en SQLite | db_name=%s", self.db_name)
+                self.cursor = self.connection.cursor()
+                logger.debug("Conexión SQLite abierta | db_name=%s", self.db_name)
+            except sqlite3.Error:
+                self.connection = None
+                self.cursor = None
+                logger.exception("Error al conectar con la base de datos SQLite | db_name=%s", self.db_name)
+                raise
 
     def crear_tablas(self):
         """Crea las tablas necesarias en la base de datos."""
@@ -52,110 +66,132 @@ class SQLiteDB:
 
     def ejecutar_consulta(self, consulta, parametros=()):
         """Ejecuta una consulta SQL con o sin parámetros."""
-        try:
-            if not self.conexion_activa():
-                logger.debug("SQLite sin conexión activa. Reconectando.")
-                self.conectar()
+        with self._lock:
+            try:
+                if not self.conexion_activa():
+                    logger.debug("SQLite sin conexión activa. Reconectando.")
+                    self.conectar()
 
-            logger.debug("SQL SQLite: %s", consulta.strip())
-            if parametros:
-                logger.debug("SQL SQLite params: %s", parametros)
+                logger.debug("SQL SQLite: %s", consulta.strip())
+                if parametros:
+                    logger.debug("SQL SQLite params: %s", parametros)
 
-            self.cursor.execute(consulta, parametros)
-            self.connection.commit()
-            resultados = self.cursor.fetchall()
+                cursor = self.connection.cursor()
+                cursor.execute(consulta, parametros)
 
-            logger.debug("Consulta SQLite ejecutada correctamente | filas=%s", len(resultados))
-            return resultados
+                sql_normalizado = consulta.lstrip().upper()
+                es_lectura = (
+                    sql_normalizado.startswith("SELECT")
+                    or sql_normalizado.startswith("PRAGMA")
+                    or sql_normalizado.startswith("WITH")
+                )
 
-        except sqlite3.Error:
-            logger.exception("Error al ejecutar consulta SQLite.")
-            return None
+                if es_lectura:
+                    resultados = cursor.fetchall()
+                else:
+                    self.connection.commit()
+                    resultados = cursor.fetchall() if cursor.description else []
+
+                logger.debug("Consulta SQLite ejecutada correctamente | filas=%s", len(resultados))
+                return resultados
+
+            except sqlite3.Error:
+                logger.exception("Error al ejecutar consulta SQLite.")
+                return None
 
     def ejecutar_consultamany(self, consulta, parametros=()):
         """Ejecuta una consulta SQL con o sin parámetros en múltiples registros."""
-        try:
-            if not self.conexion_activa():
-                logger.debug("SQLite sin conexión activa. Reconectando.")
-                self.conectar()
+        with self._lock:
+            try:
+                if not self.conexion_activa():
+                    logger.debug("SQLite sin conexión activa. Reconectando.")
+                    self.conectar()
 
-            logger.debug("SQL SQLite executemany: %s", consulta.strip())
-            logger.debug("Cantidad de registros para executemany: %s", len(parametros))
+                logger.debug("SQL SQLite executemany: %s", consulta.strip())
+                logger.debug("Cantidad de registros para executemany: %s", len(parametros))
 
-            self.cursor.executemany(consulta, parametros)
-            self.connection.commit()
+                cursor = self.connection.cursor()
+                cursor.executemany(consulta, parametros)
+                self.connection.commit()
 
-            logger.info("executemany SQLite ejecutado correctamente | registros=%s", len(parametros))
-            return True
+                logger.info("executemany SQLite ejecutado correctamente | registros=%s", len(parametros))
+                return True
 
-        except sqlite3.Error:
-            logger.exception("Error al ejecutar executemany en SQLite.")
-            return False
+            except sqlite3.Error:
+                logger.exception("Error al ejecutar executemany en SQLite.")
+                return False
 
     def conexion_activa(self):
         """Verifica si la conexión a SQLite sigue activa y funcional."""
-        try:
-            if self.connection:
-                self.connection.execute("SELECT 1")
-                return True
-        except Exception:
-            logger.warning("La conexión SQLite no está activa o se perdió.")
+        with self._lock:
+            try:
+                if self.connection:
+                    self.connection.execute("SELECT 1")
+                    return True
+            except Exception:
+                logger.warning("La conexión SQLite no está activa o se perdió.")
+                return False
             return False
-        return False
 
     def ejecutar_transaccion(self, consulta_borrar, consulta_insertar, parametros):
         """Ejecuta una transacción con las consultas de borrar e insertar."""
-        conn = None
-        cursor = None
+        with self._lock:
+            conn = None
+            cursor = None
 
-        try:
-            conn = self.obtener_conexion()
-            cursor = conn.cursor()
+            try:
+                conn = self.obtener_conexion()
+                cursor = conn.cursor()
 
-            logger.info("Iniciando transacción SQLite.")
+                logger.info("Iniciando transacción SQLite.")
 
-            if consulta_borrar:
-                logger.debug("SQL SQLite (borrado transacción): %s", consulta_borrar.strip())
-                cursor.execute(consulta_borrar)
+                if consulta_borrar:
+                    logger.debug("SQL SQLite (borrado transacción): %s", consulta_borrar.strip())
+                    cursor.execute(consulta_borrar)
 
-            logger.debug("SQL SQLite (insert transacción): %s", consulta_insertar.strip())
-            logger.debug("Cantidad de parámetros en transacción: %s", len(parametros))
-            cursor.executemany(consulta_insertar, parametros)
+                logger.debug("SQL SQLite (insert transacción): %s", consulta_insertar.strip())
+                logger.debug("Cantidad de parámetros en transacción: %s", len(parametros))
+                cursor.executemany(consulta_insertar, parametros)
 
-            conn.commit()
-            logger.info("Transacción SQLite confirmada correctamente.")
+                conn.commit()
+                logger.info("Transacción SQLite confirmada correctamente.")
 
-        except sqlite3.Error:
-            if conn:
-                conn.rollback()
-                logger.exception("Error en transacción SQLite. Se realizó rollback.")
-            raise
+            except sqlite3.Error:
+                if conn:
+                    conn.rollback()
+                    logger.exception("Error en transacción SQLite. Se realizó rollback.")
+                raise
 
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-                logger.debug("Conexión SQLite cerrada al finalizar transacción.")
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+                    logger.debug("Conexión SQLite cerrada al finalizar transacción.")
+                    if conn is self.connection:
+                        self.connection = None
+                        self.cursor = None
 
     def obtener_columnas(self, nombre_tabla):
         """Obtiene los nombres de las columnas de una tabla."""
-        try:
-            self.conectar()
-            consulta = f"PRAGMA table_info({nombre_tabla})"
-            logger.debug("Obteniendo columnas de tabla SQLite | tabla=%s", nombre_tabla)
+        with self._lock:
+            try:
+                self.conectar()
+                consulta = f"PRAGMA table_info({nombre_tabla})"
+                logger.debug("Obteniendo columnas de tabla SQLite | tabla=%s", nombre_tabla)
 
-            self.cursor.execute(consulta)
-            columnas = [columna[1] for columna in self.cursor.fetchall()]
+                cursor = self.connection.cursor()
+                cursor.execute(consulta)
+                columnas = [columna[1] for columna in cursor.fetchall()]
 
-            logger.debug("Columnas obtenidas | tabla=%s | cantidad=%s", nombre_tabla, len(columnas))
-            return columnas
+                logger.debug("Columnas obtenidas | tabla=%s | cantidad=%s", nombre_tabla, len(columnas))
+                return columnas
 
-        except sqlite3.Error:
-            logger.exception("Error al obtener las columnas de la tabla SQLite | tabla=%s", nombre_tabla)
-            return []
-        finally:
-            self.cerrar_conexion()
+            except sqlite3.Error:
+                logger.exception("Error al obtener las columnas de la tabla SQLite | tabla=%s", nombre_tabla)
+                return []
+            finally:
+                self.cerrar_conexion()
 
     def crear_tabla_VERIPRE_productos(self):
         """Crea la tabla de productos con campo de fecha de última actualización."""
@@ -343,22 +379,24 @@ class SQLiteDB:
 
     def cerrar_conexion(self):
         """Cierra la conexión con la base de datos."""
-        if self.connection:
-            try:
-                self.connection.close()
-                logger.debug("Conexión SQLite cerrada.")
-            except sqlite3.Error:
-                logger.exception("Error al cerrar la conexión SQLite.")
-            finally:
-                self.connection = None
-                self.cursor = None
+        with self._lock:
+            if self.connection:
+                try:
+                    self.connection.close()
+                    logger.debug("Conexión SQLite cerrada.")
+                except sqlite3.Error:
+                    logger.exception("Error al cerrar la conexión SQLite.")
+                finally:
+                    self.connection = None
+                    self.cursor = None
 
     def obtener_conexion(self):
         """Devuelve la conexión activa o la crea si no existe."""
-        if self.connection is None:
-            logger.debug("No existe conexión SQLite activa. Se crea una nueva.")
-            self.conectar()
-        return self.connection
+        with self._lock:
+            if self.connection is None:
+                logger.debug("No existe conexión SQLite activa. Se crea una nueva.")
+                self.conectar()
+            return self.connection
 
     def _asegurar_columnas_productos(self):
         columnas_requeridas = {
@@ -392,52 +430,54 @@ class SQLiteDB:
 
     def _migrar_tabla_productos_sin_codigos_legacy(self):
         logger.info("Migrando tabla productos para eliminar columnas legacy de codigo.")
-        try:
-            if not self.conexion_activa():
-                self.conectar()
+        with self._lock:
+            try:
+                if not self.conexion_activa():
+                    self.conectar()
 
-            self.cursor.execute("BEGIN")
-            self.cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS productos_new (
-                    CREF TEXT,
-                    codigo TEXT UNIQUE,
-                    descripcion TEXT,
-                    precio REAL,
-                    img_base64 TEXT,
-                    formato_imagen TEXT,
-                    dFechaU TEXT,
-                    TIENE_OFERTA INTEGER DEFAULT 0,
-                    PRECIO_OFERTA REAL,
-                    OFERTA_DESDE TEXT,
-                    OFERTA_HASTA TEXT,
-                    OFERTA_ORIGEN TEXT,
-                    OFERTA_CCODDIV TEXT,
-                    OFERTA_DTO REAL
+                cursor = self.connection.cursor()
+                cursor.execute("BEGIN")
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS productos_new (
+                        CREF TEXT,
+                        codigo TEXT UNIQUE,
+                        descripcion TEXT,
+                        precio REAL,
+                        img_base64 TEXT,
+                        formato_imagen TEXT,
+                        dFechaU TEXT,
+                        TIENE_OFERTA INTEGER DEFAULT 0,
+                        PRECIO_OFERTA REAL,
+                        OFERTA_DESDE TEXT,
+                        OFERTA_HASTA TEXT,
+                        OFERTA_ORIGEN TEXT,
+                        OFERTA_CCODDIV TEXT,
+                        OFERTA_DTO REAL
+                    )
+                    """
                 )
-                """
-            )
-            self.cursor.execute("DELETE FROM productos_new")
-            self.cursor.execute(
-                """
-                INSERT INTO productos_new (
-                    CREF, codigo, descripcion, precio, img_base64, formato_imagen,
-                    dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
-                    OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                cursor.execute("DELETE FROM productos_new")
+                cursor.execute(
+                    """
+                    INSERT INTO productos_new (
+                        CREF, codigo, descripcion, precio, img_base64, formato_imagen,
+                        dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
+                        OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                    )
+                    SELECT
+                        CREF, codigo, descripcion, precio, img_base64, formato_imagen,
+                        dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
+                        OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+                    FROM productos
+                    """
                 )
-                SELECT
-                    CREF, codigo, descripcion, precio, img_base64, formato_imagen,
-                    dFechaU, TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE,
-                    OFERTA_HASTA, OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
-                FROM productos
-                """
-            )
-            self.cursor.execute("DROP TABLE productos")
-            self.cursor.execute("ALTER TABLE productos_new RENAME TO productos")
-            self.connection.commit()
-            logger.info("Migracion de tabla productos completada correctamente.")
-        except sqlite3.Error:
-            if self.connection:
-                self.connection.rollback()
-            logger.exception("Error migrando tabla productos sin columnas legacy.")
-            raise
+                cursor.execute("DROP TABLE productos")
+                cursor.execute("ALTER TABLE productos_new RENAME TO productos")
+                self.connection.commit()
+                logger.info("Migracion de tabla productos completada correctamente.")
+            except sqlite3.Error:
+                if self.connection:
+                    self.connection.rollback()
+                logger.exception("Error migrando tabla productos sin columnas legacy.")
+                raise

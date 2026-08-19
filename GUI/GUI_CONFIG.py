@@ -2305,7 +2305,7 @@ class GUI_CONFIG:
                         "password": self.entry_password.get(),
                         "dsn": self.combobox_odbc.get()
                     }
-                    self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
+                    self._reemplazar_conexion_sybase_global(conexion)
                     self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
                 messagebox.showinfo("Conexión Agregada", "Conexión agregada con éxito.")
             self.cambiar_estados_widgets_frame_odbc("disabled")
@@ -2334,13 +2334,22 @@ class GUI_CONFIG:
                     "password": self.entry_password.get(),
                     "dsn": self.combobox_odbc.get()
                 }
-                self.DICT_WIDGETS.register("DATABASE","CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
+                self._reemplazar_conexion_sybase_global(conexion)
                 self.DICT_WIDGETS.register("DATABASE","CONEXION_INFORHARD", True)
             messagebox.showinfo("Estado Conexión", "Se ha actualizado el método de conexión")
             self.cambiar_estados_widgets_frame_odbc("disabled")
             self.button_agregar_datos_de_conexion.config(text="Actualizar datos", state="normal", command=self.command_modificado_button_actualizar_datos_de_conexion)
         except Exception as e:
             messagebox.showerror("ERROR", e)
+
+    def _reemplazar_conexion_sybase_global(self, conexion):
+        conexion_actual = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE")
+        if conexion_actual:
+            try:
+                conexion_actual.desconectar()
+            except Exception:
+                logger.exception("Error al cerrar la conexion Sybase anterior antes de reemplazarla.")
+        self.DICT_WIDGETS.register("DATABASE", "CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
             
     def command_importar_datos_INFORHARD(self):
         try:

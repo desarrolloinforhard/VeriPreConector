@@ -823,6 +823,12 @@ class GUI_MAIN:
         logger.info("Cerrando aplicación de forma controlada.")
         self._cleanup_tray_icon()
         try:
+            conexion_sybase = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE")
+            if conexion_sybase:
+                conexion_sybase.desconectar()
+        except Exception:
+            logger.exception("Error al cerrar la conexion Sybase durante el cierre de la aplicacion.")
+        try:
             self.ventana_creacion_caja.destroy()
         except Exception:
             logger.exception("Error al destruir la ventana principal durante el cierre.")
@@ -1458,6 +1464,13 @@ class GUI_MAIN:
                     conexion["dsn"],
                     conexion["user"]
                 )
+
+                conexion_sybase_actual = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA_SYBASE")
+                if conexion_sybase_actual:
+                    try:
+                        conexion_sybase_actual.desconectar()
+                    except Exception:
+                        logger.exception("Error al cerrar la conexion Sybase anterior antes de reconfigurar.")
 
                 self.DICT_WIDGETS.register("DATABASE", "CONEXIONDBA_SYBASE", ConexionSybase(**conexion))
                 self.DICT_WIDGETS.register("DATABASE", "CONEXION_INFORHARD", True)

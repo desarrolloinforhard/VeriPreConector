@@ -1,3 +1,14 @@
+Version 1.16.32
+- Se reforzo el acceso local a SQLite compartida en `F:\Dba\veripre.db` para atacar los `database is locked` observados en el cliente Novo.
+- `SQLiteDB` ahora serializa el uso de la conexion por proceso con lock interno, evitando que UI, sync automatico y escrituras locales reutilicen el mismo cursor a la vez.
+- Se agregaron `busy_timeout`, `journal_mode=WAL` y pragmas de conexion mas seguros para reducir contencion sobre la base local compartida.
+- Se elimino el `commit()` innecesario despues de lecturas, evitando que consultas de polling eleven bloqueos de escritura sobre SQLite.
+
+Version 1.16.31
+- Se reforzo el ciclo de vida de la conexion ODBC/Sybase para reducir interferencias con otros ejecutables legacy que comparten el mismo DBA.
+- `ConexionSybase` ahora usa `autocommit`, valida la sesion antes de reutilizarla y elimina el cursor persistente.
+- SmartPrice ahora cierra explicitamente la conexion Sybase al salir y tambien antes de reemplazar la conexion global desde Configuracion.
+
 Version 1.16.30
 - La sincronizacion automatica ahora detecta cambios no solo en `ARTICULO`, sino tambien en `CODBARP`, `PACKS_MINI`, `ATIPICAS`, `OFERTAT` y `OFERTAL`.
 - El vigia automatico registra en consola que bloque del catalogo/promociones disparo la actualizacion: productos, codigos, packs, ofertas de precio u OFPLU.

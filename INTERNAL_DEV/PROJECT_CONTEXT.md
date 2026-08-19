@@ -1,6 +1,6 @@
 ﻿# Project Context
 
-Version actual: `1.16.27`
+Version actual: `1.16.32`
 
 ## 1. Objetivo del sistema
 
@@ -30,7 +30,7 @@ Modos:
   - `CONTENIDO_PUBLICIDAD.py`: grupos, globales, grid multimedia, preview, envio, biblioteca.
   - `GUI_CONFIG.py`: configuracion Sybase/SQLite/dispositivos/GO-UPC, toggles funcionales y permisos por usuario Windows.
 - `DB/`
-  - `database.py`: wrapper SQLite.
+- `database.py`: wrapper SQLite; desde `1.16.32` usa lock interno por proceso, `busy_timeout` y WAL para reducir `database is locked` en `F:\Dba\veripre.db`.
   - `database_sybase.py`: acceso Sybase.
 - `FUNC/`
   - `config_json.py`: config persistente del programa.
@@ -132,6 +132,13 @@ Mantener compatibilidad con:
 - La deteccion por red diferencia por tipo de dispositivo (`verificador` vs `infotv`) y esa separacion no debe perderse en futuros flujos de envio.
 - La futura integracion de ofertas no debe mezclar `precio_oferta` con `precios_adicionales` de `PACKS_MINI`; son contratos distintos y deben viajar separados al verificador.
 - La futura normalizacion de codigos no debe asumir que cualquier valor de `12` digitos es automaticamente UPC-A o GS1 valido; la fase inicial se limita a fallback `EAN-13` para clientes legacy documentados.
+- La conexion ODBC legacy a SQL Anywhere/Sybase sigue teniendo un ciclo de vida fragil:
+  - `GUI_MAIN.py` registra una instancia global de `ConexionSybase`,
+  - esa instancia puede quedar viva mientras la app sigue minimizada en bandeja,
+  - los `SELECT` en `DB/database_sybase.py` no fuerzan `commit` ni `rollback` al finalizar,
+  - la misma instancia puede reutilizarse desde hilos de sincronizacion automatica.
+- Este punto puede dejar sesiones DBA abiertas mas tiempo del debido y provocar bloqueos/interferencias con otros ejecutables del cliente que usan la misma base legacy.
+- Ademas, `ConexionSybase` conserva `self.cursor` aunque la ejecucion real usa cursores locales por `with`, lo que deja un recurso persistente innecesario.
 
 ## 7. Decisiones vigentes que no deben romperse
 
@@ -145,3 +152,66 @@ Mantener compatibilidad con:
 - El arranque debe mostrar feedback visible de carga y evitar congelar la primera pantalla; la shell de GUI debe pintar antes del bootstrap pesado.
 - Productos y Publicidad no deben mezclar destinos: descubrimiento y selector deben filtrar verificadores para catalogo y dispositivos InforTV para multimedia.
 - Mientras no cierre `VPC-F4`, SmartPrice sigue guardando y enviando `codigo` tal cual viene de Sybase; no asumir normalizacion implicita.
+- La futura correccion de ODBC/DBA debe preservar comportamiento funcional de sync y ofertas:
+  - no romper `ProductosSyncService`,
+  - no romper `OfertasPLUSyncService`,
+  - no romper la carga manual/automatica de productos,
+  - no romper el modo headless ni el envio incremental.
+
+## 8. Incidente operativo abierto: posible bloqueo de DBA legacy
+
+Fecha de registro: `2026-08-14`
+
+### Sintoma observado
+
+En cliente `Novo`, otros ejecutables del ecosistema (por ejemplo calculo de precios) reportan que el DBA queda bloqueado mientras `SmartPrice` esta en ejecucion.
+
+### Evidencia ya relevada
+
+- `DB/database_sybase.py` abre conexion persistente y no finaliza explicitamente la transaccion luego de `SELECT`.
+- `GUI_MAIN.py` crea y registra `CONEXIONDBA_SYBASE` como objeto global compartido por GUI y servicios.
+- `GUI_MAIN.py` oculta la app a bandeja en lugar de cerrarla, por lo que una sesion ODBC puede quedar viva durante horas.
+- `CONTENIDO_PRODUCTO.py` usa sincronizacion automatica cada `5s` y reusa servicios que consumen la conexion Sybase.
+- Los logs del cliente muestran polling repetido con `SELECT MAX(CONVERT(VARCHAR, dFechaU, 120))` sobre:
+  - `DBA.ARTICULO`
+  - `DBA.CODBARP`
+  - `DBA.PACKS_MINI`
+  - `DBA.ATIPICAS`
+  - `DBA.OFERTAT`
+  - `DBA.OFERTAL`
+- No se encontro evidencia de escrituras directas actuales sobre tablas `DBA.*` como causa primaria del bloqueo.
+
+### Hipotesis tecnica principal
+
+La causa probable no es un `UPDATE/DELETE` legacy activo, sino una combinacion de:
+
+- conexion ODBC global de larga vida,
+- lectura sin `commit/rollback` explicito,
+- reuse desde threads,
+- proceso minimizado a bandeja.
+
+### Estado
+
+- `actual`: riesgo documentado y reproducible como sospecha fuerte.
+- `pendiente de confirmar`: falta validacion final en cliente luego de aplicar refactor de ciclo de vida de conexion.
+
+### Mitigacion implementada el 2026-08-14
+
+- `DB/database_sybase.py` ahora:
+  - usa `autocommit=True`,
+  - elimina `self.cursor` persistente,
+  - valida estado de la conexion antes de reutilizarla,
+  - serializa acceso con `RLock`,
+  - cierra la conexion ante error de ejecucion.
+- `GUI_MAIN.py` ahora:
+  - cierra la instancia previa de `CONEXIONDBA_SYBASE` al reconfigurarla,
+  - fuerza `desconectar()` al cerrar realmente la app.
+- `GUI_CONFIG.py` ahora:
+  - cierra la conexion global previa antes de reemplazar `CONEXIONDBA_SYBASE`.
+
+### Pendiente posterior al fix
+
+- validar en cliente `Novo` que:
+  - SmartPrice minimizado a bandeja no deje bloqueado el DBA,
+  - otros EXE legacy vuelvan a operar en paralelo,
+  - la sincronizacion automatica siga funcionando sin regresiones.
