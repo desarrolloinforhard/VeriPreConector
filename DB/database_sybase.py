@@ -35,7 +35,7 @@ class ConexionSybase:
             return
         try:
             self.conexion.close()
-            logger.info("Conexion Sybase cerrada correctamente.")
+            logger.debug("Conexion Sybase cerrada correctamente.")
         except pypyodbc.Error:
             logger.exception("Error al cerrar la conexion Sybase.")
         finally:

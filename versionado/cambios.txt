@@ -1,3 +1,8 @@
+Version 1.16.33
+- Se corrigio la navegacion Volver para conservar un historial valido al regresar de Publicidad a Productos.
+- La navegacion ahora se recupera de forma segura ante historiales vacios o incompletos, evitando `IndexError`.
+- Los cierres normales y periodicos de Sybase pasan a nivel DEBUG para reducir ruido operativo en consola.
+
 Version 1.16.32
 - Se reforzo el acceso local a SQLite compartida en `F:\Dba\veripre.db` para atacar los `database is locked` observados en el cliente Novo.
 - `SQLiteDB` ahora serializa el uso de la conexion por proceso con lock interno, evitando que UI, sync automatico y escrituras locales reutilicen el mismo cursor a la vez.

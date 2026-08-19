@@ -1237,12 +1237,15 @@ class GUI_MAIN:
     def command_button_volver(self):
         logger.info("Navegación: volver a sección anterior.")
         try:
-            self.VIGIA_VOLVER.pop(-1)
-            logger.debug("Historial luego de primer pop: %s", self.VIGIA_VOLVER)
+            if len(self.VIGIA_VOLVER) <= 1:
+                self.VIGIA_FRAME = "INICIO"
+                self.VIGIA_VOLVER = ["INICIO"]
+            else:
+                self.VIGIA_VOLVER.pop()
+                self.VIGIA_FRAME = self.VIGIA_VOLVER[-1]
 
-            self.VIGIA_FRAME = self.VIGIA_VOLVER.pop(-1)
             logger.debug("Frame recuperado al volver: %s", self.VIGIA_FRAME)
-            logger.debug("Historial luego de segundo pop: %s", self.VIGIA_VOLVER)
+            logger.debug("Historial luego de volver: %s", self.VIGIA_VOLVER)
 
             self.selector_seccion()
 
@@ -1315,7 +1318,9 @@ class GUI_MAIN:
             if frame_acerca:
                 frame_acerca.grid()
 
-        if self.VIGIA_VOLVER[-1] != self.VIGIA_FRAME and self.VIGIA_FRAME not in self.VIGIA_VOLVER:
+        if not self.VIGIA_VOLVER:
+            self.VIGIA_VOLVER = [self.VIGIA_FRAME]
+        elif self.VIGIA_VOLVER[-1] != self.VIGIA_FRAME and self.VIGIA_FRAME not in self.VIGIA_VOLVER:
             self.VIGIA_VOLVER.append(self.VIGIA_FRAME)
 
         self._actualizar_estilo_menu_activo()

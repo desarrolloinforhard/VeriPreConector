@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.33 - 2026-08-19
+
+- Fixed back navigation so returning from Advertising to Products preserves a valid history instead of raising `IndexError`.
+- Added defensive recovery for empty or incomplete navigation histories.
+- Reduced routine Sybase disconnect logging from `INFO` to `DEBUG` to avoid repetitive operational noise.
+- Added regression coverage for Advertising-to-Products, Products-to-Home, single-entry, and empty navigation histories.
+
 ## 1.16.32 - 2026-08-19
 
 - Hardened local SQLite access for shared installations using `F:\Dba\veripre.db`, targeting the `database is locked` failures observed in client `Novo`.
