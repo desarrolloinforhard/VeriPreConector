@@ -866,21 +866,71 @@ class ContenidoProducto:
             tipos_descubrir=("verificador",),
         )
         urls = sender.seleccionar_dispositivos()
-        print(self.productos_modificados)
         if urls:
-            productos_novedades = self._obtener_productos_novedades_por_codigos(self.productos_modificados)
-
-            print("productos_novedades", productos_novedades)
+            codigos_pendientes = self._obtener_codigos_pendientes_novedades()
+            productos_novedades = self._obtener_productos_novedades_por_codigos(codigos_pendientes)
 
             if not productos_novedades:
                 messagebox.showinfo("Sin novedades", "No hay productos modificados para transmitir.")
                 return
-            print("➡️ Productos a transmitir:")
-            for p in productos_novedades:
-                print(f"{p[0]} - {p[1]}")  # Código - Descripción
             sender.enviar_datos(urls, productos_novedades, modo="novedades")
+            self.productos_modificados.difference_update(codigos_pendientes)
+            self._registrar_transmision_novedades_exitosa(codigos_pendientes)
+            estado_boton = NORMAL if self._obtener_codigos_pendientes_novedades() else DISABLED
+            self.button_transmitir_novedades.config(state=estado_boton)
 
-            self.productos_modificados.clear()
+    def _obtener_codigos_pendientes_novedades(self):
+        codigos = {str(codigo).strip() for codigo in self.productos_modificados if str(codigo).strip()}
+        marca_transmitida = self.config.get("ultima_transmision_novedades_productos")
+        marca_sincronizada = self.config.get("ultima_sincronizacion_automatica_productos")
+        if marca_transmitida:
+            try:
+                codigos.update(
+                    self._crear_productos_sqlite_dao().listar_codigos_desde_fecha(
+                        marca_transmitida,
+                        inclusive=False,
+                    )
+                )
+            except Exception as e:
+                print(f"No se pudieron recuperar novedades pendientes desde SQLite: {e}")
+        elif marca_sincronizada:
+            try:
+                codigos.update(
+                    self._crear_productos_sqlite_dao().listar_codigos_desde_fecha(
+                        marca_sincronizada,
+                        inclusive=True,
+                    )
+                )
+            except Exception as e:
+                print(f"No se pudieron recuperar novedades pendientes desde SQLite: {e}")
+        return sorted(codigos)
+
+    def _registrar_transmision_novedades_exitosa(self, codigos):
+        codigos = [str(codigo).strip() for codigo in (codigos or []) if str(codigo).strip()]
+        if not codigos:
+            return
+
+        placeholders = ",".join("?" for _ in codigos)
+        consulta = f"""
+        SELECT MAX(dFechaU)
+        FROM productos
+        WHERE codigo IN ({placeholders})
+        """
+        try:
+            resultado = self.CONEXIONDBA.ejecutar_consulta(consulta, tuple(codigos)) or []
+            fecha_maxima = str(resultado[0][0]).strip() if resultado and resultado[0] and resultado[0][0] else None
+        except Exception as e:
+            print(f"No se pudo resolver la fecha maxima de novedades transmitidas: {e}")
+            fecha_maxima = None
+
+        if not fecha_maxima:
+            return
+
+        self.config["ultima_transmision_novedades_productos"] = fecha_maxima
+        try:
+            guardar_config(self.config)
+        except Exception as e:
+            print(f"No se pudo guardar marca de transmision de novedades: {e}")
 
     def _obtener_productos_novedades_por_codigos(self, codigos, conexion=None):
         conexion = conexion or self.CONEXIONDBA
@@ -1038,7 +1088,8 @@ class ContenidoProducto:
             enviados_error = len(resultados) - enviados_ok
             if enviados_error == 0:
                 self.productos_modificados.difference_update(codigos)
-                estado_boton = NORMAL if self.productos_modificados else DISABLED
+                self._registrar_transmision_novedades_exitosa(codigos)
+                estado_boton = NORMAL if self._obtener_codigos_pendientes_novedades() else DISABLED
                 self._run_en_ui(self.button_transmitir_novedades.config, state=estado_boton)
                 self._notificar_sistema(
                     "Envio automatico",
@@ -1457,6 +1508,10 @@ class ContenidoProducto:
                     codigo_seleccionado = str(valores[1])
 
             self.dt.delete_rows()
+            try:
+                self.dt.reset_table()
+            except Exception:
+                pass
 
             for producto in self.datos_PRODUCTOS_COMPLETOS:
                 descripcion = str(producto[2]).strip() if producto[2] else ""
@@ -1464,7 +1519,7 @@ class ContenidoProducto:
                 precio = float(producto[3]) if producto[3] else 0.0
                 precio_formateado = f"${precio:,.2f}"
                 self.dt.insert_row("end", [descripcion, codigo, precio_formateado])
-            self.dt.load_table_data()
+            self.dt.load_table_data(clear_filters=True)
             self.dt.configure(height=self.TABLE_HEIGHT)
             self._fijar_layout_productos()
             if codigo_seleccionado:
@@ -1475,10 +1530,18 @@ class ContenidoProducto:
                         self.dt.view.see(item_id)
                         self.mostrar_imagen_producto(None)
                         break
+            elif self.dt.view.get_children():
+                primer_item = self.dt.view.get_children()[0]
+                self.dt.view.selection_set(primer_item)
+                self.dt.view.see(primer_item)
+                self.mostrar_imagen_producto(None)
+            else:
+                self._mostrar_placeholder_producto(reset_resumen=True)
             self.DICT_WIDGETS.get_widget("CTK_Loader_Frame", "stop")()
             self.button_transmitir_datos.config(state=NORMAL)
             self.button_transmitir_datos_fecha.config(state=NORMAL)
-            self.button_transmitir_novedades.config(state=NORMAL)
+            estado_novedades = NORMAL if self._obtener_codigos_pendientes_novedades() else DISABLED
+            self.button_transmitir_novedades.config(state=estado_novedades)
 
         except Exception as e:
             print(f"❌ Error al insertar en la tabla: {e}")

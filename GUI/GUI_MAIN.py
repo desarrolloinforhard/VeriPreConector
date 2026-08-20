@@ -496,7 +496,7 @@ class GUI_MAIN:
             ("Registrando variables globales...", self.VARIABLES_GLOBALES),
             ("Preparando módulo inicial...", self._preparar_modulo_inicial),
             ("Aplicando pantalla inicial...", self._bootstrap_seccion_inicial),
-            ("Inicializando bandeja del sistema...", self.crear_icono_bandeja),
+            ("Inicializando bandeja del sistema...", lambda: None),
         ]
         self._ejecutar_pasos_bootstrap(pasos, 0)
 
@@ -733,6 +733,7 @@ class GUI_MAIN:
 
     def ocultar_a_bandeja(self):
         logger.info("Ocultando ventana principal a bandeja del sistema.")
+        self.crear_icono_bandeja()
         self.ventana_creacion_caja.withdraw()
 
     def mostrar_desde_bandeja(self):
@@ -741,6 +742,7 @@ class GUI_MAIN:
         self.ventana_creacion_caja.lift()
         self.ventana_creacion_caja.focus_force()
         self.ventana_creacion_caja.state("zoomed")
+        self._detener_icono_bandeja()
 
     def crear_icono_bandeja(self):
         from PIL import Image
@@ -748,6 +750,9 @@ class GUI_MAIN:
         try:
             if self.tray_icon is not None:
                 logger.debug("El icono de bandeja ya estaba creado. Se omite recrearlo.")
+                return
+            if self.tray_thread is not None and self.tray_thread.is_alive():
+                logger.debug("El hilo del icono de bandeja sigue activo. Se omite recrearlo.")
                 return
 
             ruta_icono = os.path.join(ICON_ico())
@@ -770,22 +775,20 @@ class GUI_MAIN:
             self.tray_icon = TrayIcon("VeriPre", image, menu=menu)
             self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
             self.tray_thread.start()
+            self._tray_cleanup_done = False
 
             logger.info("Icono de bandeja creado correctamente.")
 
         except Exception:
             logger.exception("Error al crear icono de bandeja.")
 
-    def _cleanup_tray_icon(self):
-        if self._tray_cleanup_done:
-            return
-
-        self._tray_cleanup_done = True
+    def _detener_icono_bandeja(self):
         icon = self.tray_icon
+        thread = self.tray_thread
         self.tray_icon = None
+        self.tray_thread = None
 
         if icon is None:
-            self._cleanup_socket_lock()
             return
 
         try:
@@ -799,6 +802,18 @@ class GUI_MAIN:
         except Exception:
             logger.exception("Error al detener el icono de bandeja.")
 
+        if thread and thread.is_alive():
+            try:
+                thread.join(timeout=2.0)
+            except Exception:
+                logger.debug("No se pudo esperar el cierre del hilo de bandeja.", exc_info=True)
+
+    def _cleanup_tray_icon(self):
+        if self._tray_cleanup_done:
+            return
+
+        self._tray_cleanup_done = True
+        self._detener_icono_bandeja()
         self._cleanup_socket_lock()
 
     def _cleanup_socket_lock(self):

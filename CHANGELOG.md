@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.33 - 2026-08-20
+
+- Changed the tray lifecycle so the SmartPrice icon is created only when the window is sent to the system tray and is explicitly destroyed when the app is restored or closed, reducing duplicate ghost icons in Windows notification overflow.
+- Fixed `Transmitir Novedades` so pending product changes are now recovered from local SQLite using persisted `dFechaU` marks instead of relying only on the in-memory `productos_modificados` set for the current session.
+- Added persistence of the last successful novedades transmission mark in configuration, allowing next-day transmissions to keep sending pending price changes without forcing a full catalog resend.
+- Hardened `Recargar Productos` so the local product list resets Tableview state and filters before repopulating, preventing empty visual lists after a refresh with valid local rows.
+
 ## 1.16.32 - 2026-08-19
 
 - Hardened local SQLite access for shared installations using `F:\Dba\veripre.db`, targeting the `database is locked` failures observed in client `Novo`.

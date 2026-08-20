@@ -1,3 +1,9 @@
+Version 1.16.33
+- Se cambio el ciclo de bandeja para que el icono se cree solo al ocultar SmartPrice y se destruya explicitamente al restaurar o cerrar, reduciendo los iconos fantasma acumulados en Windows.
+- `Transmitir Novedades` ahora reconstruye pendientes desde SQLite usando marcas `dFechaU` persistidas, en lugar de depender solo del set en memoria de la sesion actual.
+- Se guarda la ultima marca exitosa de transmision de novedades, permitiendo enviar cambios pendientes al dia siguiente sin forzar un envio completo.
+- Se reforzo `Recargar Productos` para resetear filtros y estado interno del `Tableview` antes de repoblar la lista local, evitando vistas vacias con datos existentes.
+
 Version 1.16.32
 - Se reforzo el acceso local a SQLite compartida en `F:\Dba\veripre.db` para atacar los `database is locked` observados en el cliente Novo.
 - `SQLiteDB` ahora serializa el uso de la conexion por proceso con lock interno, evitando que UI, sync automatico y escrituras locales reutilicen el mismo cursor a la vez.
