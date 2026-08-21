@@ -34,7 +34,14 @@ from core.ui.ttk_theme import (
     registrar_tema_smartprice,
 )
 from core.ui.responsive import clamp, get_size_class, get_workarea_size
-from core.ui.theme_tokens import BUTTON_PAD_X, BUTTON_PAD_Y, FONT_BODY_BOLD, FONT_SUBTITLE, FONT_TITLE_XL
+from core.ui.theme_tokens import (
+    BUTTON_PAD_X,
+    BUTTON_PAD_Y,
+    FONT_BODY_BOLD,
+    FONT_LABEL_BOLD,
+    FONT_SUBTITLE,
+    FONT_TITLE_XL,
+)
 
 logger = get_logger(__name__)
 ERROR_ALREADY_EXISTS = 183
@@ -194,6 +201,9 @@ class GUI_MAIN:
         self._responsive_after_id = None
         self._sidebar_render_state = None
         self._main_layout_state = None
+        self._sidebar_asset_state = None
+        self._sidebar_logo_state = None
+        self.sidebar_collapsed = False
 
         logger.debug("Cargando configuración JSON.")
         self.config_data = cargar_config()
@@ -279,6 +289,8 @@ class GUI_MAIN:
         self.sidebar_brand = "#149455"
         self.sidebar_expanded_width = 176
         self.sidebar_item_width = 158
+        self.sidebar_collapsed_width = 68
+        self.sidebar_collapsed_item_width = 52
         self.content_padding_x = 20
         self.content_padding_y = 18
 
@@ -412,11 +424,18 @@ class GUI_MAIN:
             self.sidebar_logo_pad = top_logo_pad
             self.sidebar_footer_pad_top = footer_pad_top
             self.inicio_pad_top = inicio_pad_top
-            wraplength_inicio = max(window_width - sidebar_width - 120, 320)
-
-            sidebar_render_state = (
+            sidebar_render = self._resolver_render_sidebar(
                 sidebar_width,
                 item_width,
+                self.sidebar_collapsed,
+            )
+            effective_sidebar_width = sidebar_render["sidebar_width"]
+            effective_item_width = sidebar_render["item_width"]
+            wraplength_inicio = max(window_width - effective_sidebar_width - 120, 320)
+
+            sidebar_render_state = (
+                effective_sidebar_width,
+                effective_item_width,
                 logo_max_width,
                 logo_max_height,
                 menu_item_height,
@@ -429,7 +448,7 @@ class GUI_MAIN:
                 inicio_pad_top,
             )
             main_layout_state = (
-                sidebar_width,
+                effective_sidebar_width,
                 content_padding_x,
                 content_padding_y,
                 wraplength_inicio,
@@ -437,26 +456,29 @@ class GUI_MAIN:
             should_refresh_sidebar = sidebar_render_state != self._sidebar_render_state
             should_refresh_main_layout = main_layout_state != self._main_layout_state
 
-            if should_refresh_main_layout:
-                self.ventana_creacion_caja.grid_columnconfigure(0, minsize=sidebar_width, weight=0)
-                self.frame_menu.configure(width=sidebar_width)
-                if hasattr(self, "frame_contenido"):
-                    self.frame_contenido.configure(padding=(content_padding_x, content_padding_y))
-
             if should_refresh_sidebar:
-                self.photo_logo = self._cargar_logo_sidebar(
-                    PNG_LOGO_SECUNDARIO(),
-                    max_width=logo_max_width,
-                    max_height=logo_max_height,
-                )
-                self.label_image_logo.configure(image=self.photo_logo)
-                self.label_image_logo.image = self.photo_logo
-                self.label_image_logo.pack_configure(pady=top_logo_pad)
+                if not sidebar_render["show_logo"]:
+                    self.label_image_logo.pack_forget()
+                else:
+                    logo_state = (logo_max_width, logo_max_height)
+                    if logo_state != self._sidebar_logo_state:
+                        self.photo_logo = self._cargar_logo_sidebar(
+                            PNG_LOGO_SECUNDARIO(),
+                            max_width=logo_max_width,
+                            max_height=logo_max_height,
+                        )
+                        self.label_image_logo.configure(image=self.photo_logo)
+                        self.label_image_logo.image = self.photo_logo
+                        self._sidebar_logo_state = logo_state
+                    self.label_image_logo.pack_configure(pady=top_logo_pad, anchor="center")
 
-                self.photo_publicidad = READ_IMG(PNG_Publicidad(), icon_size, icon_size)
-                self.photo_productos = READ_IMG(PNG_Productos(), icon_size, icon_size)
-                self.photo_setting = READ_IMG(PNG_Settings(), footer_icon_size, footer_icon_size)
-                self.photo_info = READ_IMG(PNG_Info(), footer_icon_size, footer_icon_size)
+                asset_state = (icon_size, footer_icon_size)
+                if asset_state != self._sidebar_asset_state:
+                    self.photo_publicidad = READ_IMG(PNG_Publicidad(), icon_size, icon_size)
+                    self.photo_productos = READ_IMG(PNG_Productos(), icon_size, icon_size)
+                    self.photo_setting = READ_IMG(PNG_Settings(), footer_icon_size, footer_icon_size)
+                    self.photo_info = READ_IMG(PNG_Info(), footer_icon_size, footer_icon_size)
+                    self._sidebar_asset_state = asset_state
 
                 if "productos" in self.menu_cards:
                     self.menu_cards["productos"]["canvas"].itemconfigure(
@@ -476,30 +498,116 @@ class GUI_MAIN:
                     self.boton_info_icon.image = self.photo_info
 
                 for canvas_data in self.menu_cards.values():
-                    canvas_data["canvas"].configure(width=item_width, height=menu_item_height)
-                    canvas_data["canvas"].itemconfigure(canvas_data["text_id"], font=menu_font)
+                    canvas_data["canvas"].configure(width=effective_item_width, height=menu_item_height)
+                    canvas_data["canvas"].itemconfigure(
+                        canvas_data["text_id"],
+                        font=menu_font,
+                        state="normal" if sidebar_render["show_text"] else "hidden",
+                    )
                 if hasattr(self, "boton_setting_texto") and self.boton_setting_texto:
                     self.boton_setting_texto.configure(font=footer_font)
                 if hasattr(self, "boton_info_texto") and self.boton_info_texto:
                     self.boton_info_texto.configure(font=footer_font)
                 if hasattr(self, "frame_botones_config_info"):
                     self.frame_botones_config_info.pack_configure(pady=(footer_pad_top, 0))
+                if self.boton_setting:
+                    self._render_footer_action(
+                        self.boton_setting,
+                        self.boton_setting_icon,
+                        self.boton_setting_texto,
+                        self.sidebar_collapsed,
+                    )
+                self._render_footer_action(
+                    self.boton_info,
+                    self.boton_info_icon,
+                    self.boton_info_texto,
+                    self.sidebar_collapsed,
+                )
                 if hasattr(self, "label_inicio"):
                     self.label_inicio.pack_configure(pady=(inicio_pad_top, 8))
                 self._sidebar_render_state = sidebar_render_state
 
             if should_refresh_main_layout:
+                # Preparar primero los controles internos y cambiar el ancho
+                # exterior al final evita mostrar un frame intermedio con el
+                # contenido compacto dentro del menú ya expandido.
                 if hasattr(self, "label_inicio_subtitulo") and self.label_inicio_subtitulo:
                     self.label_inicio_subtitulo.configure(wraplength=wraplength_inicio)
                 if hasattr(self, "label_inicio_usuario") and self.label_inicio_usuario:
                     self.label_inicio_usuario.configure(wraplength=wraplength_inicio)
                 if hasattr(self, "label_inicio_bloqueo") and self.label_inicio_bloqueo:
                     self.label_inicio_bloqueo.configure(wraplength=wraplength_inicio)
-                self.nav_card.configure(width=item_width)
-                self.footer_card.configure(width=item_width)
+                self.nav_card.configure(width=effective_item_width)
+                self.footer_card.configure(width=effective_item_width)
+                if hasattr(self, "frame_contenido"):
+                    self.frame_contenido.configure(padding=(content_padding_x, content_padding_y))
+                self.ventana_creacion_caja.grid_columnconfigure(
+                    0,
+                    minsize=effective_sidebar_width,
+                    weight=0,
+                )
+                self.frame_menu.configure(width=effective_sidebar_width)
                 self._main_layout_state = main_layout_state
         except Exception:
             logger.exception("No se pudo aplicar layout responsivo en GUI_MAIN.")
+
+    def _resolver_render_sidebar(self, sidebar_width, item_width, collapsed):
+        return {
+            "sidebar_width": self.sidebar_collapsed_width if collapsed else sidebar_width,
+            "item_width": self.sidebar_collapsed_item_width if collapsed else item_width,
+            "show_logo": not collapsed,
+            "show_text": not collapsed,
+            "toggle_text": "☰" if collapsed else "‹",
+        }
+
+    def alternar_menu_lateral(self):
+        redraw_handle = self._suspender_redibujado_ventana()
+        try:
+            self.sidebar_collapsed = not self.sidebar_collapsed
+            render = self._resolver_render_sidebar(
+                self.sidebar_expanded_width,
+                self.sidebar_item_width,
+                self.sidebar_collapsed,
+            )
+            self.boton_toggle_menu.configure(text=render["toggle_text"])
+            self._sidebar_render_state = None
+            self._main_layout_state = None
+            self._aplicar_layout_responsivo()
+        finally:
+            self._reanudar_redibujado_ventana(redraw_handle)
+
+    def _suspender_redibujado_ventana(self):
+        """Congela el repintado de Win32 durante un cambio de layout."""
+        if os.name != "nt" or not hasattr(self, "ventana_creacion_caja"):
+            return None
+        try:
+            hwnd = int(self.ventana_creacion_caja.winfo_id())
+            ctypes.windll.user32.SendMessageW(hwnd, 0x000B, False, 0)  # WM_SETREDRAW
+            return hwnd
+        except Exception:
+            logger.debug("No se pudo suspender el redibujado del sidebar.", exc_info=True)
+            return None
+
+    def _reanudar_redibujado_ventana(self, hwnd):
+        if not hwnd:
+            return
+        try:
+            # Resolver toda la geometría mientras Win32 todavía no pinta.
+            self.ventana_creacion_caja.update_idletasks()
+        except Exception:
+            logger.debug("No se pudo resolver la geometría del sidebar.", exc_info=True)
+        finally:
+            # Nunca dejar una ventana congelada aunque falle update_idletasks.
+            ctypes.windll.user32.SendMessageW(hwnd, 0x000B, True, 0)  # WM_SETREDRAW
+        try:
+            ctypes.windll.user32.RedrawWindow(
+                hwnd,
+                None,
+                None,
+                0x0001 | 0x0080 | 0x0100,  # INVALIDATE | ALLCHILDREN | UPDATENOW
+            )
+        except Exception:
+            logger.debug("No se pudo reanudar el redibujado del sidebar.", exc_info=True)
 
     def _iniciar_bootstrap(self):
         pasos = [
@@ -893,6 +1001,7 @@ class GUI_MAIN:
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_menu", self.frame_menu)
         self.frame_menu.grid(row=0, column=0, sticky="NSEW")
         self.frame_menu.grid_propagate(False)
+        self.frame_menu.pack_propagate(False)
 
         self.frame_menu_inner = tk.Frame(
             self.frame_menu,
@@ -971,7 +1080,7 @@ class GUI_MAIN:
             padx=2,
             pady=2,
         )
-        self.footer_card.pack(anchor="s")
+        self.footer_card.pack(anchor="s", fill="x")
 
         self.photo_setting = READ_IMG(PNG_Settings(), getattr(self, "sidebar_footer_icon_size", 20), getattr(self, "sidebar_footer_icon_size", 20))
         self.boton_setting = None
@@ -994,6 +1103,24 @@ class GUI_MAIN:
             self.command_button_acerca,
         )
 
+        self.boton_toggle_menu = tk.Button(
+            self.footer_card,
+            text="‹",
+            command=self.alternar_menu_lateral,
+            bg=self.sidebar_card,
+            fg=self.sidebar_text,
+            activebackground=self.sidebar_card_hover,
+            activeforeground=self.sidebar_brand,
+            relief="flat",
+            bd=0,
+            font=("Segoe UI Symbol", 18, "bold"),
+            cursor="hand2",
+            padx=8,
+            pady=2,
+        )
+        self.DICT_WIDGETS.register("GUI_MAIN", "boton_toggle_menu", self.boton_toggle_menu)
+        self.boton_toggle_menu.pack(fill="x", pady=(10, 0))
+
         self._render_footer_action(self.boton_info, self.boton_info_icon, self.boton_info_texto, False)
         if self.boton_setting:
             self._render_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, False)
@@ -1005,31 +1132,46 @@ class GUI_MAIN:
         return ImageTk.PhotoImage(image_logo)
 
     def _crear_footer_action(self, widget_key, image, text, command, pady=(0, 0)):
-        frame = tk.Frame(
+        slot = tk.Frame(
             self.footer_card,
             bg=self.sidebar_card,
-            cursor="hand2",
+            height=36,
+            bd=0,
+            highlightthickness=0,
         )
-        self.DICT_WIDGETS.register("GUI_MAIN", widget_key, frame)
-        frame.pack(fill="x", pady=pady)
+        slot.pack(fill="x", pady=pady)
+        slot.pack_propagate(False)
 
-        icon = tk.Label(frame, image=image, bg=self.sidebar_card, bd=0)
-        icon.pack(side="left")
-        label = tk.Label(
-            frame,
+        button = tk.Button(
+            slot,
+            image=image,
             text=text,
+            compound="left",
+            command=command,
             bg=self.sidebar_card,
             fg=self.sidebar_muted,
+            activebackground=self.sidebar_card_hover,
+            activeforeground=self.sidebar_brand,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
             font=getattr(self, "sidebar_footer_font", ("Segoe UI", 10, "bold")),
+            cursor="hand2",
+            padx=8,
+            pady=5,
+            anchor="w",
         )
-        label.pack(side="left", padx=(10, 0))
+        button.sidebar_text = text
+        button.sidebar_pady = pady
+        button.sidebar_slot = slot
+        self.DICT_WIDGETS.register("GUI_MAIN", widget_key, button)
+        button.pack(fill="both", expand=True)
+        button.bind("<Enter>", lambda _e, b=button: self._hover_footer_action(b, b, b, True))
+        button.bind("<Leave>", lambda _e, b=button: self._hover_footer_action(b, b, b, False))
 
-        for widget in (frame, icon, label):
-            widget.bind("<Button-1>", lambda _e: command())
-            widget.bind("<Enter>", lambda _e, f=frame, i=icon, l=label: self._hover_footer_action(f, i, l, True))
-            widget.bind("<Leave>", lambda _e, f=frame, i=icon, l=label: self._hover_footer_action(f, i, l, False))
-
-        return frame, icon, label
+        # Se conservan los tres alias para no alterar el contrato interno de
+        # GUI_MAIN; todos apuntan al mismo control atómico.
+        return button, button, button
 
     def _crear_tarjeta_menu(self, key, image, text, command):
         frame = tk.Frame(
@@ -1080,7 +1222,10 @@ class GUI_MAIN:
             width = max(canvas.winfo_width() - 2, 10)
             height = max(canvas.winfo_height() - 2, 10)
             canvas.coords(bg_shape, self._rounded_rect_points(2, 2, width, height, 14))
-            canvas.coords(icon_id, 16, height / 2)
+            icon_x = width / 2 if self.sidebar_collapsed else 16
+            icon_anchor = "center" if self.sidebar_collapsed else "w"
+            canvas.itemconfigure(icon_id, anchor=icon_anchor)
+            canvas.coords(icon_id, icon_x, height / 2)
             canvas.coords(text_id, 50, height / 2)
 
         canvas.bind("<Configure>", redraw)
@@ -1122,24 +1267,18 @@ class GUI_MAIN:
     def _hover_footer_action(self, frame, icon, label, hover):
         bg = self.sidebar_card_hover if hover else self.sidebar_card
         fg = self.sidebar_brand if hover else self.sidebar_muted
-        frame.configure(bg=bg)
-        icon.configure(bg=bg)
-        label.configure(bg=bg, fg=fg)
+        frame.configure(bg=bg, fg=fg)
 
     def _render_footer_action(self, frame, icon, label, collapsed):
         if collapsed:
-            label.pack_forget()
-            icon.pack_forget()
-            icon.pack(anchor="center", pady=4)
-            frame.pack_propagate(False)
-            frame.configure(height=34)
+            frame.configure(text="", compound="none", anchor="center", padx=0)
         else:
-            icon.pack_forget()
-            icon.pack(side="left")
-            if not label.winfo_manager():
-                label.pack(side="left", padx=(10, 0))
-            frame.configure(height=1)
-            frame.pack_propagate(True)
+            frame.configure(
+                text=frame.sidebar_text,
+                compound="left",
+                anchor="w",
+                padx=8,
+            )
 
     def _rounded_rect_points(self, x1, y1, x2, y2, radius):
         return [
