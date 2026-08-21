@@ -191,6 +191,48 @@ class ContenidoProducto:
         self.frame_table_view.bind("<Configure>", self._programar_layout_responsivo, add="+")
         self.frame_buttons_productos.bind("<Configure>", self._programar_layout_responsivo, add="+")
         self._fijar_layout_productos()
+        self.aplicar_tema_interfaz(self.config.get("tema_interfaz", "claro"))
+
+    @staticmethod
+    def _paleta_tabla_productos(tema):
+        if tema == "oscuro":
+            return {
+                "background": "#10251b",
+                "stripe": "#1b3a2d",
+                "foreground": "#f4fbf7",
+                "selected_background": "#149455",
+                "selected_foreground": "#ffffff",
+            }
+        return {
+            "background": "#ffffff",
+            "stripe": "#e2e7eb",
+            "foreground": "#173227",
+            "selected_background": "#149455",
+            "selected_foreground": "#ffffff",
+        }
+
+    def aplicar_tema_interfaz(self, tema):
+        if not hasattr(self, "dt"):
+            return
+        paleta = self._paleta_tabla_productos(tema)
+        style = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style
+        style_name = str(self.dt.view.cget("style"))
+        style.configure(
+            style_name,
+            background=paleta["background"],
+            fieldbackground=paleta["background"],
+            foreground=paleta["foreground"],
+        )
+        style.map(
+            style_name,
+            background=[("selected", paleta["selected_background"])],
+            foreground=[("selected", paleta["selected_foreground"])],
+        )
+        self.dt.apply_table_stripes((paleta["stripe"], paleta["foreground"]))
+
+    def _tema_interfaz_actual(self):
+        config_actual = self.DICT_WIDGETS.get_widget("CONFIG", "config_json") or self.config
+        return str(config_actual.get("tema_interfaz", "claro"))
 
     def _run_en_ui(self, callback, *args, **kwargs):
         root = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
@@ -1535,6 +1577,7 @@ class ContenidoProducto:
                     reload=False,
                 )
             self.dt.load_table_data(clear_filters=True)
+            self.aplicar_tema_interfaz(self._tema_interfaz_actual())
             self.dt.configure(height=self.TABLE_HEIGHT)
             self._fijar_layout_productos()
             if codigo_seleccionado:

@@ -5,6 +5,10 @@ Version 1.16.34
 - Se agrego un menu lateral ttkbootstrap plegable con renderizado estable en modo abierto y compacto.
 - Configuracion y Acerca de mantienen posiciones fijas; los recursos visuales se reutilizan y la transicion de Windows evita parpadeos.
 - Se corrigio el token tipografico faltante que impedia abrir la pantalla Acerca de.
+- Se agrego selector persistente de tema claro/oscuro dentro del menu lateral.
+- El shell y el menu ahora aplican paletas corporativas explicitas en ambos temas.
+- La tabla de Productos mejora el contraste de filas y usa verde fuerte para la seleccion.
+- El overlay de carga respeta el tema activo y evita destellos blancos durante navegacion y recargas.
 
 Version 1.16.33
 - Se cambio el ciclo de bandeja para que el icono se cree solo al ocultar SmartPrice y se destruya explicitamente al restaurar o cerrar, reduciendo los iconos fantasma acumulados en Windows.

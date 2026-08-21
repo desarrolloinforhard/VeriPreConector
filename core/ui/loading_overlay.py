@@ -23,7 +23,7 @@ class LoadingOverlay:
         self.frame.grid_columnconfigure(0, weight=1)
         self.frame.grid_rowconfigure(0, weight=1)
 
-        self.card = ttk.Frame(self.frame, padding=(28, 22), bootstyle="light")
+        self.card = ttk.Frame(self.frame, padding=(28, 22))
         self.card.grid(row=0, column=0)
         self.card.grid_columnconfigure(0, weight=1)
 
@@ -47,6 +47,10 @@ class LoadingOverlay:
 
     def start_loader(self, message="Cargando..."):
         self.set_message(message)
+        try:
+            self.frame.configure(bg=self.master.style.colors.bg)
+        except Exception:
+            pass
         if not self._visible:
             self.frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
             self.frame.lift()

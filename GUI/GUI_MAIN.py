@@ -207,6 +207,9 @@ class GUI_MAIN:
 
         logger.debug("Cargando configuración JSON.")
         self.config_data = cargar_config()
+        self.tema_interfaz = self._resolver_tema_interfaz(
+            self.config_data.get("tema_interfaz", "claro")
+        )
         self.usuario_windows = _obtener_scope_instancia()
         self.usuario_windows_es_admin = self._es_usuario_windows_admin()
         self._asegurar_perfiles_usuario_config()
@@ -225,7 +228,7 @@ class GUI_MAIN:
         logger.debug("Creando ventana principal ttkbootstrap.")
         registrar_tema_smartprice()
         self.ventana_creacion_caja = ttk.Window(
-            theme=SMARTPRICE_LIGHT_THEME,
+            theme=self._nombre_tema_ttk(self.tema_interfaz),
             light_theme=SMARTPRICE_LIGHT_THEME,
             dark_theme=SMARTPRICE_DARK_THEME,
             iconphoto=ICON(),
@@ -278,21 +281,144 @@ class GUI_MAIN:
             padding=(BUTTON_PAD_X + 5, BUTTON_PAD_Y + 3),
             font=FONT_BODY_BOLD,
         )
-        self.sidebar_bg = "#f3f6fa"
-        self.sidebar_card = "#f3fbf6"
-        self.sidebar_card_hover = "#ddf4e7"
-        self.sidebar_card_active = "#149455"
-        self.sidebar_text = "#173227"
-        self.sidebar_text_active = "#ffffff"
-        self.sidebar_muted = "#4f6478"
-        self.sidebar_border = "#e6edf4"
-        self.sidebar_brand = "#149455"
+        self._configurar_paleta_sidebar(self.tema_interfaz)
         self.sidebar_expanded_width = 176
         self.sidebar_item_width = 158
         self.sidebar_collapsed_width = 68
         self.sidebar_collapsed_item_width = 52
         self.content_padding_x = 20
         self.content_padding_y = 18
+
+    def _configurar_paleta_sidebar(self, tema):
+        if tema == "oscuro":
+            self.sidebar_bg = "#10251b"
+            self.sidebar_card = "#163429"
+            self.sidebar_card_hover = "#20513d"
+            self.sidebar_card_active = "#149455"
+            self.sidebar_text = "#f4fbf7"
+            self.sidebar_text_active = "#ffffff"
+            self.sidebar_muted = "#bcd4c8"
+            self.sidebar_border = "#2a5844"
+            self.sidebar_brand = "#49b982"
+        else:
+            self.sidebar_bg = "#f3f6fa"
+            self.sidebar_card = "#f3fbf6"
+            self.sidebar_card_hover = "#ddf4e7"
+            self.sidebar_card_active = "#149455"
+            self.sidebar_text = "#173227"
+            self.sidebar_text_active = "#ffffff"
+            self.sidebar_muted = "#4f6478"
+            self.sidebar_border = "#e6edf4"
+            self.sidebar_brand = "#149455"
+
+    def _aplicar_paleta_sidebar(self):
+        for nombre in (
+            "frame_menu_inner",
+            "frame_logo",
+            "frame_botones_opciones",
+            "nav_card",
+            "frame_botones_config_info",
+            "footer_card",
+        ):
+            widget = getattr(self, nombre, None)
+            if widget:
+                widget.configure(bg=self.sidebar_bg)
+
+        if getattr(self, "label_image_logo", None):
+            self.label_image_logo.configure(bg=self.sidebar_bg)
+
+        for data in getattr(self, "menu_cards", {}).values():
+            data["frame"].configure(bg=self.sidebar_bg)
+            data["canvas"].configure(bg=self.sidebar_bg)
+        for key in getattr(self, "menu_cards", {}):
+            self._aplicar_estado_tarjeta_menu(key, hover=False)
+
+        for nombre in ("boton_setting", "boton_info"):
+            button = getattr(self, nombre, None)
+            if button:
+                button.sidebar_slot.configure(bg=self.sidebar_bg)
+                button.configure(
+                    bg=self.sidebar_card,
+                    fg=self.sidebar_muted,
+                    activebackground=self.sidebar_card_hover,
+                    activeforeground=self.sidebar_brand,
+                )
+
+        button_tema = getattr(self, "boton_tema", None)
+        if button_tema:
+            button_tema.sidebar_slot.configure(bg=self.sidebar_bg)
+            button_tema.configure(
+                bg=self.sidebar_card,
+                fg=self.sidebar_muted,
+                activebackground=self.sidebar_card_hover,
+                activeforeground=self.sidebar_brand,
+            )
+
+        button_toggle = getattr(self, "boton_toggle_menu", None)
+        if button_toggle:
+            button_toggle.configure(
+                bg=self.sidebar_card,
+                fg=self.sidebar_text,
+                activebackground=self.sidebar_card_hover,
+                activeforeground=self.sidebar_brand,
+            )
+
+        if hasattr(self, "VIGIA_FRAME"):
+            self._actualizar_estilo_menu_activo()
+
+    @staticmethod
+    def _resolver_tema_interfaz(valor):
+        return "oscuro" if str(valor).strip().lower() in {"oscuro", "dark"} else "claro"
+
+    @staticmethod
+    def _nombre_tema_ttk(tema):
+        return SMARTPRICE_DARK_THEME if tema == "oscuro" else SMARTPRICE_LIGHT_THEME
+
+    @staticmethod
+    def _texto_boton_tema(tema):
+        return "Modo claro" if tema == "oscuro" else "Modo oscuro"
+
+    @staticmethod
+    def _icono_boton_tema(tema):
+        return "☀" if tema == "oscuro" else "☾"
+
+    def _render_boton_tema(self):
+        icono = self._icono_boton_tema(self.tema_interfaz)
+        texto = self._texto_boton_tema(self.tema_interfaz)
+        self.boton_tema.configure(
+            text=icono if self.sidebar_collapsed else f"{icono}  {texto}",
+            anchor="center" if self.sidebar_collapsed else "w",
+            padx=0 if self.sidebar_collapsed else 8,
+        )
+
+    def alternar_tema_interfaz(self):
+        tema_anterior = self.tema_interfaz
+        tema_nuevo = "claro" if tema_anterior == "oscuro" else "oscuro"
+        redraw_handle = self._suspender_redibujado_ventana()
+        try:
+            config_actualizada = actualizar_config_parcial({"tema_interfaz": tema_nuevo})
+            self.ventana_creacion_caja.theme_use(self._nombre_tema_ttk(tema_nuevo))
+            self.tema_interfaz = tema_nuevo
+            self._configurar_paleta_sidebar(tema_nuevo)
+            self._aplicar_paleta_sidebar()
+            if getattr(self, "contenido_productos", None):
+                self.contenido_productos.aplicar_tema_interfaz(tema_nuevo)
+            self.config_data = config_actualizada
+            self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
+            self._render_boton_tema()
+            logger.info("Tema de interfaz actualizado | tema=%s", tema_nuevo)
+        except Exception:
+            logger.exception("No se pudo cambiar el tema de interfaz | tema=%s", tema_nuevo)
+            try:
+                self.ventana_creacion_caja.theme_use(self._nombre_tema_ttk(tema_anterior))
+            except Exception:
+                logger.debug("No se pudo restaurar el tema anterior.", exc_info=True)
+            messagebox.showerror(
+                "Tema de interfaz",
+                "No se pudo guardar el cambio de tema. Se mantiene el tema anterior.",
+            )
+        finally:
+            self._reanudar_redibujado_ventana(redraw_handle)
 
     def _iniciar_listener_instancia(self):
         if self._socket_listener_running or self.socket_lock_server is None:
@@ -523,6 +649,8 @@ class GUI_MAIN:
                     self.boton_info_texto,
                     self.sidebar_collapsed,
                 )
+                if hasattr(self, "boton_tema"):
+                    self._render_boton_tema()
                 if hasattr(self, "label_inicio"):
                     self.label_inicio.pack_configure(pady=(inicio_pad_top, 8))
                 self._sidebar_render_state = sidebar_render_state
@@ -1118,6 +1246,8 @@ class GUI_MAIN:
             self.command_button_acerca,
         )
 
+        self.boton_tema = self._crear_boton_tema_menu()
+
         self.boton_toggle_menu = tk.Button(
             self.footer_card,
             text="‹",
@@ -1139,6 +1269,7 @@ class GUI_MAIN:
         self._render_footer_action(self.boton_info, self.boton_info_icon, self.boton_info_texto, False)
         if self.boton_setting:
             self._render_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, False)
+        self._render_boton_tema()
         logger.debug("frameMenu construido correctamente.")
 
     def _cargar_logo_sidebar(self, path, max_width, max_height):
@@ -1187,6 +1318,34 @@ class GUI_MAIN:
         # Se conservan los tres alias para no alterar el contrato interno de
         # GUI_MAIN; todos apuntan al mismo control atómico.
         return button, button, button
+
+    def _crear_boton_tema_menu(self):
+        slot = tk.Frame(
+            self.footer_card,
+            bg=self.sidebar_card,
+            height=36,
+            bd=0,
+            highlightthickness=0,
+        )
+        slot.pack(fill="x", pady=(10, 0))
+        slot.pack_propagate(False)
+        button = tk.Button(
+            slot,
+            command=self.alternar_tema_interfaz,
+            bg=self.sidebar_card,
+            fg=self.sidebar_muted,
+            activebackground=self.sidebar_card_hover,
+            activeforeground=self.sidebar_brand,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            font=("Segoe UI Symbol", 10, "bold"),
+            cursor="hand2",
+        )
+        button.sidebar_slot = slot
+        button.pack(fill="both", expand=True)
+        self.DICT_WIDGETS.register("GUI_MAIN", "boton_tema", button)
+        return button
 
     def _crear_tarjeta_menu(self, key, image, text, command):
         frame = tk.Frame(

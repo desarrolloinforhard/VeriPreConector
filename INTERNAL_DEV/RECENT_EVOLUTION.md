@@ -8,6 +8,8 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - Fijada la geometria de Configuracion y Acerca de para evitar saltos durante hover y cambios de estado.
 - Cacheados logo e iconos y aplicado repintado atomico en Windows para reducir demoras y parpadeos.
 - Corregida la apertura de Acerca de y reforzada la navegacion Volver.
+- Agregado selector persistente de tema claro/oscuro en el menu lateral.
+- Adaptado el contraste de la tabla de Productos y eliminado el destello blanco del overlay de carga.
 
 ## Productos / Sync / Envios
 

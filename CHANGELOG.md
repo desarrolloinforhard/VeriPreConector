@@ -9,6 +9,10 @@
 - Added a responsive collapsible ttkbootstrap sidebar with stable compact and expanded rendering.
 - Kept footer actions at fixed positions, cached sidebar assets, and made Windows layout transitions atomic to prevent flicker.
 - Fixed the missing typography token that prevented the About screen from opening.
+- Added a persistent light/dark theme selector to the sidebar with compact icon-only rendering.
+- Added explicit corporate light and dark palettes for the shell and sidebar controls.
+- Improved Product table contrast with dark striped rows and a strong green selection state.
+- Made the loading overlay theme-aware to prevent white flashes during dark-mode navigation and reloads.
 
 ## 1.16.33 - 2026-08-20
 
