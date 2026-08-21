@@ -2,8 +2,18 @@
 
 Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 
+## Frontend ttkbootstrap 1.16.34
+
+- Agregado menu lateral plegable con modos expandido y compacto estables.
+- Fijada la geometria de Configuracion y Acerca de para evitar saltos durante hover y cambios de estado.
+- Cacheados logo e iconos y aplicado repintado atomico en Windows para reducir demoras y parpadeos.
+- Corregida la apertura de Acerca de y reforzada la navegacion Volver.
+
 ## Productos / Sync / Envios
 
+- El icono de bandeja ahora se crea solo al minimizar a tray y se destruye al restaurar/cerrar para reducir iconos fantasma en Windows.
+- `Transmitir Novedades` dejo de depender solo del estado en memoria y ahora recompone pendientes desde SQLite con una marca persistida de ultima transmision exitosa.
+- `Recargar Productos` ahora limpia filtros/estado del `Tableview` antes de repoblar la lista local.
 - Endurecido el acceso a `F:\Dba\veripre.db` para instalaciones compartidas con lock interno por proceso, `busy_timeout`, WAL y eliminacion de `commit()` en lecturas.
 - Registrado el incidente `database is locked` observado en cliente Novo como problema de contencion SQLite local entre polling automatico, UI y escrituras.
 - Corregido loop de sincronizacion automatica que repetia mensajes y recargas.

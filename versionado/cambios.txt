@@ -1,7 +1,16 @@
-Version 1.16.33
+Version 1.16.34
 - Se corrigio la navegacion Volver para conservar un historial valido al regresar de Publicidad a Productos.
 - La navegacion ahora se recupera de forma segura ante historiales vacios o incompletos, evitando `IndexError`.
 - Los cierres normales y periodicos de Sybase pasan a nivel DEBUG para reducir ruido operativo en consola.
+- Se agrego un menu lateral ttkbootstrap plegable con renderizado estable en modo abierto y compacto.
+- Configuracion y Acerca de mantienen posiciones fijas; los recursos visuales se reutilizan y la transicion de Windows evita parpadeos.
+- Se corrigio el token tipografico faltante que impedia abrir la pantalla Acerca de.
+
+Version 1.16.33
+- Se cambio el ciclo de bandeja para que el icono se cree solo al ocultar SmartPrice y se destruya explicitamente al restaurar o cerrar, reduciendo los iconos fantasma acumulados en Windows.
+- `Transmitir Novedades` ahora reconstruye pendientes desde SQLite usando marcas `dFechaU` persistidas, en lugar de depender solo del set en memoria de la sesion actual.
+- Se guarda la ultima marca exitosa de transmision de novedades, permitiendo enviar cambios pendientes al dia siguiente sin forzar un envio completo.
+- Se reforzo `Recargar Productos` para resetear filtros y estado interno del `Tableview` antes de repoblar la lista local, evitando vistas vacias con datos existentes.
 
 Version 1.16.32
 - Se reforzo el acceso local a SQLite compartida en `F:\Dba\veripre.db` para atacar los `database is locked` observados en el cliente Novo.

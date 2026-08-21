@@ -1,11 +1,21 @@
 # Changelog
 
-## 1.16.33 - 2026-08-19
+## 1.16.34 - 2026-08-21
 
 - Fixed back navigation so returning from Advertising to Products preserves a valid history instead of raising `IndexError`.
 - Added defensive recovery for empty or incomplete navigation histories.
 - Reduced routine Sybase disconnect logging from `INFO` to `DEBUG` to avoid repetitive operational noise.
 - Added regression coverage for Advertising-to-Products, Products-to-Home, single-entry, and empty navigation histories.
+- Added a responsive collapsible ttkbootstrap sidebar with stable compact and expanded rendering.
+- Kept footer actions at fixed positions, cached sidebar assets, and made Windows layout transitions atomic to prevent flicker.
+- Fixed the missing typography token that prevented the About screen from opening.
+
+## 1.16.33 - 2026-08-20
+
+- Changed the tray lifecycle so the SmartPrice icon is created only when the window is sent to the system tray and is explicitly destroyed when the app is restored or closed, reducing duplicate ghost icons in Windows notification overflow.
+- Fixed `Transmitir Novedades` so pending product changes are now recovered from local SQLite using persisted `dFechaU` marks instead of relying only on the in-memory `productos_modificados` set for the current session.
+- Added persistence of the last successful novedades transmission mark in configuration, allowing next-day transmissions to keep sending pending price changes without forcing a full catalog resend.
+- Hardened `Recargar Productos` so the local product list resets Tableview state and filters before repopulating, preventing empty visual lists after a refresh with valid local rows.
 
 ## 1.16.32 - 2026-08-19
 

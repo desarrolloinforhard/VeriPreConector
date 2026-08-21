@@ -113,6 +113,25 @@ class ProductosSQLiteDAO:
         """
         return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
+    def listar_codigos_desde_fecha(self, fecha_desde, inclusive=True):
+        fecha_txt = str(fecha_desde).strip() if fecha_desde else ""
+        if not fecha_txt:
+            return []
+
+        operador = ">=" if inclusive else ">"
+        sql = f"""
+        SELECT DISTINCT codigo
+        FROM productos
+        WHERE codigo IS NOT NULL
+          AND TRIM(codigo) <> ''
+          AND dFechaU IS NOT NULL
+          AND TRIM(dFechaU) <> ''
+          AND dFechaU {operador} ?
+        ORDER BY dFechaU ASC, codigo ASC
+        """
+        filas = self.db.ejecutar_consulta(sql, (fecha_txt,)) or []
+        return [str(fila[0]).strip() for fila in filas if fila and fila[0]]
+
     def obtener_oferta_por_codigo(self, codigo):
         sql = """
         SELECT
