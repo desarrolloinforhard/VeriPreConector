@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 import GUI.GUI_MAIN as gui_main_module
 from GUI.GUI_MAIN import GUI_MAIN
 from GUI.CONTENIDO_PRODUCTO import ContenidoProducto
+from GUI.CONTENIDO_PUBLICIDAD import ContenidoPublicidad
 from core.ui.theme_tokens import FONT_LABEL_BOLD
 from core.ui.ttk_theme import SMARTPRICE_DARK_THEME, SMARTPRICE_LIGHT_THEME
 
@@ -24,6 +25,7 @@ class SidebarStateTest(unittest.TestCase):
         self.assertEqual(gui.sidebar_bg, "#10251b")
         self.assertEqual(gui.sidebar_card_active, "#149455")
         self.assertEqual(gui.sidebar_text_active, "#ffffff")
+        self.assertEqual(gui.sidebar_border, "#f4fbf7")
         self.assertNotEqual(gui.sidebar_card, gui.sidebar_card_hover)
 
     def test_tabla_productos_usa_verde_para_seleccion_en_ambos_temas(self):
@@ -33,7 +35,28 @@ class SidebarStateTest(unittest.TestCase):
         self.assertEqual(clara["selected_background"], "#149455")
         self.assertEqual(oscura["selected_background"], "#149455")
         self.assertEqual(oscura["selected_foreground"], "#ffffff")
+        self.assertEqual(oscura["section_border"], "#f4fbf7")
         self.assertNotEqual(oscura["background"], oscura["stripe"])
+
+    def test_publicidad_oscura_no_crea_paneles_blancos(self):
+        oscura = ContenidoPublicidad._paleta_publicidad("oscuro")
+
+        self.assertEqual(oscura["item_selected"], "#149455")
+        self.assertNotEqual(oscura["card_bg"], "#ffffff")
+        self.assertNotEqual(oscura["page_bg"], "#ffffff")
+        self.assertNotEqual(oscura["card_bg"], oscura["page_bg"])
+
+    def test_publicidad_distribuye_botonera_en_columnas_uniformes(self):
+        botones = [Mock() for _ in range(8)]
+        frames = [Mock(), Mock()]
+
+        ContenidoPublicidad._distribuir_botones_uniformes(botones, frames, 4)
+
+        for frame in frames:
+            self.assertEqual(frame.columnconfigure.call_count, 4)
+        for boton in botones:
+            boton.grid.assert_called_once()
+            self.assertEqual(boton.grid.call_args.kwargs["sticky"], "ew")
 
     def test_alternar_tema_persiste_y_actualiza_el_control(self):
         gui = GUI_MAIN.__new__(GUI_MAIN)
@@ -44,6 +67,7 @@ class SidebarStateTest(unittest.TestCase):
         gui.boton_tema = Mock()
         gui.DICT_WIDGETS = Mock()
         gui.contenido_productos = None
+        gui.contenido_publicidad = None
         gui._suspender_redibujado_ventana = Mock(return_value=None)
         gui._reanudar_redibujado_ventana = Mock()
 

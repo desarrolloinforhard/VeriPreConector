@@ -298,7 +298,7 @@ class GUI_MAIN:
             self.sidebar_text = "#f4fbf7"
             self.sidebar_text_active = "#ffffff"
             self.sidebar_muted = "#bcd4c8"
-            self.sidebar_border = "#2a5844"
+            self.sidebar_border = "#f4fbf7"
             self.sidebar_brand = "#49b982"
         else:
             self.sidebar_bg = "#f3f6fa"
@@ -313,6 +313,7 @@ class GUI_MAIN:
 
     def _aplicar_paleta_sidebar(self):
         for nombre in (
+            "frame_menu",
             "frame_menu_inner",
             "frame_logo",
             "frame_botones_opciones",
@@ -327,6 +328,11 @@ class GUI_MAIN:
         if getattr(self, "label_image_logo", None):
             self.label_image_logo.configure(bg=self.sidebar_bg)
 
+        if getattr(self, "frame_menu_inner", None):
+            self.frame_menu_inner.configure(highlightthickness=0)
+        if getattr(self, "sidebar_separator", None):
+            self.sidebar_separator.configure(bg=self.sidebar_border)
+
         for data in getattr(self, "menu_cards", {}).values():
             data["frame"].configure(bg=self.sidebar_bg)
             data["canvas"].configure(bg=self.sidebar_bg)
@@ -336,7 +342,10 @@ class GUI_MAIN:
         for nombre in ("boton_setting", "boton_info"):
             button = getattr(self, nombre, None)
             if button:
-                button.sidebar_slot.configure(bg=self.sidebar_bg)
+                button.sidebar_slot.configure(
+                    bg=self.sidebar_bg,
+                    highlightthickness=0,
+                )
                 button.configure(
                     bg=self.sidebar_card,
                     fg=self.sidebar_muted,
@@ -346,7 +355,10 @@ class GUI_MAIN:
 
         button_tema = getattr(self, "boton_tema", None)
         if button_tema:
-            button_tema.sidebar_slot.configure(bg=self.sidebar_bg)
+            button_tema.sidebar_slot.configure(
+                bg=self.sidebar_bg,
+                highlightthickness=0,
+            )
             button_tema.configure(
                 bg=self.sidebar_card,
                 fg=self.sidebar_muted,
@@ -361,6 +373,7 @@ class GUI_MAIN:
                 fg=self.sidebar_text,
                 activebackground=self.sidebar_card_hover,
                 activeforeground=self.sidebar_brand,
+                highlightthickness=0,
             )
 
         if hasattr(self, "VIGIA_FRAME"):
@@ -403,6 +416,8 @@ class GUI_MAIN:
             self._aplicar_paleta_sidebar()
             if getattr(self, "contenido_productos", None):
                 self.contenido_productos.aplicar_tema_interfaz(tema_nuevo)
+            if getattr(self, "contenido_publicidad", None):
+                self.contenido_publicidad.aplicar_tema_interfaz(tema_nuevo)
             self.config_data = config_actualizada
             self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
             self._render_boton_tema()
@@ -1136,10 +1151,12 @@ class GUI_MAIN:
     def frameMenu(self):
         logger.debug("Construyendo frameMenu.")
 
-        self.frame_menu = ttk.Frame(
+        self.frame_menu = tk.Frame(
             self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja"),
-            bootstyle="light",
+            bg=self.sidebar_bg,
             width=self.sidebar_expanded_width,
+            bd=0,
+            highlightthickness=0,
         )
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_menu", self.frame_menu)
         self.frame_menu.grid(row=0, column=0, sticky="NSEW")
@@ -1151,8 +1168,19 @@ class GUI_MAIN:
             bg=self.sidebar_bg,
             padx=6,
             pady=14,
+            highlightthickness=0,
         )
         self.frame_menu_inner.pack(fill="both", expand=True)
+
+        self.sidebar_separator = tk.Frame(
+            self.frame_menu_inner,
+            bg=self.sidebar_border,
+            width=1,
+            bd=0,
+            highlightthickness=0,
+        )
+        self.sidebar_separator.place(relx=1.0, x=-1, y=0, relheight=1.0, anchor="ne")
+        self.sidebar_separator.lift()
 
         # LOGO
         self.frame_logo = tk.Frame(self.frame_menu_inner, bg=self.sidebar_bg)
@@ -1258,6 +1286,7 @@ class GUI_MAIN:
             activeforeground=self.sidebar_brand,
             relief="flat",
             bd=0,
+            highlightthickness=0,
             font=("Segoe UI Symbol", 18, "bold"),
             cursor="hand2",
             padx=8,
@@ -1270,6 +1299,7 @@ class GUI_MAIN:
         if self.boton_setting:
             self._render_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, False)
         self._render_boton_tema()
+        self.sidebar_separator.lift()
         logger.debug("frameMenu construido correctamente.")
 
     def _cargar_logo_sidebar(self, path, max_width, max_height):
@@ -1381,7 +1411,11 @@ class GUI_MAIN:
             widget.bind("<Enter>", on_enter)
             widget.bind("<Leave>", on_leave)
 
-        bg_shape = self._draw_rounded_rect(canvas, 2, 2, 10, 44, 14, fill=self.sidebar_card, outline="")
+        bg_shape = self._draw_rounded_rect(
+            canvas, 2, 2, 10, 44, 14,
+            fill=self.sidebar_card,
+            outline="",
+        )
         icon_id = canvas.create_image(16, 23, image=image, anchor="w")
         text_id = canvas.create_text(
             50,
@@ -1432,7 +1466,12 @@ class GUI_MAIN:
             bg = self.sidebar_card
 
         data["frame"].configure(bg=self.sidebar_bg)
-        data["canvas"].itemconfigure(data["shape"], fill=bg)
+        data["canvas"].itemconfigure(
+            data["shape"],
+            fill=bg,
+            outline="",
+            width=0,
+        )
         data["canvas"].itemconfigure(
             data["text_id"],
             fill=self.sidebar_text_active if data["active"] else self.sidebar_text,
@@ -1617,7 +1656,7 @@ class GUI_MAIN:
             if frame_acerca:
                 frame_acerca.grid_remove()
             self.frame_seccion_inicio.grid_remove()
-            self.frame_barra_superior.grid()
+            self.frame_barra_superior.grid_remove()
             if frame_publicidad:
                 frame_publicidad.grid()
 

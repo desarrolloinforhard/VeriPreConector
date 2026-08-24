@@ -13,13 +13,13 @@ from tkinter import filedialog, messagebox, simpledialog
 from ttkbootstrap.constants import *
 from PIL import Image, ImageTk, ImageDraw
 
-from ASSETS.path_img import READ_IMG, PNG_Check
+from ASSETS.path_img import READ_IMG, PNG_Back, PNG_Check
 from core.network.api_client import DispositivoAPIClient
 from core.network.dispositivo_sender import DispositivoSender
 from GUI.OFERTAS_GENERADOR import GeneradorOfertasToplevel
 from core.logging.logger import get_logger
 from core.ui.responsive import center_toplevel_in_workarea, fit_toplevel_to_workarea, clamp
-from core.ui.theme_tokens import FONT_LABEL_BOLD, FONT_SUBTITLE, FONT_TITLE_XL, PANEL_PAD_X, PANEL_PAD_Y
+from core.ui.theme_tokens import FONT_LABEL_BOLD, FONT_SUBTITLE, FONT_TITLE_LG, PANEL_PAD_X, PANEL_PAD_Y
 from FUNC.config_json import cargar_config, guardar_config, obtener_data_dir
 
 # from core.network.selector_envio_dispositivos import EnvioDispositivos
@@ -44,10 +44,33 @@ class ContenidoPublicidad:
     PAGE_BG = "#f4f7fb"
     ACCENT = "#0d6efd"
 
+    @staticmethod
+    def _paleta_publicidad(tema):
+        if str(tema).strip().lower() in {"oscuro", "dark"}:
+            return {
+                "card_bg": "#163429",
+                "card_border": "#2a5844",
+                "page_bg": "#10251b",
+                "badge_bg": "#20513d",
+                "badge_fg": "#f4fbf7",
+                "item_selected": "#149455",
+            }
+        return {
+            "card_bg": "#ffffff",
+            "card_border": "#dce4ee",
+            "page_bg": "#f4f7fb",
+            "badge_bg": "#f0f6ff",
+            "badge_fg": "#0d6efd",
+            "item_selected": "#149455",
+        }
+
     def __init__(self, widgets):
         logger.info("Inicializando ContenidoPublicidad.")
 
         self.widgets = widgets
+        config = self.widgets.get_widget("CONFIG", "config_json") or {}
+        self.tema_interfaz = str(config.get("tema_interfaz", "claro"))
+        self._actualizar_tokens_tema(self.tema_interfaz)
         self.items_dict = {}
         self.items = []
         self.drag_item = None
@@ -69,6 +92,35 @@ class ContenidoPublicidad:
 
         self.setup_gui()
 
+    def _actualizar_tokens_tema(self, tema):
+        self.tema_interfaz = "oscuro" if str(tema).strip().lower() in {"oscuro", "dark"} else "claro"
+        paleta = self._paleta_publicidad(self.tema_interfaz)
+        self.CARD_BG = paleta["card_bg"]
+        self.CARD_BORDER = paleta["card_border"]
+        self.PAGE_BG = paleta["page_bg"]
+        self.BADGE_BG = paleta["badge_bg"]
+        self.BADGE_FG = paleta["badge_fg"]
+        self.ITEM_SELECTED = paleta["item_selected"]
+
+    def aplicar_tema_interfaz(self, tema):
+        self._actualizar_tokens_tema(tema)
+        if not hasattr(self, "canvas"):
+            return
+
+        self.panel_opciones.configure(bg=self.CARD_BG, highlightbackground=self.CARD_BORDER)
+        self.grid_card.configure(bg=self.CARD_BG, highlightbackground=self.CARD_BORDER)
+        self.canvas.configure(bg=self.PAGE_BG)
+
+        for item in self.items:
+            seleccionado = item is self.item_seleccionado
+            item["frame"].configure(
+                bg=self.CARD_BG,
+                highlightbackground=self.ITEM_SELECTED if seleccionado else self.CARD_BORDER,
+            )
+            item["label_pos"].configure(bg=self.BADGE_BG, fg=self.BADGE_FG)
+
+        self.canvas.update_idletasks()
+
     def setup_gui(self):
         logger.debug("Construyendo interfaz de ContenidoPublicidad.")
 
@@ -78,24 +130,32 @@ class ContenidoPublicidad:
 
         self.frame_resumen = ttk.Frame(self.contenedor_general)
         self.frame_resumen.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 14))
+        self.frame_resumen.columnconfigure(2, weight=1)
 
-        self.frame_titulos = ttk.Frame(self.frame_resumen)
-        self.frame_titulos.pack(side="left", fill="x", expand=True)
+        self.photo_back_local = READ_IMG(PNG_Back(), 24, 24)
+        self.button_back_local = ttk.Button(
+            self.frame_resumen,
+            image=self.photo_back_local,
+            command=lambda: self.widgets.get_widget("GUI_MAIN", "instance").command_button_volver(),
+            bootstyle="primary-link",
+            width=2,
+        )
+        self.button_back_local.grid(row=0, column=0, sticky="w", padx=(0, 10))
 
         self.lbl_titulo = ttk.Label(
-            self.frame_titulos,
+            self.frame_resumen,
             text="Publicidad",
-            font=FONT_TITLE_XL,
+            font=FONT_TITLE_LG,
         )
-        self.lbl_titulo.pack(anchor="w")
+        self.lbl_titulo.grid(row=0, column=1, sticky="w")
 
         self.lbl_resumen_grupo = ttk.Label(
-            self.frame_titulos,
+            self.frame_resumen,
             text="Grupo: General | 0 publicidades",
             font=FONT_SUBTITLE,
             bootstyle="secondary",
         )
-        self.lbl_resumen_grupo.pack(anchor="w", pady=(4, 0))
+        self.lbl_resumen_grupo.grid(row=0, column=2, sticky="w", padx=(24, 12))
 
         self.btn_opciones = ttk.Button(
             self.frame_resumen,
@@ -104,7 +164,7 @@ class ContenidoPublicidad:
             bootstyle="secondary-outline",
             padding=(12, 8),
         )
-        self.btn_opciones.pack(side="right", pady=(4, 0))
+        self.btn_opciones.grid(row=0, column=3, sticky="e")
 
         self.panel_opciones = tk.Frame(
             self.contenedor_general,
@@ -135,11 +195,11 @@ class ContenidoPublicidad:
         self.frame_grupos_botones_l2 = ttk.Frame(self.frame_grupos_botones)
 
         self._botones_grupo = [
-            ttk.Button(self.frame_grupos_botones, text="Nuevo Grupo", command=self.crear_grupo, bootstyle="primary-outline", padding=(12, 8)),
-            ttk.Button(self.frame_grupos_botones, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline", padding=(12, 8)),
-            ttk.Button(self.frame_grupos_botones, text="Eliminar Grupo", command=self.eliminar_grupo, bootstyle="danger-outline", padding=(12, 8)),
-            ttk.Button(self.frame_grupos_botones, text="Publicidades Globales", command=self.abrir_globales, bootstyle="dark-outline", padding=(12, 8)),
-            ttk.Button(self.frame_grupos_botones, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="info-outline", padding=(12, 8)),
+            ttk.Button(self.frame_grupos_botones, text="Nuevo grupo", command=self.crear_grupo, bootstyle="success-outline", padding=(10, 6)),
+            ttk.Button(self.frame_grupos_botones, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline", padding=(10, 6)),
+            ttk.Button(self.frame_grupos_botones, text="Eliminar grupo", command=self.eliminar_grupo, bootstyle="danger-outline", padding=(10, 6)),
+            ttk.Button(self.frame_grupos_botones, text="Publicidades globales", command=self.abrir_globales, bootstyle="secondary-outline", padding=(10, 6)),
+            ttk.Button(self.frame_grupos_botones, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="secondary-outline", padding=(10, 6)),
         ]
 
         self.frame_botones = ttk.Frame(self.frame_opciones)
@@ -150,14 +210,14 @@ class ContenidoPublicidad:
         self.frame_botones_accion_l2 = ttk.Frame(self.frame_botones)
 
         self._botones_accion = [
-            ttk.Button(self.frame_botones, text="Agregar Multimedia", command=self.agregar_multimedia, bootstyle="success", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="primary", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="info", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="dark", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Vista Completa", command=self.mostrar_preview_general, bootstyle="dark-outline", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Panel de Control", command=self.abrir_panel_de_control, bootstyle="dark", padding=(12, 8)),
-            ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="warning", padding=(12, 8)),
+            ttk.Button(self.frame_botones, text="Agregar multimedia", command=self.agregar_multimedia, bootstyle="success", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="success-outline", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="success-outline", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="secondary-outline", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary-outline", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Vista completa", command=self.mostrar_preview_general, bootstyle="secondary-outline", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="secondary-outline", padding=(10, 6)),
+            ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="success-outline", padding=(10, 6)),
         ]
 
         self.grid_card = tk.Frame(
@@ -234,8 +294,10 @@ class ContenidoPublicidad:
     def _reorganizar_botoneras(self, ancho_util):
         for widget in self._botones_grupo:
             widget.pack_forget()
+            widget.grid_forget()
         for widget in self._botones_accion:
             widget.pack_forget()
+            widget.grid_forget()
         self.frame_grupos_botones_l1.pack_forget()
         self.frame_grupos_botones_l2.pack_forget()
         self.frame_botones_accion_l1.pack_forget()
@@ -245,34 +307,39 @@ class ContenidoPublicidad:
         self.frame_botones.pack(fill="x", pady=(10, 0))
         self.frame_botones_accion_l1.pack(fill="x")
 
-        grupos_en_bloque = ancho_util < 1460
-        acciones_en_bloque = ancho_util < 1500
+        columnas_grupo = 3 if ancho_util < 1460 else 5
+        filas_grupo = (len(self._botones_grupo) + columnas_grupo - 1) // columnas_grupo
+        frames_grupo = [self.frame_grupos_botones_l1]
+        if filas_grupo > 1:
+            self.frame_grupos_botones_l2.pack(fill="x", pady=(6, 0))
+            frames_grupo.append(self.frame_grupos_botones_l2)
+        self._distribuir_botones_uniformes(self._botones_grupo, frames_grupo, columnas_grupo)
 
-        if grupos_en_bloque:
-            self.frame_grupos_botones_l2.pack(fill="x", pady=(8, 0))
-            for idx, widget in enumerate(self._botones_grupo[:3]):
-                padx = (0, 8) if idx < 2 else (0, 0)
-                widget.pack(in_=self.frame_grupos_botones_l1, side="left", padx=padx)
-            for idx, widget in enumerate(self._botones_grupo[3:]):
-                padx = (0, 8) if idx == 0 else (0, 0)
-                widget.pack(in_=self.frame_grupos_botones_l2, side="left", padx=padx)
-        else:
-            for idx, widget in enumerate(self._botones_grupo):
-                padx = (0, 8) if idx < 3 else ((6, 8) if idx == 3 else (0, 0))
-                widget.pack(in_=self.frame_grupos_botones_l1, side="left", padx=padx)
+        columnas_accion = 4
+        self.frame_botones_accion_l2.pack(fill="x", pady=(6, 0))
+        self._distribuir_botones_uniformes(
+            self._botones_accion,
+            [self.frame_botones_accion_l1, self.frame_botones_accion_l2],
+            columnas_accion,
+        )
 
-        if acciones_en_bloque:
-            self.frame_botones_accion_l2.pack(fill="x", pady=(8, 0))
-            for idx, widget in enumerate(self._botones_accion[:4]):
-                padx = (0, 8) if idx < 3 else (0, 0)
-                widget.pack(in_=self.frame_botones_accion_l1, side="left", padx=padx)
-            for idx, widget in enumerate(self._botones_accion[4:]):
-                padx = (0, 8) if idx < 3 else (0, 0)
-                widget.pack(in_=self.frame_botones_accion_l2, side="left", padx=padx)
-        else:
-            for idx, widget in enumerate(self._botones_accion):
-                padx = (0, 8) if idx < len(self._botones_accion) - 1 else (0, 0)
-                widget.pack(in_=self.frame_botones_accion_l1, side="left", padx=padx)
+    @staticmethod
+    def _distribuir_botones_uniformes(botones, frames, columnas):
+        for frame in frames:
+            for columna in range(columnas):
+                frame.columnconfigure(columna, weight=1, uniform="publicidad_botones")
+
+        for indice, boton in enumerate(botones):
+            fila = indice // columnas
+            columna = indice % columnas
+            frame = frames[min(fila, len(frames) - 1)]
+            boton.grid(
+                in_=frame,
+                row=0,
+                column=columna,
+                sticky="ew",
+                padx=(0, 6) if columna < columnas - 1 else 0,
+            )
 
     def toggle_opciones(self):
         if self._opciones_visibles:
@@ -1282,8 +1349,8 @@ class ContenidoPublicidad:
                 frame_item,
                 text="",
                 font=("Segoe UI", 11, "bold"),
-                bg="#f0f6ff",
-                fg=self.ACCENT,
+                bg=self.BADGE_BG,
+                fg=self.BADGE_FG,
                 padx=8,
                 pady=3,
             )
@@ -1402,16 +1469,16 @@ class ContenidoPublicidad:
                     break
 
             if self.item_seleccionado and self.item_seleccionado != self.drag_item:
-                self.item_seleccionado["frame"].config(highlightbackground="#063970")
+                self.item_seleccionado["frame"].config(highlightbackground=self.CARD_BORDER)
 
             if self.drag_item:
                 logger.debug("Inicio drag | ruta=%s", self.drag_item.get("filepath"))
                 self.canvas.tag_raise(self.drag_item["window_id"])
                 self.drag_item["frame"].lift()
                 self.drag_item["frame"].config(
-                    highlightbackground="#00cc66",
+                    highlightbackground=self.ITEM_SELECTED,
                     highlightthickness=5,
-                    bg="#f0f0f0"
+                    bg=self.CARD_BG,
                 )
                 self.item_seleccionado = self.drag_item
 
@@ -1471,9 +1538,9 @@ class ContenidoPublicidad:
 
             if self.drag_item:
                 self.drag_item["frame"].config(
-                    highlightbackground="#063970",
+                    highlightbackground=self.ITEM_SELECTED,
                     highlightthickness=3,
-                    bg="white"
+                    bg=self.CARD_BG,
                 )
 
             self.drag_item = None

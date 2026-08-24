@@ -202,6 +202,7 @@ class ContenidoProducto:
                 "foreground": "#f4fbf7",
                 "selected_background": "#149455",
                 "selected_foreground": "#ffffff",
+                "section_border": "#f4fbf7",
             }
         return {
             "background": "#ffffff",
@@ -209,6 +210,7 @@ class ContenidoProducto:
             "foreground": "#173227",
             "selected_background": "#149455",
             "selected_foreground": "#ffffff",
+            "section_border": "#149455",
         }
 
     def aplicar_tema_interfaz(self, tema):
@@ -228,6 +230,25 @@ class ContenidoProducto:
             background=[("selected", paleta["selected_background"])],
             foreground=[("selected", paleta["selected_foreground"])],
         )
+        style.configure(
+            "SmartPriceProduct.TLabelframe",
+            background=paleta["background"],
+            bordercolor=paleta["section_border"],
+            lightcolor=paleta["section_border"],
+            darkcolor=paleta["section_border"],
+            borderwidth=1,
+        )
+        style.configure(
+            "SmartPriceProduct.TLabelframe.Label",
+            background=paleta["background"],
+            foreground=paleta["section_border"],
+        )
+        for panel in (
+            self.frame_tabla_producto,
+            self.frame_side_panel,
+            self.frame_buttons_productos,
+        ):
+            panel.configure(style="SmartPriceProduct.TLabelframe")
         self.dt.apply_table_stripes((paleta["stripe"], paleta["foreground"]))
 
     def _tema_interfaz_actual(self):
