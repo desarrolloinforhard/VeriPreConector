@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.16.35 - 2026-08-24
+
+- Added an informative Home dashboard with local product and advertising metrics, connection state, registered devices, guided shortcuts, and a status bar.
+- Added a dedicated Home navigation entry plus theme-aware Inforhard branding assets.
+- Refined the corporate light and dark themes with layered green surfaces, consistent contrast, and reduced navigation flashes.
+- Improved the Products header, cards, action hierarchy, selected-row contrast, and dark-mode rendering.
+- Reorganized Advertising actions into a more compact and consistent layout across both themes.
+- Added human-readable catalog dates, actionable empty states, and structured device rows.
+
 ## 1.16.34 - 2026-08-21
 
 - Fixed back navigation so returning from Advertising to Products preserves a valid history instead of raising `IndexError`.

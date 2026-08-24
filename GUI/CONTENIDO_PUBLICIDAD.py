@@ -20,6 +20,12 @@ from GUI.OFERTAS_GENERADOR import GeneradorOfertasToplevel
 from core.logging.logger import get_logger
 from core.ui.responsive import center_toplevel_in_workarea, fit_toplevel_to_workarea, clamp
 from core.ui.theme_tokens import FONT_LABEL_BOLD, FONT_SUBTITLE, FONT_TITLE_LG, PANEL_PAD_X, PANEL_PAD_Y
+from core.ui.ttk_theme import (
+    SMARTPRICE_DARK_BORDER,
+    SMARTPRICE_DARK_CARD,
+    SMARTPRICE_DARK_HOVER,
+    SMARTPRICE_DARK_SURFACE,
+)
 from FUNC.config_json import cargar_config, guardar_config, obtener_data_dir
 
 # from core.network.selector_envio_dispositivos import EnvioDispositivos
@@ -48,10 +54,10 @@ class ContenidoPublicidad:
     def _paleta_publicidad(tema):
         if str(tema).strip().lower() in {"oscuro", "dark"}:
             return {
-                "card_bg": "#163429",
-                "card_border": "#2a5844",
-                "page_bg": "#10251b",
-                "badge_bg": "#20513d",
+                "card_bg": SMARTPRICE_DARK_CARD,
+                "card_border": SMARTPRICE_DARK_BORDER,
+                "page_bg": SMARTPRICE_DARK_SURFACE,
+                "badge_bg": SMARTPRICE_DARK_HOVER,
                 "badge_fg": "#f4fbf7",
                 "item_selected": "#149455",
             }

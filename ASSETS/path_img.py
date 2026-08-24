@@ -17,6 +17,9 @@ def PNG_Productos():
 def PNG_Publicidad():
     return os.path.join(path_script, 'publicidad.png')
 
+def PNG_Inicio():
+    return os.path.join(path_script, 'inicio.png')
+
 def PNG_Settings():
     return os.path.join(path_script, 'settings.png')
 
@@ -51,6 +54,12 @@ def PNG_LOGO_DISPOSITIVO():
 
 def PNG_LOGO_SECUNDARIO():
     return os.path.join(path_script, 'INFORHARD_HORIZONTAL.png')
+
+def PNG_LOGO_TEMA_OSCURO():
+    return os.path.join(path_script, 'INFORHARD_TEMA_OSCURO.png')
+
+def PNG_LOGO_TEMA_CLARO():
+    return os.path.join(path_script, 'INFORHARD_TEMA_CLARO.png')
 
 def READ_IMG(path, widht, height):
     image_logo = Image.open(path)

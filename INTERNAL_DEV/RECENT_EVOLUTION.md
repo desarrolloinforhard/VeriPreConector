@@ -2,7 +2,7 @@
 
 Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 
-## Frontend ttkbootstrap 1.16.34
+## Frontend ttkbootstrap 1.16.35
 
 - Agregado menu lateral plegable con modos expandido y compacto estables.
 - Fijada la geometria de Configuracion y Acerca de para evitar saltos durante hover y cambios de estado.
@@ -10,6 +10,9 @@ Resumen de lo construido y estabilizado durante esta etapa de trabajo.
 - Corregida la apertura de Acerca de y reforzada la navegacion Volver.
 - Agregado selector persistente de tema claro/oscuro en el menu lateral.
 - Adaptado el contraste de la tabla de Productos y eliminado el destello blanco del overlay de carga.
+- Incorporado Home informativo con metricas locales, estado de conexion, dispositivos registrados, accesos guiados y barra de estado.
+- Renovada la identidad visual con logos por tema, icono de Inicio y paleta corporativa verde/blanca.
+- Unificado el lenguaje visual de Productos y Publicidad mediante tarjetas, jerarquia de superficies y acciones compactas.
 
 ## Productos / Sync / Envios
 

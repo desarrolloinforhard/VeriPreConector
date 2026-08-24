@@ -5,6 +5,7 @@ import os
 import requests
 import threading
 import time
+import tkinter as tk
 import ttkbootstrap as ttk
 from io import BytesIO
 from plyer import notification
@@ -20,6 +21,12 @@ from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
 from core.dao.ofertas_plu_sqlite_dao import OfertasPLUSQLiteDAO
 from core.ui.responsive import clamp, fit_toplevel_to_workarea
 from core.ui.theme_tokens import BUTTON_PAD_X, BUTTON_PAD_Y, FONT_BODY_BOLD, FONT_SUBTITLE, FONT_TITLE_LG, PANEL_PAD_X, PANEL_PAD_Y
+from core.ui.ttk_theme import (
+    SMARTPRICE_DARK_BORDER,
+    SMARTPRICE_DARK_CARD,
+    SMARTPRICE_DARK_MUTED,
+    SMARTPRICE_DARK_SURFACE,
+)
 from core.services.image_resolver import ProductImageResolver
 from core.services.productos_sync_service import ProductosSyncService
 from core.logging.logger import get_logger
@@ -74,10 +81,11 @@ class ContenidoProducto:
         self.frame_header_productos.columnconfigure(0, weight=0)
         self.frame_header_productos.columnconfigure(1, weight=0)
         self.frame_header_productos.columnconfigure(2, weight=1)
-        self.frame_header_productos.columnconfigure(3, weight=1)
-        self.frame_header_productos.columnconfigure(4, weight=1)
+        self.frame_header_productos.columnconfigure(3, weight=0)
 
-        self.photo_back_local = READ_IMG(PNG_Back(), 24, 24)
+        self.photo_back_local = self._crear_icono_volver(
+            self.config.get("tema_interfaz", "claro")
+        )
         self.button_back_local = ttk.Button(
             self.frame_header_productos,
             image=self.photo_back_local,
@@ -94,35 +102,31 @@ class ContenidoProducto:
         )
         self.label_producto.grid(row=0, column=1, sticky="w")
 
-        self.label_oferta_estado = ttk.Label(
-            self.frame_header_productos,
-            text="Oferta precio: -",
-            anchor="w",
-            justify="left",
-            font=FONT_BODY_BOLD,
-            bootstyle="warning",
-        )
-        self.label_oferta_estado.grid(row=0, column=2, sticky="e", padx=(16, 10))
+        self.frame_indicadores_producto = ttk.Frame(self.frame_header_productos)
+        self.frame_indicadores_producto.grid(row=0, column=3, sticky="e")
 
-        self.label_ofplu_estado = ttk.Label(
-            self.frame_header_productos,
-            text="Oferta OFPLU: -",
-            anchor="w",
-            justify="left",
-            font=FONT_BODY_BOLD,
-            bootstyle="warning",
+        self.indicador_oferta, self.label_oferta_estado = self._crear_indicador_header(
+            self.frame_indicadores_producto, "OFERTA PRECIO"
         )
-        self.label_ofplu_estado.grid(row=0, column=3, sticky="e", padx=(10, 10))
+        self.indicador_ofplu, self.label_ofplu_estado = self._crear_indicador_header(
+            self.frame_indicadores_producto, "OFERTA OFPLU"
+        )
+        self.indicador_precios, self.label_precios_extra_estado = self._crear_indicador_header(
+            self.frame_indicadores_producto, "PRECIOS ADICIONALES", ultimo=True
+        )
 
-        self.label_precios_extra_estado = ttk.Label(
-            self.frame_header_productos,
-            text="Precios adicionales: -",
-            anchor="w",
-            justify="left",
-            font=FONT_BODY_BOLD,
-            bootstyle="info",
+        self.separador_header_productos = tk.Frame(
+            self.frame_producto,
+            height=1,
+            bd=0,
+            highlightthickness=0,
         )
-        self.label_precios_extra_estado.grid(row=0, column=4, sticky="e", padx=(10, 0))
+        self.separador_header_productos.grid(
+            row=0,
+            column=0,
+            sticky="sew",
+            padx=PANEL_PAD_X,
+        )
 
         self.crear_interfaz_table_view()
 
@@ -141,7 +145,7 @@ class ContenidoProducto:
         
         self.button_crear_datos = ttk.Button(
             self.frame_buttons_inner,
-            text="Recargar Productos",
+            text="↻ Recargar productos",
             command=self.command_crear_datos,
             bootstyle="primary",
             padding=(14, 9),
@@ -154,7 +158,7 @@ class ContenidoProducto:
             text="Transmitir Novedades",
             command=self.command_transmitir_novedades,
             state=DISABLED,
-            bootstyle="success",
+            bootstyle="success-outline",
             padding=(14, 9),
             width=22,
         )
@@ -165,7 +169,7 @@ class ContenidoProducto:
             text="Transmitir por Fecha",
             command=self.command_transmitir_por_fecha,
             state=DISABLED,
-            bootstyle="secondary",
+            bootstyle="success-outline",
             padding=(14, 9),
             width=22,
         )
@@ -176,7 +180,7 @@ class ContenidoProducto:
             text="Transmitir Datos Completos",
             command=self.command_transmitir_datos,
             state=DISABLED,
-            bootstyle="dark",
+            bootstyle="secondary-outline",
             padding=(14, 9),
             width=22,
         )
@@ -193,16 +197,70 @@ class ContenidoProducto:
         self._fijar_layout_productos()
         self.aplicar_tema_interfaz(self.config.get("tema_interfaz", "claro"))
 
+    def _crear_indicador_header(self, parent, titulo, ultimo=False):
+        paleta = self._paleta_tabla_productos(self.config.get("tema_interfaz", "claro"))
+        frame = tk.Frame(
+            parent,
+            bg=paleta["header_card"],
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=paleta["header_border"],
+            padx=9,
+            pady=5,
+        )
+        frame.pack(side="left", padx=(0, 0 if ultimo else 6))
+
+        title_label = tk.Label(
+            frame,
+            text=titulo,
+            bg=paleta["header_card"],
+            fg=paleta["header_muted"],
+            font=("Segoe UI", 7),
+            padx=0,
+            pady=0,
+        )
+        title_label.pack(side="left")
+
+        value_label = tk.Label(
+            frame,
+            text="-",
+            bg=paleta["header_card"],
+            fg=paleta["header_text"],
+            font=("Segoe UI", 9, "bold"),
+            padx=0,
+            pady=0,
+        )
+        value_label.pack(side="left", padx=(8, 0))
+        frame.header_title = title_label
+        return frame, value_label
+
+    @staticmethod
+    def _color_flecha_volver(tema):
+        return "#F4FBF7" if tema == "oscuro" else "#087A46"
+
+    def _crear_icono_volver(self, tema):
+        imagen = Image.open(PNG_Back()).convert("RGBA")
+        imagen = imagen.resize((24, 24), Image.Resampling.LANCZOS)
+        color = self._color_flecha_volver(tema)
+        capa_color = Image.new("RGBA", imagen.size, color)
+        capa_color.putalpha(imagen.getchannel("A"))
+        return ImageTk.PhotoImage(capa_color)
+
     @staticmethod
     def _paleta_tabla_productos(tema):
         if tema == "oscuro":
             return {
-                "background": "#10251b",
-                "stripe": "#1b3a2d",
+                "background": SMARTPRICE_DARK_SURFACE,
+                "stripe": SMARTPRICE_DARK_CARD,
                 "foreground": "#f4fbf7",
                 "selected_background": "#149455",
                 "selected_foreground": "#ffffff",
-                "section_border": "#f4fbf7",
+                "section_border": SMARTPRICE_DARK_BORDER,
+                "section_label": "#F4FBF7",
+                "header_card": SMARTPRICE_DARK_SURFACE,
+                "header_border": SMARTPRICE_DARK_BORDER,
+                "header_muted": SMARTPRICE_DARK_MUTED,
+                "header_text": "#f4fbf7",
             }
         return {
             "background": "#ffffff",
@@ -211,12 +269,39 @@ class ContenidoProducto:
             "selected_background": "#149455",
             "selected_foreground": "#ffffff",
             "section_border": "#149455",
+            "section_label": "#087A46",
+            "header_card": "#ffffff",
+            "header_border": "#d7e3dc",
+            "header_muted": "#4f6478",
+            "header_text": "#173227",
         }
+
+    @staticmethod
+    def _valor_indicador_estado(texto):
+        texto = str(texto or "-")
+        return texto.split(":", 1)[1].strip() if ":" in texto else texto
+
+    def _actualizar_indicador_estado(self, label, texto, estilo="secondary"):
+        paleta = self._paleta_tabla_productos(self._tema_interfaz_actual())
+        colores = {
+            "success": "#49b982",
+            "warning": "#e5a50a",
+            "danger": "#df5b5b",
+            "info": "#49b982",
+            "secondary": paleta["header_text"],
+        }
+        label.configure(
+            text=self._valor_indicador_estado(texto),
+            bg=paleta["header_card"],
+            fg=colores.get(estilo, paleta["header_text"]),
+        )
 
     def aplicar_tema_interfaz(self, tema):
         if not hasattr(self, "dt"):
             return
         paleta = self._paleta_tabla_productos(tema)
+        self.photo_back_local = self._crear_icono_volver(tema)
+        self.button_back_local.configure(image=self.photo_back_local)
         style = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style
         style_name = str(self.dt.view.cget("style"))
         style.configure(
@@ -241,7 +326,7 @@ class ContenidoProducto:
         style.configure(
             "SmartPriceProduct.TLabelframe.Label",
             background=paleta["background"],
-            foreground=paleta["section_border"],
+            foreground=paleta["section_label"],
         )
         for panel in (
             self.frame_tabla_producto,
@@ -249,6 +334,26 @@ class ContenidoProducto:
             self.frame_buttons_productos,
         ):
             panel.configure(style="SmartPriceProduct.TLabelframe")
+        for indicador in (
+            self.indicador_oferta,
+            self.indicador_ofplu,
+            self.indicador_precios,
+        ):
+            indicador.configure(
+                bg=paleta["header_card"],
+                highlightbackground=paleta["header_border"],
+            )
+            indicador.header_title.configure(
+                bg=paleta["header_card"],
+                fg=paleta["header_muted"],
+            )
+        for label in (
+            self.label_oferta_estado,
+            self.label_ofplu_estado,
+            self.label_precios_extra_estado,
+        ):
+            label.configure(bg=paleta["header_card"])
+        self.separador_header_productos.configure(bg=paleta["header_border"])
         self.dt.apply_table_stripes((paleta["stripe"], paleta["foreground"]))
 
     def _tema_interfaz_actual(self):
@@ -287,7 +392,7 @@ class ContenidoProducto:
         
     def crear_interfaz_table_view(self):
         self.frame_table_view = ttk.Frame(self.frame_producto)
-        self.frame_table_view.grid(row=1, column=0, sticky="nsew", padx=PANEL_PAD_X, pady=(0, 8))
+        self.frame_table_view.grid(row=1, column=0, sticky="nsew", padx=PANEL_PAD_X, pady=(12, 8))
         self.frame_table_view.columnconfigure(0, weight=1)
         self.frame_table_view.columnconfigure(1, weight=0)
         self.frame_table_view.rowconfigure(0, weight=1)
@@ -850,7 +955,7 @@ class ContenidoProducto:
                         self._carga_local_en_curso = False
                         self.button_crear_datos.config(
                             state=NORMAL,
-                            text="Recargar Productos",
+                            text="↻ Recargar productos",
                             command=lambda: self.cargar_productos_locales_con_loader(
                                 force=True,
                                 mostrar_sin_datos=True,
@@ -867,7 +972,7 @@ class ContenidoProducto:
                     self._carga_local_en_curso = False
                     self.button_crear_datos.config(
                         state=NORMAL,
-                        text="Recargar Productos",
+                        text="↻ Recargar productos",
                         command=lambda: self.cargar_productos_locales_con_loader(
                             force=True,
                             mostrar_sin_datos=True,
@@ -1753,10 +1858,14 @@ class ContenidoProducto:
             else:
                 texto = "Precios adicionales: NO"
                 estilo = "secondary"
-            self.label_precios_extra_estado.config(text=texto, bootstyle=estilo)
+            self._actualizar_indicador_estado(self.label_precios_extra_estado, texto, estilo)
         except Exception as e:
             print(f"Error actualizando estado de precios adicionales: {e}")
-            self.label_precios_extra_estado.config(text="Precios adicionales: error", bootstyle="danger")
+            self._actualizar_indicador_estado(
+                self.label_precios_extra_estado,
+                "Precios adicionales: error",
+                "danger",
+            )
 
     def _obtener_oferta_precio_producto(self, codigo_producto):
         try:
@@ -1794,10 +1903,14 @@ class ContenidoProducto:
             else:
                 texto = "Oferta precio: NO"
                 estilo = "secondary"
-            self.label_oferta_estado.config(text=texto, bootstyle=estilo)
+            self._actualizar_indicador_estado(self.label_oferta_estado, texto, estilo)
         except Exception as e:
             print(f"Error actualizando estado de oferta: {e}")
-            self.label_oferta_estado.config(text="Oferta precio: error", bootstyle="danger")
+            self._actualizar_indicador_estado(
+                self.label_oferta_estado,
+                "Oferta precio: error",
+                "danger",
+            )
 
         try:
             if ofertas_plu is None:
@@ -1809,10 +1922,14 @@ class ContenidoProducto:
             else:
                 texto = "Oferta OFPLU: NO"
                 estilo = "secondary"
-            self.label_ofplu_estado.config(text=texto, bootstyle=estilo)
+            self._actualizar_indicador_estado(self.label_ofplu_estado, texto, estilo)
         except Exception as e:
             print(f"Error actualizando estado de OFPLU: {e}")
-            self.label_ofplu_estado.config(text="Oferta OFPLU: error", bootstyle="danger")
+            self._actualizar_indicador_estado(
+                self.label_ofplu_estado,
+                "Oferta OFPLU: error",
+                "danger",
+            )
 
     def _obtener_ofertas_plu_producto(self, codigo_producto):
         try:

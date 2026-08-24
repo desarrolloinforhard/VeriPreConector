@@ -9,6 +9,7 @@ import hashlib
 import atexit
 import ctypes
 import subprocess
+from datetime import datetime
 
 import ttkbootstrap as ttk
 import tkinter as tk
@@ -29,6 +30,11 @@ from DB.database_sybase import ConexionSybase
 from core.logging.logger import get_logger
 from core.ui.loading_overlay import LoadingOverlay
 from core.ui.ttk_theme import (
+    SMARTPRICE_DARK_BORDER,
+    SMARTPRICE_DARK_CARD,
+    SMARTPRICE_DARK_HOVER,
+    SMARTPRICE_DARK_MUTED,
+    SMARTPRICE_DARK_SURFACE,
     SMARTPRICE_DARK_THEME,
     SMARTPRICE_LIGHT_THEME,
     registrar_tema_smartprice,
@@ -291,14 +297,14 @@ class GUI_MAIN:
 
     def _configurar_paleta_sidebar(self, tema):
         if tema == "oscuro":
-            self.sidebar_bg = "#10251b"
-            self.sidebar_card = "#163429"
-            self.sidebar_card_hover = "#20513d"
+            self.sidebar_bg = SMARTPRICE_DARK_CARD
+            self.sidebar_card = SMARTPRICE_DARK_CARD
+            self.sidebar_card_hover = SMARTPRICE_DARK_HOVER
             self.sidebar_card_active = "#149455"
             self.sidebar_text = "#f4fbf7"
             self.sidebar_text_active = "#ffffff"
-            self.sidebar_muted = "#bcd4c8"
-            self.sidebar_border = "#f4fbf7"
+            self.sidebar_muted = SMARTPRICE_DARK_MUTED
+            self.sidebar_border = SMARTPRICE_DARK_BORDER
             self.sidebar_brand = "#49b982"
         else:
             self.sidebar_bg = "#f3f6fa"
@@ -330,8 +336,12 @@ class GUI_MAIN:
 
         if getattr(self, "frame_menu_inner", None):
             self.frame_menu_inner.configure(highlightthickness=0)
-        if getattr(self, "sidebar_separator", None):
-            self.sidebar_separator.configure(bg=self.sidebar_border)
+
+        if getattr(self, "sidebar_right_separator", None):
+            self.sidebar_right_separator.configure(bg="#1B2521" if self.tema_interfaz == "oscuro" else self.sidebar_border)
+            self.sidebar_right_separator.lift()
+        if getattr(self, "sidebar_footer_separator", None):
+            self.sidebar_footer_separator.configure(bg="#1B2521" if self.tema_interfaz == "oscuro" else self.sidebar_border)
 
         for data in getattr(self, "menu_cards", {}).values():
             data["frame"].configure(bg=self.sidebar_bg)
@@ -378,6 +388,18 @@ class GUI_MAIN:
 
         if hasattr(self, "VIGIA_FRAME"):
             self._actualizar_estilo_menu_activo()
+        self._actualizar_iconos_sidebar()
+
+    def _actualizar_iconos_sidebar(self):
+        if not getattr(self, "menu_cards", None):
+            return
+        footer_size = getattr(self, "sidebar_footer_icon_size", 20)
+        if getattr(self, "boton_setting", None):
+            self.photo_setting = self._cargar_icono_sidebar(PNG_Settings(), footer_size)
+            self.boton_setting.configure(image=self.photo_setting)
+        if getattr(self, "boton_info", None):
+            self.photo_info = self._cargar_icono_sidebar(PNG_Info(), footer_size)
+            self.boton_info.configure(image=self.photo_info)
 
     @staticmethod
     def _resolver_tema_interfaz(valor):
@@ -414,10 +436,12 @@ class GUI_MAIN:
             self.tema_interfaz = tema_nuevo
             self._configurar_paleta_sidebar(tema_nuevo)
             self._aplicar_paleta_sidebar()
+            self._actualizar_logo_sidebar()
             if getattr(self, "contenido_productos", None):
                 self.contenido_productos.aplicar_tema_interfaz(tema_nuevo)
             if getattr(self, "contenido_publicidad", None):
                 self.contenido_publicidad.aplicar_tema_interfaz(tema_nuevo)
+            self._aplicar_tema_home(tema_nuevo)
             self.config_data = config_actualizada
             self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
             self._render_boton_tema()
@@ -601,24 +625,21 @@ class GUI_MAIN:
                 if not sidebar_render["show_logo"]:
                     self.label_image_logo.pack_forget()
                 else:
-                    logo_state = (logo_max_width, logo_max_height)
+                    logo_state = (self.tema_interfaz, logo_max_width, logo_max_height)
                     if logo_state != self._sidebar_logo_state:
-                        self.photo_logo = self._cargar_logo_sidebar(
-                            PNG_LOGO_SECUNDARIO(),
+                        self._actualizar_logo_sidebar(
                             max_width=logo_max_width,
                             max_height=logo_max_height,
                         )
-                        self.label_image_logo.configure(image=self.photo_logo)
-                        self.label_image_logo.image = self.photo_logo
-                        self._sidebar_logo_state = logo_state
                     self.label_image_logo.pack_configure(pady=top_logo_pad, anchor="center")
 
                 asset_state = (icon_size, footer_icon_size)
                 if asset_state != self._sidebar_asset_state:
                     self.photo_publicidad = READ_IMG(PNG_Publicidad(), icon_size, icon_size)
                     self.photo_productos = READ_IMG(PNG_Productos(), icon_size, icon_size)
-                    self.photo_setting = READ_IMG(PNG_Settings(), footer_icon_size, footer_icon_size)
-                    self.photo_info = READ_IMG(PNG_Info(), footer_icon_size, footer_icon_size)
+                    self.photo_inicio = READ_IMG(PNG_Inicio(), icon_size, icon_size)
+                    self.photo_setting = self._cargar_icono_sidebar(PNG_Settings(), footer_icon_size)
+                    self.photo_info = self._cargar_icono_sidebar(PNG_Info(), footer_icon_size)
                     self._sidebar_asset_state = asset_state
 
                 if "productos" in self.menu_cards:
@@ -630,6 +651,11 @@ class GUI_MAIN:
                     self.menu_cards["publicidad"]["canvas"].itemconfigure(
                         self.menu_cards["publicidad"]["icon_id"],
                         image=self.photo_publicidad,
+                    )
+                if "inicio" in self.menu_cards:
+                    self.menu_cards["inicio"]["canvas"].itemconfigure(
+                        self.menu_cards["inicio"]["icon_id"],
+                        image=self.photo_inicio,
                     )
                 if hasattr(self, "boton_setting_icon") and self.boton_setting_icon:
                     self.boton_setting_icon.configure(image=self.photo_setting)
@@ -666,8 +692,6 @@ class GUI_MAIN:
                 )
                 if hasattr(self, "boton_tema"):
                     self._render_boton_tema()
-                if hasattr(self, "label_inicio"):
-                    self.label_inicio.pack_configure(pady=(inicio_pad_top, 8))
                 self._sidebar_render_state = sidebar_render_state
 
             if should_refresh_main_layout:
@@ -1172,22 +1196,25 @@ class GUI_MAIN:
         )
         self.frame_menu_inner.pack(fill="both", expand=True)
 
-        self.sidebar_separator = tk.Frame(
-            self.frame_menu_inner,
-            bg=self.sidebar_border,
+        self.sidebar_right_separator = tk.Frame(
+            self.frame_menu,
             width=1,
+            bg=self.sidebar_border,
             bd=0,
-            highlightthickness=0,
         )
-        self.sidebar_separator.place(relx=1.0, x=-1, y=0, relheight=1.0, anchor="ne")
-        self.sidebar_separator.lift()
+        self.sidebar_right_separator.place(relx=1.0, x=-1, y=0, relheight=1.0)
+        self.sidebar_right_separator.lift()
 
         # LOGO
         self.frame_logo = tk.Frame(self.frame_menu_inner, bg=self.sidebar_bg)
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_logo", self.frame_logo)
         self.frame_logo.pack(fill="x")
 
-        self.photo_logo = self._cargar_logo_sidebar(PNG_LOGO_SECUNDARIO(), max_width=158, max_height=28)
+        self.photo_logo = self._cargar_logo_sidebar(
+            self._ruta_logo_sidebar(self.tema_interfaz),
+            max_width=158,
+            max_height=28,
+        )
 
         self.label_image_logo = tk.Label(
             self.frame_logo,
@@ -1214,9 +1241,17 @@ class GUI_MAIN:
         )
         self.nav_card.pack(anchor="n", pady=(2, 0))
 
-        self.photo_publicidad = READ_IMG(PNG_Publicidad(), getattr(self, "sidebar_icon_size", 28), getattr(self, "sidebar_icon_size", 28))
-        self.photo_productos = READ_IMG(PNG_Productos(), getattr(self, "sidebar_icon_size", 28), getattr(self, "sidebar_icon_size", 28))
+        icon_size = getattr(self, "sidebar_icon_size", 28)
+        self.photo_publicidad = READ_IMG(PNG_Publicidad(), icon_size, icon_size)
+        self.photo_productos = READ_IMG(PNG_Productos(), icon_size, icon_size)
+        self.photo_inicio = READ_IMG(PNG_Inicio(), icon_size, icon_size)
         self.menu_cards = {}
+        self.frame_boton_inicio = self._crear_tarjeta_menu(
+            "inicio",
+            self.photo_inicio,
+            "Inicio",
+            self.command_button_inicio,
+        )
         self.frame_boton_productos = None
         self.frame_boton_publicidad = None
 
@@ -1242,6 +1277,14 @@ class GUI_MAIN:
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_botones_config_info", self.frame_botones_config_info)
         self.frame_botones_config_info.pack(pady=(getattr(self, "sidebar_footer_pad_top", 14), 0), side="bottom", fill="x")
 
+        self.sidebar_footer_separator = tk.Frame(
+            self.frame_botones_config_info,
+            height=1,
+            bg=self.sidebar_border,
+            bd=0,
+        )
+        self.sidebar_footer_separator.pack(fill="x", pady=(0, 8))
+
         self.footer_card = tk.Frame(
             self.frame_botones_config_info,
             bg=self.sidebar_bg,
@@ -1253,7 +1296,7 @@ class GUI_MAIN:
         )
         self.footer_card.pack(anchor="s", fill="x")
 
-        self.photo_setting = READ_IMG(PNG_Settings(), getattr(self, "sidebar_footer_icon_size", 20), getattr(self, "sidebar_footer_icon_size", 20))
+        self.photo_setting = self._cargar_icono_sidebar(PNG_Settings(), getattr(self, "sidebar_footer_icon_size", 20))
         self.boton_setting = None
         self.boton_setting_icon = None
         self.boton_setting_texto = None
@@ -1266,7 +1309,7 @@ class GUI_MAIN:
                 pady=(0, 10),
             )
 
-        self.photo_info = READ_IMG(PNG_Info(), getattr(self, "sidebar_footer_icon_size", 20), getattr(self, "sidebar_footer_icon_size", 20))
+        self.photo_info = self._cargar_icono_sidebar(PNG_Info(), getattr(self, "sidebar_footer_icon_size", 20))
         self.boton_info, self.boton_info_icon, self.boton_info_texto = self._crear_footer_action(
             "boton_info",
             self.photo_info,
@@ -1299,13 +1342,56 @@ class GUI_MAIN:
         if self.boton_setting:
             self._render_footer_action(self.boton_setting, self.boton_setting_icon, self.boton_setting_texto, False)
         self._render_boton_tema()
-        self.sidebar_separator.lift()
         logger.debug("frameMenu construido correctamente.")
 
     def _cargar_logo_sidebar(self, path, max_width, max_height):
         image_logo = Image.open(path)
-        image_logo.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+        if os.path.basename(path) in {
+            "INFORHARD_TEMA_OSCURO.png",
+            "INFORHARD_TEMA_CLARO.png",
+        }:
+            target_width, target_height = self._dimensiones_logo_sidebar(max_width, max_height)
+            image_logo = image_logo.resize(
+                (target_width, target_height),
+                Image.Resampling.LANCZOS,
+            )
+        else:
+            image_logo.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(image_logo)
+
+    def _cargar_icono_sidebar(self, path, size):
+        imagen = Image.open(path).convert("RGBA")
+        imagen = imagen.resize((int(size), int(size)), Image.Resampling.LANCZOS)
+        color = "#49B982" if self.tema_interfaz == "oscuro" else "#176B49"
+        monocromo = Image.new("RGBA", imagen.size, color)
+        monocromo.putalpha(imagen.getchannel("A"))
+        return ImageTk.PhotoImage(monocromo)
+
+    @staticmethod
+    def _dimensiones_logo_sidebar(max_width, max_height):
+        target_width = max(1, int(max_width))
+        target_height = max(1, min(int(max_height), round(target_width / 7.35)))
+        return target_width, target_height
+
+    @staticmethod
+    def _ruta_logo_sidebar(tema):
+        if str(tema).strip().lower() in {"oscuro", "dark"}:
+            return PNG_LOGO_TEMA_OSCURO()
+        return PNG_LOGO_TEMA_CLARO()
+
+    def _actualizar_logo_sidebar(self, max_width=None, max_height=None):
+        if not getattr(self, "label_image_logo", None):
+            return
+        max_width = int(max_width or max(self.sidebar_expanded_width - 22, 40))
+        max_height = int(max_height or 28)
+        self.photo_logo = self._cargar_logo_sidebar(
+            self._ruta_logo_sidebar(self.tema_interfaz),
+            max_width=max_width,
+            max_height=max_height,
+        )
+        self.label_image_logo.configure(image=self.photo_logo)
+        self.label_image_logo.image = self.photo_logo
+        self._sidebar_logo_state = (self.tema_interfaz, max_width, max_height)
 
     def _crear_footer_action(self, widget_key, image, text, command, pady=(0, 0)):
         slot = tk.Frame(
@@ -1549,6 +1635,12 @@ class GUI_MAIN:
 
         logger.debug("frameContenido construido correctamente.")
 
+    def command_button_inicio(self):
+        logger.info("Navegación solicitada a sección INICIO.")
+        self.VIGIA_FRAME = "INICIO"
+        self.VIGIA_VOLVER = ["INICIO"]
+        self.selector_seccion()
+
     def command_button_productos(self):
         if not self._tiene_permiso("productos"):
             messagebox.showwarning("Acceso restringido", "Este usuario no tiene acceso al módulo Productos.")
@@ -1639,6 +1731,7 @@ class GUI_MAIN:
             if frame_acerca:
                 frame_acerca.grid_remove()
             self.frame_barra_superior.grid_remove()
+            self.ventana_creacion_caja.after_idle(self._actualizar_home)
 
         elif self.VIGIA_FRAME == "BOTON_PRODUCTOS":
             if frame_publicidad:
@@ -1680,9 +1773,11 @@ class GUI_MAIN:
         logger.debug("Sección aplicada | historial_resultante=%s", self.VIGIA_VOLVER)
 
     def _actualizar_estilo_menu_activo(self):
+        activo_inicio = self.VIGIA_FRAME == "INICIO"
         activo_productos = self.VIGIA_FRAME == "BOTON_PRODUCTOS"
         activo_publicidad = self.VIGIA_FRAME == "BOTON_PUBLICIDAD"
         try:
+            self._aplicar_estado_tarjeta_menu("inicio", active=activo_inicio)
             self._aplicar_estado_tarjeta_menu("productos", active=activo_productos)
             self._aplicar_estado_tarjeta_menu("publicidad", active=activo_publicidad)
             activo_info = self.VIGIA_FRAME == "BOTON_ACERCA"
@@ -1702,23 +1797,156 @@ class GUI_MAIN:
         self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_inicio", self.frame_seccion_inicio)
         self.frame_seccion_inicio.grid(row=0, column=0, sticky="nsew")
         self.frame_seccion_inicio.columnconfigure(0, weight=1)
+        self.frame_seccion_inicio.rowconfigure(3, weight=1)
 
-        self.label_inicio = ttk.Label(self.frame_seccion_inicio, text="Bienvenidos", font=FONT_TITLE_XL)
-        self.label_inicio.pack(pady=(30, 8), anchor="w")
+        header = ttk.Frame(self.frame_seccion_inicio, style="SmartPriceHome.TFrame")
+        header.grid(row=0, column=0, sticky="ew", padx=14, pady=(8, 8))
+        header.columnconfigure(0, weight=1)
+        self.label_inicio = ttk.Label(
+            header,
+            text=f"Bienvenido, {self.usuario_windows}",
+            font=("Segoe UI", 18, "bold"),
+            style="SmartPriceHomeTitle.TLabel",
+        )
+        self.label_inicio.grid(row=0, column=0, sticky="w")
+        permisos = ", ".join(
+            nombre.capitalize() for nombre, activo in self.permisos_usuario.items() if activo
+        ) or "Sin módulos habilitados"
         self.label_inicio_subtitulo = ttk.Label(
-            self.frame_seccion_inicio,
-            text="Seleccioná una sección del panel lateral para comenzar.",
-            bootstyle="secondary",
+            header,
+            text=f"Permisos efectivos: {permisos}",
             font=FONT_SUBTITLE,
+            style="SmartPriceHomeHeaderMuted.TLabel",
         )
-        self.label_inicio_subtitulo.pack(anchor="w")
-        self.label_inicio_usuario = ttk.Label(
-            self.frame_seccion_inicio,
-            text=f"Usuario actual: {self.usuario_windows}",
-            bootstyle="secondary",
-            font=FONT_SUBTITLE,
+        self.label_inicio_subtitulo.grid(row=1, column=0, sticky="w", pady=(2, 0))
+
+        alerta = ttk.Frame(self.frame_seccion_inicio, padding=(12, 9), style="SmartPriceHomeAlert.TFrame")
+        alerta.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+        alerta.columnconfigure(0, weight=0)
+        self.home_alerta_dot = tk.Label(alerta, text="●", bd=0, font=FONT_BODY_BOLD, fg="#E5A50A")
+        self.home_alerta_dot.grid(row=0, column=0, sticky="w")
+        self.home_alerta = ttk.Label(
+            alerta,
+            text="Sin información local · Recargá el catálogo",
+            style="SmartPriceHomeAlert.TLabel",
+            font=FONT_BODY_BOLD,
         )
-        self.label_inicio_usuario.pack(anchor="w", pady=(6, 0))
+        self.home_alerta.grid(row=0, column=1, sticky="w", padx=(7, 0))
+        alerta.columnconfigure(1, weight=1)
+        ttk.Button(alerta, text="Ir a Publicidad", command=self.command_button_publicidad, bootstyle="success-outline", padding=(10, 5)).grid(row=0, column=2, sticky="e")
+
+        metricas = ttk.Frame(self.frame_seccion_inicio, style="SmartPriceHome.TFrame")
+        metricas.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
+        for columna, peso in enumerate((2, 3, 2)):
+            metricas.columnconfigure(columna, weight=peso, uniform="home_metricas")
+        productos_card = self._crear_home_card(metricas, "PRODUCTOS LOCALES", 0)
+        self.home_total_productos = tk.Label(
+            productos_card,
+            text="—",
+            font=("Segoe UI", 24, "bold"),
+            bd=0,
+            highlightthickness=0,
+        )
+        self.home_total_productos._home_tiene_datos = False
+        self.home_total_productos.pack(anchor="w")
+        self.home_total_productos_hint = ttk.Label(productos_card, text="sin datos", style="SmartPriceHomePlaceholderHint.TLabel")
+        self.home_total_productos_hint.pack(anchor="w", pady=(0, 1))
+        self.home_fecha_catalogo = ttk.Label(productos_card, text="Última actualización: sin información", style="SmartPriceHomeMuted.TLabel")
+        self.home_fecha_catalogo.pack(anchor="w", pady=(3, 0))
+
+        publicidad_card = self._crear_home_card(metricas, "PUBLICIDADES", 1)
+        publicidad_metricas = ttk.Frame(publicidad_card, style="SmartPriceHomeCard.TFrame")
+        publicidad_metricas.pack(fill="x")
+        self.home_publicidad_valores = []
+        self.home_publicidad_hints = []
+        for columna, etiqueta in enumerate(("activas", "globales", "pendientes")):
+            publicidad_metricas.columnconfigure(columna, weight=1)
+            valor = tk.Label(
+                publicidad_metricas,
+                text="—",
+                font=("Segoe UI", 24, "bold"),
+                bd=0,
+                highlightthickness=0,
+            )
+            valor._home_tiene_datos = False
+            valor.grid(row=0, column=columna, sticky="w")
+            hint = ttk.Label(publicidad_metricas, text="sin datos", style="SmartPriceHomePlaceholderHint.TLabel")
+            hint.grid(row=1, column=columna, sticky="w")
+            ttk.Label(publicidad_metricas, text=etiqueta, style="SmartPriceHomeMuted.TLabel").grid(row=2, column=columna, sticky="w", pady=(2, 0))
+            self.home_publicidad_valores.append(valor)
+            self.home_publicidad_hints.append(hint)
+
+        transmision_card = self._crear_home_card(metricas, "ÚLTIMA TRANSMISIÓN", 2, ultimo=True)
+        self.home_ultima_transmision = ttk.Label(transmision_card, text="Publicidad: sin transmisiones registradas", style="SmartPriceHomeText.TLabel", justify="left")
+        self.home_ultima_transmision.pack(anchor="w")
+        ttk.Label(transmision_card, text="Productos: consultar historial del módulo", style="SmartPriceHomeMuted.TLabel").pack(anchor="w", pady=(5, 0))
+
+        cuerpo = ttk.Frame(self.frame_seccion_inicio, style="SmartPriceHome.TFrame")
+        cuerpo.grid(row=3, column=0, sticky="nsew", padx=14, pady=(0, 10))
+        cuerpo.columnconfigure(0, weight=3)
+        cuerpo.columnconfigure(1, weight=2)
+        cuerpo.rowconfigure(0, weight=1)
+        estado_card = self._crear_home_card(cuerpo, "CONEXIONES Y DISPOSITIVOS", 0, sticky="nsew")
+        conexion_row = ttk.Frame(estado_card, style="SmartPriceHomeCard.TFrame")
+        conexion_row.pack(fill="x", pady=(2, 12))
+        conexion_row.columnconfigure(0, weight=1)
+        self.home_conexion = ttk.Label(conexion_row, text="●  Sybase / ODBC — sin comprobar", style="SmartPriceHomeText.TLabel", font=FONT_BODY_BOLD)
+        self.home_conexion.grid(row=0, column=0, sticky="w")
+        ttk.Button(conexion_row, text="Comprobar", command=self.command_button_configuracion, bootstyle="success-outline", padding=(9, 5)).grid(row=0, column=1, sticky="e")
+        dispositivos_header = ttk.Frame(estado_card, style="SmartPriceHomeCard.TFrame")
+        dispositivos_header.pack(fill="x", pady=(2, 5))
+        dispositivos_header.columnconfigure(0, weight=1)
+        ttk.Label(dispositivos_header, text="DISPOSITIVOS ANDROID REGISTRADOS", style="SmartPriceHomeCaption.TLabel").grid(row=0, column=0, sticky="w")
+        self.home_actualizar_dispositivos_header = ttk.Button(
+            dispositivos_header,
+            text="Actualizar estado",
+            command=self.command_button_configuracion,
+            bootstyle="success-link",
+            padding=(6, 3),
+        )
+        self.home_actualizar_dispositivos_header.grid(row=0, column=1, sticky="e")
+        self.home_actualizar_dispositivos_header.grid_remove()
+        dispositivos_region = ttk.Frame(estado_card, style="SmartPriceHomeCard.TFrame")
+        dispositivos_region.pack(fill="both", expand=True)
+        self.home_dispositivos_lista = ttk.Frame(dispositivos_region, style="SmartPriceHomeCard.TFrame")
+        self.home_dispositivos_grupo = ttk.Frame(dispositivos_region, style="SmartPriceHomeCard.TFrame")
+        self.home_dispositivos_grupo.place(relx=0.5, rely=0.5, anchor="center")
+        self.home_dispositivos = ttk.Label(self.home_dispositivos_grupo, text="Sin dispositivos registrados", style="SmartPriceHomeMuted.TLabel", justify="center", anchor="center")
+        self.home_dispositivos.pack(anchor="center")
+        self.home_actualizar_dispositivos = ttk.Button(
+            self.home_dispositivos_grupo,
+            text="Actualizar estado",
+            command=self.command_button_configuracion,
+            bootstyle="success-link",
+            padding=(6, 3),
+        )
+        self.home_actualizar_dispositivos.pack(anchor="center", pady=(9, 0))
+
+        accesos_card = self._crear_home_card(cuerpo, "ACCESOS A SECCIONES", 1, ultimo=True, sticky="nsew")
+        accesos_contenido = ttk.Frame(accesos_card, style="SmartPriceHomeCard.TFrame")
+        accesos_contenido.pack(fill="both", expand=True)
+        accesos_contenido.columnconfigure(0, weight=1)
+        accesos = (
+            ("Productos", "Consultá el catálogo local, precios, ofertas e imágenes.", self.command_button_productos),
+            ("Publicidad", "Administrá grupos, multimedia y publicaciones pendientes.", self.command_button_publicidad),
+            ("Configuración", "Configurá conexiones, dispositivos, permisos y sincronización.", self.command_button_configuracion),
+        )
+        for fila, (titulo, detalle, comando) in enumerate(accesos):
+            accesos_contenido.rowconfigure(fila, weight=1, uniform="home_accesos")
+            self._crear_acceso_home(accesos_contenido, titulo, detalle, comando, fila)
+
+        footer = ttk.Frame(self.frame_seccion_inicio, style="SmartPriceHome.TFrame")
+        footer.grid(row=4, column=0, sticky="ew", padx=14, pady=(0, 6))
+        footer.columnconfigure(0, weight=1)
+        ttk.Label(
+            footer,
+            text="FLUJO RECOMENDADO   1  Comprobar conexión   ›   2  Recargar catálogo   ›   3  Revisar pendientes   ›   4  Transmitir desde su pantalla",
+            style="SmartPriceHomeHeaderMuted.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Button(footer, text="Ir a Productos", command=self.command_button_productos, bootstyle="secondary-outline", padding=(10, 6)).grid(row=0, column=1, padx=(8, 6))
+        ttk.Button(footer, text="↻ Actualizar estado", command=self._actualizar_home, bootstyle="success-outline", padding=(10, 6)).grid(row=0, column=2, padx=(0, 6))
+        ttk.Button(footer, text="Recargar catálogo", command=self.command_button_productos, bootstyle="success", padding=(10, 6)).grid(row=0, column=3)
+
         if not any(self.permisos_usuario.values()):
             self.label_inicio_bloqueo = ttk.Label(
                 self.frame_seccion_inicio,
@@ -1726,9 +1954,321 @@ class GUI_MAIN:
                 bootstyle="warning",
                 font=FONT_BODY_BOLD,
             )
-            self.label_inicio_bloqueo.pack(anchor="w", pady=(10, 0))
+            self.label_inicio_bloqueo.grid(row=6, column=0, sticky="w", padx=14, pady=(0, 6))
         else:
             self.label_inicio_bloqueo = None
+
+        self.home_statusbar_borde = ttk.Frame(self.frame_seccion_inicio, height=27, style="SmartPriceHomeStatus.TFrame")
+        self.home_statusbar_borde.grid(row=5, column=0, sticky="ew")
+        self.home_statusbar_borde.grid_propagate(False)
+        self.home_statusbar_linea = tk.Frame(self.home_statusbar_borde, height=1, bd=0)
+        self.home_statusbar_linea.pack(side="top", fill="x")
+        self.home_statusbar = ttk.Frame(self.home_statusbar_borde, height=26, style="SmartPriceHomeStatus.TFrame")
+        self.home_statusbar.pack(fill="both", expand=True)
+        self.home_statusbar.grid_propagate(False)
+        self.home_status_text = ttk.Label(
+            self.home_statusbar,
+            text=f"Usuario {self.usuario_windows}  ·  V.{self.version}  ·  Estado leído a las --:--",
+            style="SmartPriceHomeStatus.TLabel",
+        )
+        self.home_status_text.pack(side="left", padx=20)
+        self._aplicar_tema_home(self.tema_interfaz)
+
+    def _crear_home_card(self, parent, titulo, columna, ultimo=False, sticky="nsew"):
+        borde = tk.Frame(parent, bd=0, highlightthickness=1)
+        borde.grid(row=0, column=columna, sticky=sticky, padx=(0, 0 if ultimo else 10))
+        card = ttk.Frame(borde, padding=(12, 10), style="SmartPriceHomeCard.TFrame")
+        card.pack(fill="both", expand=True)
+        ttk.Label(card, text=titulo, style="SmartPriceHomeCaption.TLabel").pack(anchor="w", pady=(0, 7))
+        if not hasattr(self, "_home_cards"):
+            self._home_cards = []
+        self._home_cards.append(borde)
+        return card
+
+    def _crear_acceso_home(self, parent, titulo, detalle, comando, fila=0):
+        borde = tk.Frame(parent, bd=0, highlightthickness=1, cursor="hand2")
+        borde.grid(row=fila, column=0, sticky="nsew", pady=(0, 7 if fila < 2 else 0))
+        contenido = tk.Frame(borde, bd=0, padx=10, pady=7, cursor="hand2")
+        contenido.pack(fill="both", expand=True)
+        contenido.columnconfigure(0, weight=1)
+        contenido.rowconfigure(0, weight=1)
+        texto_bloque = tk.Frame(contenido, bd=0, cursor="hand2")
+        texto_bloque.grid(row=0, column=0, sticky="w")
+        titulo_label = tk.Label(texto_bloque, text=titulo, font=("Segoe UI", 9, "bold"), anchor="w", bd=0, cursor="hand2")
+        titulo_label.pack(anchor="w")
+        detalle_label = tk.Label(texto_bloque, text=detalle, font=("Segoe UI", 8), anchor="w", justify="left", bd=0, cursor="hand2")
+        detalle_label.pack(anchor="w", pady=(2, 0))
+        chevron = tk.Label(contenido, text="›", font=("Segoe UI", 13), anchor="e", bd=0, cursor="hand2")
+        chevron.grid(row=0, column=1, sticky="e", padx=(12, 2))
+        for widget in (borde, contenido, texto_bloque, titulo_label, detalle_label, chevron):
+            widget.bind("<Button-1>", lambda _event, accion=comando: accion())
+        if not hasattr(self, "_home_access_cards"):
+            self._home_access_cards = []
+        self._home_access_cards.append((borde, contenido, texto_bloque, titulo_label, detalle_label, chevron))
+
+    def _aplicar_tema_home(self, tema):
+        if not getattr(self, "frame_seccion_inicio", None):
+            return
+        paleta = self._paleta_home(tema)
+        oscuro = tema == "oscuro"
+        fondo = paleta["fondo"]
+        tarjeta = paleta["tarjeta"]
+        borde = paleta["borde"]
+        texto = paleta["texto"]
+        muted = paleta["muted"]
+        alerta = paleta["alerta"]
+        style = self.ventana_creacion_caja.style
+        style.configure("SmartPriceHome.TFrame", background=fondo)
+        style.configure("SmartPriceHomeCard.TFrame", background=tarjeta, bordercolor=borde, relief="solid", borderwidth=1)
+        style.configure("SmartPriceHomeDeviceRow.TFrame", background=tarjeta, relief="flat", borderwidth=0)
+        style.configure("SmartPriceHomeAlert.TFrame", background=alerta, bordercolor="#49B982", relief="solid", borderwidth=1)
+        style.configure("SmartPriceHomeTitle.TLabel", background=fondo, foreground=texto)
+        style.configure("SmartPriceHomeHeaderMuted.TLabel", background=fondo, foreground=muted)
+        style.configure("SmartPriceHomeValue.TLabel", background=tarjeta, foreground=texto)
+        style.map(
+            "SmartPriceHomeValue.TLabel",
+            background=[("!disabled", tarjeta)],
+            foreground=[("!disabled", texto)],
+        )
+        style.configure(
+            "SmartPriceHomePlaceholder.TLabel",
+            background=tarjeta,
+            foreground="#A8B3AE" if oscuro else "#5F7268",
+        )
+        style.configure(
+            "SmartPriceHomePlaceholderHint.TLabel",
+            background=tarjeta,
+            foreground="#A8B3AE" if oscuro else "#5F7268",
+            font=("Segoe UI", 9),
+        )
+        style.configure("SmartPriceHomeText.TLabel", background=tarjeta, foreground=texto)
+        style.configure("SmartPriceHomeMuted.TLabel", background=tarjeta, foreground=muted)
+        style.configure("SmartPriceHomeCaption.TLabel", background=tarjeta, foreground="#49B982" if oscuro else "#4F7564")
+        style.configure("SmartPriceHomeAlert.TLabel", background=alerta, foreground=texto)
+        style.configure("SmartPriceHomeStatus.TFrame", background=paleta["status_fondo"])
+        style.configure("SmartPriceHomeStatus.TLabel", background=paleta["status_fondo"], foreground=muted)
+        self.frame_seccion_inicio.configure(style="SmartPriceHome.TFrame")
+        self.home_alerta_dot.configure(bg=alerta)
+        self.home_statusbar_linea.configure(bg=paleta["status_borde"])
+        for valor in [self.home_total_productos, *self.home_publicidad_valores]:
+            valor.configure(
+                bg=tarjeta,
+                fg=(
+                    texto
+                    if getattr(valor, "_home_tiene_datos", False)
+                    else ("#A8B3AE" if oscuro else "#5F7268")
+                ),
+            )
+        for card in getattr(self, "_home_cards", []):
+            card.configure(bg=tarjeta, highlightbackground=borde, highlightcolor=borde)
+        for card, contenido, texto_bloque, titulo_label, detalle_label, chevron in getattr(self, "_home_access_cards", []):
+            card.configure(bg=tarjeta, highlightbackground=borde, highlightcolor=borde)
+            contenido.configure(bg=tarjeta)
+            texto_bloque.configure(bg=tarjeta)
+            titulo_label.configure(bg=tarjeta, fg=texto)
+            detalle_label.configure(bg=tarjeta, fg=muted)
+            chevron.configure(bg=tarjeta, fg="#49B982")
+        for separador in getattr(self, "_home_device_separators", []):
+            separador.configure(bg=borde)
+
+    @staticmethod
+    def _paleta_home(tema):
+        if tema == "oscuro":
+            return {
+                "fondo": "#0E1512",
+                "tarjeta": "#111A16",
+                "borde": "#1F2B26",
+                "texto": "#F4FBF7",
+                "muted": SMARTPRICE_DARK_MUTED,
+                "alerta": SMARTPRICE_DARK_HOVER,
+                "status_fondo": "#0B1210",
+                "status_borde": "#1F2B26",
+            }
+        return {
+            "fondo": "#F4F7F5",
+            "tarjeta": "#FFFFFF",
+            "borde": "#D8E1DC",
+            "texto": "#102019",
+            "muted": "#617269",
+            "alerta": "#E7F5ED",
+            "status_fondo": "#ECEEED",
+            "status_borde": "#D8E1DC",
+        }
+
+    @staticmethod
+    def _resumen_publicidades_home(config):
+        publicidades = (config or {}).get("publicidades") or {}
+        grupos = publicidades.get("grupos") or {}
+        grupo_activo = publicidades.get("grupo_activo", "default")
+        activas = len((grupos.get(grupo_activo) or {}).get("items") or {})
+        globales = len(publicidades.get("globales") or {})
+        pendientes = sum(
+            1 for meta in (publicidades.get("biblioteca") or {}).values()
+            if isinstance(meta, dict) and meta.get("cambios_pendientes")
+        )
+        historial = publicidades.get("historial_envios") or []
+        ultima = historial[-1] if historial else None
+        return activas, globales, pendientes, ultima
+
+    @staticmethod
+    def _estado_alerta_home(pendientes, fecha_catalogo):
+        pendientes = int(pendientes or 0)
+        if pendientes > 0:
+            return (
+                f"Hay {pendientes} publicidades pendientes · catálogo "
+                f"{'actualizado' if fecha_catalogo else 'sin actualizar'}",
+                "#E5A50A",
+            )
+        if fecha_catalogo:
+            return "Sin publicidades pendientes · catálogo actualizado", "#49B982"
+        return "Sin publicidades pendientes · catálogo sin actualizar", "#7D9188"
+
+    @staticmethod
+    def _formatear_fecha_home(valor, solo_hora=False):
+        if valor in (None, ""):
+            return "--:--" if solo_hora else "sin información"
+        if isinstance(valor, datetime):
+            fecha = valor
+        else:
+            texto = str(valor).strip()
+            try:
+                fecha = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+            except ValueError:
+                return "--:--" if solo_hora else texto
+        return fecha.strftime("%H:%M" if solo_hora else "%d/%m/%Y %H:%M")
+
+    def _mostrar_dispositivos_home(self, equipos):
+        for widget in self.home_dispositivos_lista.winfo_children():
+            widget.destroy()
+        self._home_device_separators = []
+
+        if not equipos:
+            self.home_dispositivos_lista.pack_forget()
+            self.home_actualizar_dispositivos_header.grid_remove()
+            self.home_dispositivos.configure(
+                text="Sin dispositivos registrados",
+                anchor="center",
+                justify="center",
+            )
+            self.home_dispositivos_grupo.place(relx=0.5, rely=0.5, anchor="center")
+            return
+
+        self.home_dispositivos_grupo.place_forget()
+        self.home_actualizar_dispositivos_header.grid()
+        self.home_dispositivos_lista.pack(fill="x", anchor="n", pady=(2, 0))
+        for fila, (nombre, ip, fecha_alta) in enumerate(equipos):
+            dispositivo = ttk.Frame(self.home_dispositivos_lista, style="SmartPriceHomeDeviceRow.TFrame")
+            dispositivo.pack(fill="x", pady=(0, 5))
+            dispositivo.columnconfigure(1, weight=2)
+            dispositivo.columnconfigure(2, weight=2)
+            dispositivo.columnconfigure(3, weight=2)
+            dispositivo.columnconfigure(4, weight=1)
+            ttk.Label(dispositivo, text="●", style="SmartPriceHomeCaption.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 7))
+            ttk.Label(dispositivo, text=str(nombre or "Sin nombre"), style="SmartPriceHomeText.TLabel", font=FONT_BODY_BOLD).grid(row=0, column=1, sticky="w")
+            ttk.Label(dispositivo, text=str(ip or "Sin IP"), style="SmartPriceHomeText.TLabel", font=("Consolas", 9)).grid(row=0, column=2, sticky="w", padx=(12, 8))
+            ttk.Label(dispositivo, text="registrado", style="SmartPriceHomeText.TLabel").grid(row=0, column=3, sticky="w")
+            hora_deteccion = self._formatear_fecha_home(fecha_alta, solo_hora=True)
+            ttk.Label(
+                dispositivo,
+                text=(
+                    f"detectado {hora_deteccion}"
+                    if hora_deteccion != "--:--"
+                    else "sin detección registrada"
+                ),
+                style="SmartPriceHomeMuted.TLabel",
+            ).grid(row=0, column=4, sticky="e", padx=(12, 0))
+            separador = tk.Frame(self.home_dispositivos_lista, height=1, bd=0)
+            separador.pack(fill="x", pady=(0, 5))
+            self._home_device_separators.append(separador)
+        self._aplicar_tema_home(self.tema_interfaz)
+
+    def _actualizar_home(self):
+        if not getattr(self, "home_total_productos", None):
+            return
+        self._mostrar_home_sin_datos()
+        local_resuelto = False
+        try:
+            fecha = None
+            conexion = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA")
+            if conexion:
+                productos = conexion.ejecutar_consulta("SELECT COUNT(*), MAX(dFechaU) FROM productos") or [(0, None)]
+                total, fecha = productos[0]
+                self.home_total_productos.configure(
+                    text=f"{int(total or 0):,}".replace(",", "."),
+                )
+                self.home_total_productos._home_tiene_datos = True
+                self.home_total_productos_hint.pack_forget()
+                self.home_fecha_catalogo.configure(
+                    text=f"Última actualización: {self._formatear_fecha_home(fecha)}"
+                )
+                local_resuelto = True
+                conexiones = conexion.ejecutar_consulta("SELECT dsn FROM VERIPRE_CONEXION WHERE activo = 1 LIMIT 1") or []
+                dsn = conexiones[0][0] if conexiones else "sin configurar"
+                self.home_conexion.configure(text=f"●  Sybase / ODBC — DSN {dsn} · sin comprobar en esta sesión")
+                equipos = conexion.ejecutar_consulta(
+                    "SELECT nombre, direccion_conexion, fecha_alta "
+                    "FROM VERIPRE_EQUIPOS ORDER BY nombre LIMIT 3"
+                ) or []
+                self._mostrar_dispositivos_home(equipos)
+
+            self.config_data = cargar_config()
+            activas, globales, pendientes, ultima = self._resumen_publicidades_home(self.config_data)
+            for label, hint, valor in zip(
+                self.home_publicidad_valores,
+                self.home_publicidad_hints,
+                (activas, globales, pendientes),
+            ):
+                label.configure(text=str(valor))
+                label._home_tiene_datos = True
+                hint.grid_remove()
+            if local_resuelto:
+                alerta_texto, alerta_color = self._estado_alerta_home(pendientes, fecha)
+                self.home_alerta.configure(text=alerta_texto)
+                self.home_alerta_dot.configure(fg=alerta_color)
+            if ultima:
+                fecha_envio = ultima.get("fecha") if isinstance(ultima, dict) else str(ultima)
+                self.home_ultima_transmision.configure(text=f"Publicidad: {fecha_envio or 'registro disponible'}")
+            else:
+                self.home_ultima_transmision.configure(text="Publicidad: sin transmisiones registradas")
+            self.home_status_text.configure(
+                text=(
+                    f"Usuario {self.usuario_windows}  ·  V.{self.version}  ·  "
+                    f"Estado leído a las {datetime.now().strftime('%H:%M')}"
+                )
+            )
+            self._aplicar_tema_home(self.tema_interfaz)
+            logger.debug(
+                "Panel de inicio actualizado | productos=%s | publicidades=%s/%s/%s",
+                self.home_total_productos.cget("text"),
+                activas,
+                globales,
+                pendientes,
+            )
+        except Exception:
+            logger.exception("No se pudo actualizar el panel de inicio.")
+            self._mostrar_home_sin_datos()
+
+    def _mostrar_home_sin_datos(self):
+        """Deja el Home en un estado final y accionable aunque falle la lectura local."""
+        self.home_alerta.configure(text="Sin información local · Recargá el catálogo")
+        self.home_alerta_dot.configure(fg="#E5A50A")
+        self.home_total_productos.configure(text="—")
+        self.home_total_productos._home_tiene_datos = False
+        if not self.home_total_productos_hint.winfo_manager():
+            self.home_total_productos_hint.pack(
+                anchor="w",
+                pady=(0, 1),
+                before=self.home_fecha_catalogo,
+            )
+        self.home_fecha_catalogo.configure(text="Última actualización: sin información")
+        for label, hint in zip(self.home_publicidad_valores, self.home_publicidad_hints):
+            label.configure(text="—")
+            label._home_tiene_datos = False
+            hint.grid()
+        self._aplicar_tema_home(self.tema_interfaz)
+        self.home_status_text.configure(
+            text=f"Usuario {self.usuario_windows}  ·  V.{self.version}  ·  Estado leído a las --:--"
+        )
 
     def seccion_productos(self):
         logger.debug("Creando widgets de sección PRODUCTOS.")

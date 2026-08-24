@@ -1,3 +1,11 @@
+Version 1.16.35
+- Se agrego un Home informativo con productos locales, publicidades, conexion, dispositivos, accesos rapidos y flujo recomendado.
+- El menu incorpora Inicio, logos adaptados a tema y una identidad visual corporativa consistente.
+- Se profundizo el modo oscuro con superficies jerarquizadas, contraste estable y eliminacion de destellos durante la navegacion.
+- Productos mejora encabezado, tarjetas, estados, acciones y contraste de seleccion.
+- Publicidad reorganiza sus acciones con tamanos y colores consistentes en ambos temas.
+- Se agregaron formatos legibles para fechas, estados vacios accionables y filas informativas de dispositivos.
+
 Version 1.16.34
 - Se corrigio la navegacion Volver para conservar un historial valido al regresar de Publicidad a Productos.
 - La navegacion ahora se recupera de forma segura ante historiales vacios o incompletos, evitando `IndexError`.

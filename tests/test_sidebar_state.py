@@ -7,6 +7,7 @@ from GUI.CONTENIDO_PRODUCTO import ContenidoProducto
 from GUI.CONTENIDO_PUBLICIDAD import ContenidoPublicidad
 from core.ui.theme_tokens import FONT_LABEL_BOLD
 from core.ui.ttk_theme import SMARTPRICE_DARK_THEME, SMARTPRICE_LIGHT_THEME
+from core.ui.ttk_theme import SMARTPRICE_DARK_BORDER, SMARTPRICE_DARK_CARD, SMARTPRICE_DARK_SURFACE
 
 
 class SidebarStateTest(unittest.TestCase):
@@ -16,16 +17,26 @@ class SidebarStateTest(unittest.TestCase):
         self.assertEqual(GUI_MAIN._resolver_tema_interfaz("valor-invalido"), "claro")
         self.assertEqual(GUI_MAIN._nombre_tema_ttk("oscuro"), SMARTPRICE_DARK_THEME)
         self.assertEqual(GUI_MAIN._nombre_tema_ttk("claro"), SMARTPRICE_LIGHT_THEME)
+        self.assertTrue(
+            GUI_MAIN._ruta_logo_sidebar("oscuro").endswith("INFORHARD_TEMA_OSCURO.png")
+        )
+        self.assertTrue(
+            GUI_MAIN._ruta_logo_sidebar("claro").endswith("INFORHARD_TEMA_CLARO.png")
+        )
+        self.assertEqual(GUI_MAIN._dimensiones_logo_sidebar(158, 28), (158, 21))
+        self.assertEqual(GUI_MAIN._dimensiones_logo_sidebar(120, 18), (120, 16))
 
     def test_paleta_sidebar_oscura_conserva_contraste_corporativo(self):
         gui = GUI_MAIN.__new__(GUI_MAIN)
 
         gui._configurar_paleta_sidebar("oscuro")
 
-        self.assertEqual(gui.sidebar_bg, "#10251b")
+        self.assertEqual(gui.sidebar_bg, SMARTPRICE_DARK_CARD)
+        self.assertEqual(gui.sidebar_card, SMARTPRICE_DARK_CARD)
+        self.assertEqual(gui.sidebar_bg, gui.sidebar_card)
         self.assertEqual(gui.sidebar_card_active, "#149455")
         self.assertEqual(gui.sidebar_text_active, "#ffffff")
-        self.assertEqual(gui.sidebar_border, "#f4fbf7")
+        self.assertEqual(gui.sidebar_border, SMARTPRICE_DARK_BORDER)
         self.assertNotEqual(gui.sidebar_card, gui.sidebar_card_hover)
 
     def test_tabla_productos_usa_verde_para_seleccion_en_ambos_temas(self):
@@ -35,8 +46,90 @@ class SidebarStateTest(unittest.TestCase):
         self.assertEqual(clara["selected_background"], "#149455")
         self.assertEqual(oscura["selected_background"], "#149455")
         self.assertEqual(oscura["selected_foreground"], "#ffffff")
-        self.assertEqual(oscura["section_border"], "#f4fbf7")
+        self.assertEqual(oscura["section_border"], SMARTPRICE_DARK_BORDER)
+        self.assertEqual(oscura["section_label"], "#F4FBF7")
         self.assertNotEqual(oscura["background"], oscura["stripe"])
+        self.assertEqual(oscura["background"], SMARTPRICE_DARK_SURFACE)
+        self.assertEqual(oscura["header_card"], SMARTPRICE_DARK_SURFACE)
+        self.assertEqual(oscura["header_border"], SMARTPRICE_DARK_BORDER)
+
+    def test_indicadores_de_productos_separan_titulo_y_valor(self):
+        self.assertEqual(
+            ContenidoProducto._valor_indicador_estado("Oferta precio: NO"),
+            "NO",
+        )
+        self.assertEqual(
+            ContenidoProducto._valor_indicador_estado("Precios adicionales: SI (3)"),
+            "SI (3)",
+        )
+        self.assertEqual(ContenidoProducto._valor_indicador_estado("-"), "-")
+
+    def test_flecha_de_productos_contrasta_con_cada_tema(self):
+        self.assertEqual(ContenidoProducto._color_flecha_volver("oscuro"), "#F4FBF7")
+        self.assertEqual(ContenidoProducto._color_flecha_volver("claro"), "#087A46")
+
+    def test_resumen_home_lee_publicidades_sin_modificar_configuracion(self):
+        self.assertTrue(hasattr(gui_main_module, "SMARTPRICE_DARK_SURFACE"))
+        config = {
+            "publicidades": {
+                "grupo_activo": "general",
+                "grupos": {"general": {"items": {"a": {}, "b": {}}}},
+                "globales": {"g": {}},
+                "biblioteca": {
+                    "a": {"cambios_pendientes": True},
+                    "b": {"cambios_pendientes": False},
+                },
+                "historial_envios": [{"fecha": "2026-08-24 18:00"}],
+            }
+        }
+
+        resumen = GUI_MAIN._resumen_publicidades_home(config)
+
+        self.assertEqual(resumen[:3], (2, 1, 1))
+        self.assertEqual(resumen[3]["fecha"], "2026-08-24 18:00")
+
+    def test_paleta_home_oscura_separa_fondo_tarjeta_y_borde(self):
+        paleta = GUI_MAIN._paleta_home("oscuro")
+
+        self.assertEqual(paleta["fondo"], "#0E1512")
+        self.assertEqual(paleta["tarjeta"], "#111A16")
+        self.assertEqual(paleta["borde"], "#1F2B26")
+        self.assertEqual(paleta["status_fondo"], "#0B1210")
+        self.assertEqual(paleta["status_borde"], "#1F2B26")
+
+    def test_paleta_home_clara_separa_barra_de_estado(self):
+        paleta = GUI_MAIN._paleta_home("claro")
+
+        self.assertEqual(paleta["status_fondo"], "#ECEEED")
+        self.assertEqual(paleta["status_borde"], "#D8E1DC")
+
+    def test_alerta_home_resuelve_pendientes_y_catalogo(self):
+        texto, color = GUI_MAIN._estado_alerta_home(0, None)
+        self.assertEqual(texto, "Sin publicidades pendientes · catálogo sin actualizar")
+        self.assertEqual(color, "#7D9188")
+
+        texto, color = GUI_MAIN._estado_alerta_home(3, "2026-08-24")
+        self.assertIn("3 publicidades pendientes", texto)
+        self.assertEqual(color, "#E5A50A")
+
+    def test_home_formatea_fechas_para_lectura_humana(self):
+        self.assertEqual(
+            GUI_MAIN._formatear_fecha_home("2026-08-08 10:02:53"),
+            "08/08/2026 10:02",
+        )
+        self.assertEqual(
+            GUI_MAIN._formatear_fecha_home("2026-08-08 19:04:53", solo_hora=True),
+            "19:04",
+        )
+        self.assertEqual(GUI_MAIN._formatear_fecha_home(None, solo_hora=True), "--:--")
+
+    def test_icono_inicio_existe_y_tiene_transparencia(self):
+        from ASSETS.path_img import PNG_Inicio
+        from PIL import Image
+
+        with Image.open(PNG_Inicio()) as imagen:
+            self.assertEqual(imagen.mode, "RGBA")
+            self.assertEqual(imagen.getpixel((0, 0))[3], 0)
 
     def test_publicidad_oscura_no_crea_paneles_blancos(self):
         oscura = ContenidoPublicidad._paleta_publicidad("oscuro")
