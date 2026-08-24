@@ -52,6 +52,9 @@ class SidebarStateTest(unittest.TestCase):
         self.assertEqual(oscura["background"], SMARTPRICE_DARK_SURFACE)
         self.assertEqual(oscura["header_card"], SMARTPRICE_DARK_SURFACE)
         self.assertEqual(oscura["header_border"], SMARTPRICE_DARK_BORDER)
+        self.assertEqual(oscura["table_heading"], "#16211C")
+        self.assertEqual(clara["table_heading"], "#F6F8F7")
+        self.assertNotEqual(oscura["table_heading"], oscura["selected_background"])
 
     def test_indicadores_de_productos_separan_titulo_y_valor(self):
         self.assertEqual(
@@ -67,6 +70,11 @@ class SidebarStateTest(unittest.TestCase):
     def test_flecha_de_productos_contrasta_con_cada_tema(self):
         self.assertEqual(ContenidoProducto._color_flecha_volver("oscuro"), "#F4FBF7")
         self.assertEqual(ContenidoProducto._color_flecha_volver("claro"), "#087A46")
+
+    def test_productos_formatea_precios_con_convencion_local(self):
+        self.assertEqual(ContenidoProducto._formatear_precio_local(1525.63), "$1.525,63")
+        self.assertEqual(ContenidoProducto._formatear_precio_local("$1,525.63"), "$1.525,63")
+        self.assertEqual(ContenidoProducto._formatear_precio_local("$1.525,63"), "$1.525,63")
 
     def test_resumen_home_lee_publicidades_sin_modificar_configuracion(self):
         self.assertTrue(hasattr(gui_main_module, "SMARTPRICE_DARK_SURFACE"))

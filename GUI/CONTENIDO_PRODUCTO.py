@@ -130,17 +130,23 @@ class ContenidoProducto:
 
         self.crear_interfaz_table_view()
 
-        self.frame_buttons_productos = ttk.Labelframe(
+        self.frame_buttons_productos = ttk.Frame(
             self.frame_side_panel,
-            text="Acciones",
-            bootstyle="secondary",
+            style="SmartPriceProductCard.TFrame",
             padding=(12, 12),
         )
-        self.frame_buttons_productos.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        self.frame_buttons_productos.grid(row=3, column=0, sticky="ew", pady=(8, 0))
         self.frame_buttons_productos.columnconfigure(0, weight=1)
 
+        self.label_acciones_productos = ttk.Label(
+            self.frame_buttons_productos,
+            text="ACCIONES",
+            style="SmartPriceProductCaption.TLabel",
+        )
+        self.label_acciones_productos.grid(row=0, column=0, sticky="w", pady=(0, 8))
+
         self.frame_buttons_inner = ttk.Frame(self.frame_buttons_productos)
-        self.frame_buttons_inner.grid(row=0, column=0, sticky="nsew")
+        self.frame_buttons_inner.grid(row=1, column=0, sticky="nsew")
         self.frame_buttons_inner.columnconfigure(0, weight=1)
         
         self.button_crear_datos = ttk.Button(
@@ -177,7 +183,7 @@ class ContenidoProducto:
         
         self.button_transmitir_datos = ttk.Button(
             self.frame_buttons_inner,
-            text="Transmitir Datos Completos",
+            text="Transmitir datos completos",
             command=self.command_transmitir_datos,
             state=DISABLED,
             bootstyle="secondary-outline",
@@ -194,6 +200,7 @@ class ContenidoProducto:
         self.ctk_loader =  self.DICT_WIDGETS.get_widget("VARIABLES_GLOBALES", "ctk_loader")
         self.frame_table_view.bind("<Configure>", self._programar_layout_responsivo, add="+")
         self.frame_buttons_productos.bind("<Configure>", self._programar_layout_responsivo, add="+")
+        self._crear_barra_estado_productos()
         self._fijar_layout_productos()
         self.aplicar_tema_interfaz(self.config.get("tema_interfaz", "claro"))
 
@@ -247,6 +254,45 @@ class ContenidoProducto:
         return ImageTk.PhotoImage(capa_color)
 
     @staticmethod
+    def _formatear_precio_local(valor):
+        try:
+            if isinstance(valor, str):
+                texto = valor.replace("$", "").replace(" ", "")
+                if "," in texto and "." in texto:
+                    if texto.rfind(".") > texto.rfind(","):
+                        texto = texto.replace(",", "")
+                    else:
+                        texto = texto.replace(".", "").replace(",", ".")
+                elif "," in texto:
+                    texto = texto.replace(",", ".")
+                numero = float(texto)
+            else:
+                numero = float(valor)
+        except (TypeError, ValueError):
+            numero = 0.0
+        formato = f"{numero:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        return f"${formato}"
+
+    def _aplicar_estilo_pastilla_preview(self, label, activa, tema=None):
+        tema = tema or self._tema_interfaz_actual()
+        paleta = self._paleta_tabla_productos(tema)
+        label._activa = bool(activa)
+        if activa:
+            label.configure(
+                bg="#149455",
+                fg="#FFFFFF",
+                highlightbackground="#149455",
+                highlightcolor="#149455",
+            )
+        else:
+            label.configure(
+                bg=paleta["background"],
+                fg="#A9BCB2" if tema == "oscuro" else "#5F7268",
+                highlightbackground="#2B3A34" if tema == "oscuro" else "#D8E1DC",
+                highlightcolor="#2B3A34" if tema == "oscuro" else "#D8E1DC",
+            )
+
+    @staticmethod
     def _paleta_tabla_productos(tema):
         if tema == "oscuro":
             return {
@@ -261,6 +307,9 @@ class ContenidoProducto:
                 "header_border": SMARTPRICE_DARK_BORDER,
                 "header_muted": SMARTPRICE_DARK_MUTED,
                 "header_text": "#f4fbf7",
+                "table_heading": "#16211C",
+                "table_heading_text": "#A8B3AE",
+                "preview_empty": "#EDEFEE",
             }
         return {
             "background": "#ffffff",
@@ -268,12 +317,15 @@ class ContenidoProducto:
             "foreground": "#173227",
             "selected_background": "#149455",
             "selected_foreground": "#ffffff",
-            "section_border": "#149455",
+            "section_border": "#D8E1DC",
             "section_label": "#087A46",
             "header_card": "#ffffff",
             "header_border": "#d7e3dc",
             "header_muted": "#4f6478",
             "header_text": "#173227",
+            "table_heading": "#F6F8F7",
+            "table_heading_text": "#5F7268",
+            "preview_empty": "#F6F8F7",
         }
 
     @staticmethod
@@ -309,6 +361,14 @@ class ContenidoProducto:
             background=paleta["background"],
             fieldbackground=paleta["background"],
             foreground=paleta["foreground"],
+            rowheight=22,
+        )
+        style.configure(
+            f"{style_name}.Heading",
+            background=paleta["table_heading"],
+            foreground=paleta["table_heading_text"],
+            relief="flat",
+            font=("Segoe UI", 8),
         )
         style.map(
             style_name,
@@ -316,24 +376,24 @@ class ContenidoProducto:
             foreground=[("selected", paleta["selected_foreground"])],
         )
         style.configure(
-            "SmartPriceProduct.TLabelframe",
+            "SmartPriceProductCard.TFrame",
             background=paleta["background"],
             bordercolor=paleta["section_border"],
-            lightcolor=paleta["section_border"],
-            darkcolor=paleta["section_border"],
+            relief="solid",
             borderwidth=1,
         )
         style.configure(
-            "SmartPriceProduct.TLabelframe.Label",
+            "SmartPriceProductCaption.TLabel",
             background=paleta["background"],
-            foreground=paleta["section_label"],
+            foreground=paleta["header_muted"],
+            font=("Segoe UI", 8),
         )
         for panel in (
             self.frame_tabla_producto,
             self.frame_side_panel,
             self.frame_buttons_productos,
         ):
-            panel.configure(style="SmartPriceProduct.TLabelframe")
+            panel.configure(style="SmartPriceProductCard.TFrame")
         for indicador in (
             self.indicador_oferta,
             self.indicador_ofplu,
@@ -354,6 +414,34 @@ class ContenidoProducto:
         ):
             label.configure(bg=paleta["header_card"])
         self.separador_header_productos.configure(bg=paleta["header_border"])
+        self.frame_preview_producto.configure(style="SmartPriceProductPreview.TFrame")
+        self.frame_img_producto.configure(style="SmartPriceProductPreview.TFrame")
+        style.configure("SmartPriceProductPreview.TFrame", background=paleta["preview_empty"])
+        style.configure("SmartPriceProductPreview.TLabel", background=paleta["preview_empty"], foreground=paleta["header_muted"])
+        style.configure(
+            "SmartPriceProductPreviewCard.TFrame",
+            background=paleta["preview_empty"],
+            bordercolor="#24322D" if tema == "oscuro" else "#E2E7E4",
+            relief="solid",
+            borderwidth=1,
+        )
+        style.configure(
+            "SmartPriceProductSummary.TFrame",
+            background=paleta["background"],
+            relief="flat",
+            borderwidth=0,
+        )
+        style.configure("SmartPriceProductText.TLabel", background=paleta["background"], foreground=paleta["foreground"])
+        style.configure("SmartPriceProductMuted.TLabel", background=paleta["background"], foreground=paleta["header_muted"])
+        style.configure("SmartPriceProductPrice.TLabel", background=paleta["background"], foreground="#49B982" if tema == "oscuro" else "#087A46")
+        self.frame_resumen_preview.configure(style="SmartPriceProductSummary.TFrame")
+        self.frame_preview_pastillas.configure(style="SmartPriceProductSummary.TFrame")
+        self._aplicar_estilo_pastilla_preview(self.label_preview_oferta, self.label_preview_oferta._activa, tema)
+        self._aplicar_estilo_pastilla_preview(self.label_preview_ofplu, self.label_preview_ofplu._activa, tema)
+        if hasattr(self, "label_estado_productos"):
+            style.configure("SmartPriceProductStatus.TFrame", background=paleta["table_heading"])
+            style.configure("SmartPriceProductStatus.TLabel", background=paleta["table_heading"], foreground=paleta["header_muted"])
+            self.linea_estado_productos.configure(bg=paleta["header_border"])
         self.dt.apply_table_stripes((paleta["stripe"], paleta["foreground"]))
 
     def _tema_interfaz_actual(self):
@@ -398,26 +486,34 @@ class ContenidoProducto:
         self.frame_table_view.rowconfigure(0, weight=1)
         colors = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja").style.colors
         coldata = [
-            {"text": "Producto", "stretch": True},
-            {"text": "Código de Barras", "stretch": True},
-            {"text": "Precio", "stretch": True},
+            {"text": "PRODUCTO", "stretch": True},
+            {"text": "CÓDIGO DE BARRAS", "stretch": True},
+            {"text": "PRECIO", "stretch": True},
         ]
 
-        self.frame_tabla_producto = ttk.Labelframe(
+        self.frame_tabla_producto = ttk.Frame(
             self.frame_table_view,
-            text="Listado local",
-            bootstyle="primary",
+            style="SmartPriceProductCard.TFrame",
             padding=(8, 8),
         )
         self.frame_tabla_producto.grid(row=0, column=0, sticky="nsew")
         self.frame_tabla_producto.columnconfigure(0, weight=1)
-        self.frame_tabla_producto.rowconfigure(0, weight=1)
+        self.frame_tabla_producto.rowconfigure(1, weight=1)
+        self.label_listado_local = ttk.Label(
+            self.frame_tabla_producto,
+            text="LISTADO LOCAL",
+            style="SmartPriceProductCaption.TLabel",
+        )
+        self.label_listado_local.grid(row=0, column=0, sticky="w", pady=(0, 6))
+
+        self.frame_tabla_contenido = ttk.Frame(self.frame_tabla_producto)
+        self.frame_tabla_contenido.grid(row=1, column=0, sticky="nsew")
 
         self.dt = ttk.Tableview(
-            master=self.frame_tabla_producto,
+            master=self.frame_tabla_contenido,
             coldata=coldata,
             paginated=True,
-            pagesize=100,
+            pagesize=20,
             searchable=True,
             autoalign=True,
             height=self.TABLE_HEIGHT,
@@ -431,23 +527,30 @@ class ContenidoProducto:
         self.dt.align_column_center(cid=1)
         self.dt.align_column_right(cid=2)
         self.dt.pack(fill=BOTH, expand=True, padx=0, pady=0)
+        self._configurar_tabla_productos()
         self.dt.view.bind("<<TreeviewSelect>>", self.mostrar_imagen_producto)
         self.dt.view.bind("<Double-1>", self.abrir_detalle_producto)
 
-        self.frame_side_panel = ttk.Labelframe(
+        self.frame_side_panel = ttk.Frame(
             self.frame_table_view,
-            text="Vista previa y acciones",
-            bootstyle="primary",
+            style="SmartPriceProductCard.TFrame",
             padding=(12, 12),
         )
         self.frame_side_panel.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
         self.frame_side_panel.columnconfigure(0, weight=1)
         self.frame_side_panel.rowconfigure(0, weight=0)
-        self.frame_side_panel.rowconfigure(1, weight=1)
-        self.frame_side_panel.rowconfigure(2, weight=0)
+        self.frame_side_panel.rowconfigure(2, weight=1)
+        self.frame_side_panel.rowconfigure(3, weight=0)
 
-        self.frame_resumen_preview = ttk.Frame(self.frame_side_panel)
-        self.frame_resumen_preview.grid(row=0, column=0, sticky="ew")
+        self.label_vista_previa = ttk.Label(
+            self.frame_side_panel,
+            text="VISTA PREVIA",
+            style="SmartPriceProductCaption.TLabel",
+        )
+        self.label_vista_previa.grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+        self.frame_resumen_preview = ttk.Frame(self.frame_side_panel, style="SmartPriceProductSummary.TFrame")
+        self.frame_resumen_preview.grid(row=1, column=0, sticky="ew")
         self.frame_resumen_preview.columnconfigure(0, weight=1)
 
         self.label_preview_descripcion = ttk.Label(
@@ -456,13 +559,14 @@ class ContenidoProducto:
             font=("Segoe UI", 10, "bold"),
             anchor="w",
             justify="left",
+            style="SmartPriceProductText.TLabel",
         )
         self.label_preview_descripcion.grid(row=0, column=0, sticky="ew")
 
         self.label_preview_codigo = ttk.Label(
             self.frame_resumen_preview,
             text="Código: -",
-            bootstyle="secondary",
+            style="SmartPriceProductMuted.TLabel",
             font=("Segoe UI", 9),
             anchor="w",
         )
@@ -472,56 +576,61 @@ class ContenidoProducto:
             self.frame_resumen_preview,
             text="$0.00",
             font=("Segoe UI", 18, "bold"),
-            bootstyle="success",
+            style="SmartPriceProductPrice.TLabel",
             anchor="w",
             justify="left",
         )
         self.label_preview_precio.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
-        self.label_preview_oferta = ttk.Label(
-            self.frame_resumen_preview,
+        self.frame_preview_pastillas = ttk.Frame(self.frame_resumen_preview, style="SmartPriceProductSummary.TFrame")
+        self.frame_preview_pastillas.grid(row=3, column=0, sticky="w", pady=(6, 0))
+        self.label_preview_oferta = tk.Label(
+            self.frame_preview_pastillas,
             text="Oferta precio: NO",
-            bootstyle="secondary",
             font=("Segoe UI", 9, "bold"),
-            anchor="w",
-            justify="left",
+            padx=7,
+            pady=3,
+            bd=0,
+            highlightthickness=1,
         )
-        self.label_preview_oferta.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        self.label_preview_oferta._activa = False
+        self.label_preview_oferta.pack(side="left")
 
-        self.label_preview_ofplu = ttk.Label(
-            self.frame_resumen_preview,
+        self.label_preview_ofplu = tk.Label(
+            self.frame_preview_pastillas,
             text="Oferta OFPLU: NO",
-            bootstyle="secondary",
             font=("Segoe UI", 9, "bold"),
-            anchor="w",
-            justify="left",
+            padx=7,
+            pady=3,
+            bd=0,
+            highlightthickness=1,
         )
-        self.label_preview_ofplu.grid(row=4, column=0, sticky="ew", pady=(2, 0))
+        self.label_preview_ofplu._activa = False
+        self.label_preview_ofplu.pack(side="left", padx=(6, 0))
 
         self.frame_img_producto = ttk.Frame(
             self.frame_side_panel,
             width=self.IMAGE_PANEL_WIDTH,
             height=self.IMAGE_PANEL_HEIGHT,
-            bootstyle="light",
+            style="SmartPriceProductPreviewCard.TFrame",
         )
-        self.frame_img_producto.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        self.frame_img_producto.grid(row=2, column=0, sticky="nsew", pady=(12, 0))
         self.frame_img_producto.grid_propagate(False)
         self.frame_img_producto.columnconfigure(0, weight=1)
-        self.frame_img_producto.rowconfigure(0, weight=0)
-        self.frame_img_producto.rowconfigure(1, weight=1)
+        self.frame_img_producto.rowconfigure(0, weight=1)
 
         self.label_preview_hint = ttk.Label(
             self.frame_img_producto,
-            text="Seleccione un producto para ver su imagen.",
-            bootstyle="secondary",
+            text="Seleccioná un producto para ver su imagen",
+            style="SmartPriceProductPreview.TLabel",
             font=FONT_SUBTITLE,
             justify="center",
             anchor="center",
         )
-        self.label_preview_hint.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        self.label_preview_hint.grid_remove()
 
-        self.frame_preview_producto = ttk.Frame(self.frame_img_producto, bootstyle="light")
-        self.frame_preview_producto.grid(row=1, column=0, sticky="nsew")
+        self.frame_preview_producto = ttk.Frame(self.frame_img_producto, style="SmartPriceProductPreview.TFrame")
+        self.frame_preview_producto.grid(row=0, column=0, sticky="nsew")
         self.frame_preview_producto.grid_propagate(False)
         self.frame_preview_producto.columnconfigure(0, weight=1)
         self.frame_preview_producto.rowconfigure(0, weight=1)
@@ -529,11 +638,12 @@ class ContenidoProducto:
         self.label_img_producto = ttk.Label(
             self.frame_preview_producto,
             text="",
+            style="SmartPriceProductPreview.TLabel",
             anchor="center",
         )
         self.label_img_producto.place(relx=0.5, rely=0.5, anchor="center")
 
-        self.frame_preview_loader = ttk.Frame(self.frame_preview_producto, bootstyle="light")
+        self.frame_preview_loader = ttk.Frame(self.frame_preview_producto, style="SmartPriceProductPreview.TFrame")
         self.frame_preview_loader.place_forget()
         self.frame_preview_loader.columnconfigure(0, weight=1)
         self.frame_preview_loader.rowconfigure(0, weight=1)
@@ -550,11 +660,85 @@ class ContenidoProducto:
         self.label_preview_loader = ttk.Label(
             self.frame_preview_loader,
             text="Cargando imagen...",
-            bootstyle="secondary",
+            style="SmartPriceProductPreview.TLabel",
             font=FONT_SUBTITLE,
             anchor="center",
         )
         self.label_preview_loader.grid(row=1, column=0, padx=24, pady=(0, 24))
+
+    def _configurar_tabla_productos(self):
+        """Ajusta buscador, scroll y pie sin modificar el filtrado de Tableview."""
+        frames = [widget for widget in self.dt.winfo_children() if isinstance(widget, ttk.Frame)]
+        if frames:
+            search_frame = frames[0]
+            search_children = search_frame.winfo_children()
+            labels = [widget for widget in search_children if isinstance(widget, ttk.Label)]
+            entries = [widget for widget in search_children if isinstance(widget, ttk.Entry)]
+            if labels:
+                labels[0].pack_forget()
+            if entries:
+                self.entry_busqueda_productos = entries[0]
+                self.entry_busqueda_productos.pack_forget()
+                ttk.Label(search_frame, text="⌕", font=("Segoe UI Symbol", 13)).pack(side="left", padx=(4, 7))
+                self.entry_busqueda_productos.pack(fill="x", side="left", expand=True)
+                self._placeholder_busqueda = "Buscar producto o código de barras…"
+                self._search_placeholder_activo = True
+                self.dt.searchcriteria = self._placeholder_busqueda
+                self.entry_busqueda_productos.bind("<FocusIn>", self._quitar_placeholder_busqueda, add="+")
+                self.entry_busqueda_productos.bind("<FocusOut>", self._restaurar_placeholder_busqueda, add="+")
+                self.entry_busqueda_productos.bind("<Return>", lambda _event: self._programar_contador_productos(), add="+")
+                self.entry_busqueda_productos.bind("<KP_Enter>", lambda _event: self._programar_contador_productos(), add="+")
+
+        if len(frames) > 1:
+            self._dt_table_frame = frames[1]
+            self._dt_table_frame.pack_configure(fill="x", expand=False)
+            self._dt_table_frame.rowconfigure(0, weight=0)
+
+        if frames:
+            page_frame = frames[-1]
+            self.label_contador_productos = ttk.Label(page_frame, text="0 productos · 0 visibles", bootstyle="secondary")
+            self.label_contador_productos.pack(side="left", padx=(5, 0))
+        self.dt._pageindex.trace_add("write", lambda *_: self._programar_contador_productos())
+
+    def _quitar_placeholder_busqueda(self, _event=None):
+        if self._search_placeholder_activo:
+            self.dt.searchcriteria = ""
+            self._search_placeholder_activo = False
+
+    def _restaurar_placeholder_busqueda(self, _event=None):
+        if not self.dt.searchcriteria.strip():
+            self.dt.searchcriteria = self._placeholder_busqueda
+            self._search_placeholder_activo = True
+
+    def _programar_contador_productos(self):
+        root = self.DICT_WIDGETS.get_widget("GUI_MAIN", "ventana_creacion_caja")
+        root.after(80, self._actualizar_contador_productos)
+
+    def _actualizar_contador_productos(self):
+        if not hasattr(self, "label_contador_productos"):
+            return
+        total = len(self.dt.tablerows_filtered) if self.dt.is_filtered else len(self.dt.tablerows)
+        visibles = len(self.dt.view.get_children())
+        self.label_contador_productos.configure(
+            text=f"{total:,} productos · {visibles} visibles".replace(",", ".")
+        )
+
+    def _crear_barra_estado_productos(self):
+        main = self.DICT_WIDGETS.get_widget("GUI_MAIN", "instance")
+        self.frame_producto_estado = ttk.Frame(self.frame_producto, height=27, style="SmartPriceProductStatus.TFrame")
+        self.frame_producto_estado.grid(row=2, column=0, sticky="ew")
+        self.frame_producto_estado.grid_propagate(False)
+        self.linea_estado_productos = tk.Frame(self.frame_producto_estado, height=1, bd=0)
+        self.linea_estado_productos.pack(side="top", fill="x")
+        self.label_estado_productos = ttk.Label(
+            self.frame_producto_estado,
+            text=(
+                f"Usuario {main.usuario_windows}  ·  V.{main.version}  ·  "
+                f"Estado leído a las {datetime.now().strftime('%H:%M')}"
+            ),
+            style="SmartPriceProductStatus.TLabel",
+        )
+        self.label_estado_productos.pack(side="left", padx=20)
 
     def _actualizar_resumen_preview(
         self,
@@ -569,13 +753,13 @@ class ContenidoProducto:
 
         try:
             if isinstance(precio, str):
-                precio_txt = precio.strip() or "$0.00"
+                precio_txt = self._formatear_precio_local(precio)
             elif precio is None:
-                precio_txt = "$0.00"
+                precio_txt = "$0,00"
             else:
-                precio_txt = f"${float(precio):,.2f}"
+                precio_txt = self._formatear_precio_local(precio)
         except Exception:
-            precio_txt = "$0.00"
+            precio_txt = "$0,00"
 
         self.label_preview_descripcion.configure(
             text=descripcion_txt,
@@ -600,16 +784,16 @@ class ContenidoProducto:
                 ofertas_plu = []
 
         if oferta_simple:
-            precio_oferta = f"${float(oferta_simple.get('precio_oferta') or 0):,.2f}"
+            precio_oferta = self._formatear_precio_local(oferta_simple.get("precio_oferta") or 0)
             self.label_preview_oferta.configure(
                 text=f"Oferta precio: {precio_oferta}",
-                bootstyle="warning",
             )
+            self._aplicar_estilo_pastilla_preview(self.label_preview_oferta, True)
         else:
             self.label_preview_oferta.configure(
                 text="Oferta precio: NO",
-                bootstyle="secondary",
             )
+            self._aplicar_estilo_pastilla_preview(self.label_preview_oferta, False)
 
         if ofertas_plu:
             primera = ofertas_plu[0]
@@ -618,13 +802,13 @@ class ContenidoProducto:
             sufijo = f" ({cantidad} promos)" if cantidad > 1 else " (1 promo)"
             self.label_preview_ofplu.configure(
                 text=f"Oferta OFPLU: {detalle}{sufijo}",
-                bootstyle="warning",
             )
+            self._aplicar_estilo_pastilla_preview(self.label_preview_ofplu, True)
         else:
             self.label_preview_ofplu.configure(
                 text="Oferta OFPLU: NO",
-                bootstyle="secondary",
             )
+            self._aplicar_estilo_pastilla_preview(self.label_preview_ofplu, False)
 
     def _fijar_layout_productos(self):
         self._aplicar_layout_responsivo()
@@ -716,8 +900,8 @@ class ContenidoProducto:
             image_rely = 0.50
 
         self._preview_image_size = (
-            clamp(int(panel_width * 0.97), 220, 390),
-            clamp(int(preview_height * 0.97), 220, 340),
+            max(panel_width - 6, 220),
+            max(preview_height - 6, 220),
         )
         self.frame_side_panel.configure(width=panel_width)
         self.frame_img_producto.configure(width=panel_width, height=panel_height)
@@ -786,14 +970,18 @@ class ContenidoProducto:
             self._preview_codigo_actual = None
             self._actualizar_resumen_preview()
         self._ocultar_loader_preview()
-        try:
-            img = Image.open(PNG_No_Foto())
-            img.thumbnail(self._preview_image_size, Image.Resampling.LANCZOS)
-            img_tk = ImageTk.PhotoImage(img)
-            self.label_img_producto.config(image=img_tk, text="")
-            self.label_img_producto.image = img_tk
-        except Exception:
-            self.label_img_producto.config(image="", text="Sin imagen")
+        self.label_preview_hint.configure(
+            text=""
+        )
+        self.label_img_producto.config(
+            image="",
+            text=(
+                "Seleccioná un producto para ver su imagen"
+                if reset_resumen
+                else "Sin imagen disponible"
+            ),
+        )
+        self.label_img_producto.image = None
 
     def _preparar_imagen_para_preview(self, imagen_pil, size_objetivo):
         try:
@@ -806,8 +994,19 @@ class ContenidoProducto:
             if bbox:
                 imagen_pil = imagen_pil.crop(bbox)
 
-            imagen_pil.thumbnail(size_objetivo, Image.Resampling.LANCZOS)
-            return imagen_pil
+            ancho_objetivo, alto_disponible = size_objetivo
+            if imagen_pil.width <= 0 or imagen_pil.height <= 0:
+                return imagen_pil
+            escala = ancho_objetivo / imagen_pil.width
+            alto_objetivo = max(int(imagen_pil.height * escala), 1)
+            if alto_objetivo > alto_disponible:
+                escala = alto_disponible / imagen_pil.height
+                ancho_objetivo = max(int(imagen_pil.width * escala), 1)
+                alto_objetivo = alto_disponible
+            return imagen_pil.resize(
+                (max(int(ancho_objetivo), 1), max(int(alto_objetivo), 1)),
+                Image.Resampling.LANCZOS,
+            )
         except Exception:
             imagen_pil.thumbnail(size_objetivo, Image.Resampling.LANCZOS)
             return imagen_pil
@@ -1696,13 +1895,15 @@ class ContenidoProducto:
                 descripcion = str(producto[2]).strip() if producto[2] else ""
                 codigo = str(producto[1]).strip() if producto[1] else ""
                 precio = float(producto[3]) if producto[3] else 0.0
-                precio_formateado = f"${precio:,.2f}"
+                precio_formateado = self._formatear_precio_local(precio)
                 self.dt.insert_row(
                     "end",
                     [descripcion, codigo, precio_formateado],
                     reload=False,
                 )
             self.dt.load_table_data(clear_filters=True)
+            self._restaurar_placeholder_busqueda()
+            self._programar_contador_productos()
             self.aplicar_tema_interfaz(self._tema_interfaz_actual())
             self.dt.configure(height=self.TABLE_HEIGHT)
             self._fijar_layout_productos()
@@ -1771,6 +1972,7 @@ class ContenidoProducto:
         self._image_request_id += 1
         request_id = self._image_request_id
         self._mostrar_loader_preview()
+        self.label_preview_hint.configure(text="")
         self.label_img_producto.config(image="", text="")
         self.label_img_producto.image = None
 
