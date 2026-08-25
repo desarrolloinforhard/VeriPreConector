@@ -153,7 +153,7 @@ class ContenidoProducto:
             self.frame_buttons_inner,
             text="↻ Recargar productos",
             command=self.command_crear_datos,
-            bootstyle="primary",
+            style="SmartPriceProductPrimary.TButton",
             padding=(14, 9),
             width=22,
         )
@@ -164,7 +164,7 @@ class ContenidoProducto:
             text="Transmitir Novedades",
             command=self.command_transmitir_novedades,
             state=DISABLED,
-            bootstyle="success-outline",
+            style="SmartPriceProductAction.TButton",
             padding=(14, 9),
             width=22,
         )
@@ -175,7 +175,7 @@ class ContenidoProducto:
             text="Transmitir por Fecha",
             command=self.command_transmitir_por_fecha,
             state=DISABLED,
-            bootstyle="success-outline",
+            style="SmartPriceProductAction.TButton",
             padding=(14, 9),
             width=22,
         )
@@ -186,7 +186,7 @@ class ContenidoProducto:
             text="Transmitir datos completos",
             command=self.command_transmitir_datos,
             state=DISABLED,
-            bootstyle="secondary-outline",
+            style="SmartPriceProductSecondary.TButton",
             padding=(14, 9),
             width=22,
         )
@@ -388,6 +388,44 @@ class ContenidoProducto:
             foreground=paleta["header_muted"],
             font=("Segoe UI", 8),
         )
+        oscuro = str(tema).strip().lower() in {"oscuro", "dark"}
+        fondo_accion = paleta["background"]
+        texto_accion = "#FFFFFF" if oscuro else "#176B49"
+        texto_deshabilitado = "#E5ECE8" if oscuro else "#7C8C84"
+        style.configure(
+            "SmartPriceProductPrimary.TButton",
+            background="#49B982" if oscuro else "#158447",
+            foreground="#FFFFFF",
+            bordercolor="#49B982" if oscuro else "#158447",
+            focuscolor="",
+            relief="flat",
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.map(
+            "SmartPriceProductPrimary.TButton",
+            background=[("active", "#5CCB91"), ("disabled", "#315C48")],
+            foreground=[("active", "#FFFFFF"), ("disabled", texto_deshabilitado)],
+        )
+        for nombre_estilo, borde in (
+            ("SmartPriceProductAction.TButton", "#49B982" if oscuro else "#158447"),
+            ("SmartPriceProductSecondary.TButton", "#6F8278" if oscuro else "#64776E"),
+        ):
+            style.configure(
+                nombre_estilo,
+                background=fondo_accion,
+                foreground=texto_accion,
+                bordercolor=borde,
+                focuscolor="",
+                relief="solid",
+                borderwidth=1,
+                font=("Segoe UI", 9, "bold"),
+            )
+            style.map(
+                nombre_estilo,
+                background=[("active", paleta["header_card"]), ("disabled", fondo_accion)],
+                foreground=[("active", "#FFFFFF" if oscuro else "#176B49"), ("disabled", texto_deshabilitado)],
+                bordercolor=[("active", "#69D49B" if oscuro else borde), ("disabled", paleta["header_border"])],
+            )
         for panel in (
             self.frame_tabla_producto,
             self.frame_side_panel,

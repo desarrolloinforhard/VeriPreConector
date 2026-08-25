@@ -303,11 +303,11 @@ class GUI_MAIN:
             self.sidebar_card_active = "#149455"
             self.sidebar_text = "#f4fbf7"
             self.sidebar_text_active = "#ffffff"
-            self.sidebar_muted = SMARTPRICE_DARK_MUTED
+            self.sidebar_muted = "#ffffff"
             self.sidebar_border = SMARTPRICE_DARK_BORDER
-            self.sidebar_brand = "#49b982"
+            self.sidebar_brand = "#ffffff"
         else:
-            self.sidebar_bg = "#f3f6fa"
+            self.sidebar_bg = "#f3fbf6"
             self.sidebar_card = "#f3fbf6"
             self.sidebar_card_hover = "#ddf4e7"
             self.sidebar_card_active = "#149455"
@@ -1362,7 +1362,7 @@ class GUI_MAIN:
     def _cargar_icono_sidebar(self, path, size):
         imagen = Image.open(path).convert("RGBA")
         imagen = imagen.resize((int(size), int(size)), Image.Resampling.LANCZOS)
-        color = "#49B982" if self.tema_interfaz == "oscuro" else "#176B49"
+        color = "#FFFFFF" if self.tema_interfaz == "oscuro" else "#176B49"
         monocromo = Image.new("RGBA", imagen.size, color)
         monocromo.putalpha(imagen.getchannel("A"))
         return ImageTk.PhotoImage(monocromo)
@@ -1943,9 +1943,30 @@ class GUI_MAIN:
             text="FLUJO RECOMENDADO   1  Comprobar conexión   ›   2  Recargar catálogo   ›   3  Revisar pendientes   ›   4  Transmitir desde su pantalla",
             style="SmartPriceHomeHeaderMuted.TLabel",
         ).grid(row=0, column=0, sticky="w")
-        ttk.Button(footer, text="Ir a Productos", command=self.command_button_productos, bootstyle="secondary-outline", padding=(10, 6)).grid(row=0, column=1, padx=(8, 6))
-        ttk.Button(footer, text="↻ Actualizar estado", command=self._actualizar_home, bootstyle="success-outline", padding=(10, 6)).grid(row=0, column=2, padx=(0, 6))
-        ttk.Button(footer, text="Recargar catálogo", command=self.command_button_productos, bootstyle="success", padding=(10, 6)).grid(row=0, column=3)
+        self.home_btn_productos = ttk.Button(
+            footer,
+            text="Ir a Productos",
+            command=self.command_button_productos,
+            style="SmartPriceHomeSecondary.TButton",
+            padding=(10, 6),
+        )
+        self.home_btn_productos.grid(row=0, column=1, padx=(8, 6))
+        self.home_btn_actualizar = ttk.Button(
+            footer,
+            text="↻ Actualizar estado",
+            command=self._actualizar_home,
+            style="SmartPriceHomeAction.TButton",
+            padding=(10, 6),
+        )
+        self.home_btn_actualizar.grid(row=0, column=2, padx=(0, 6))
+        self.home_btn_recargar = ttk.Button(
+            footer,
+            text="Recargar catálogo",
+            command=self.command_button_productos,
+            style="SmartPriceHomePrimary.TButton",
+            padding=(10, 6),
+        )
+        self.home_btn_recargar.grid(row=0, column=3)
 
         if not any(self.permisos_usuario.values()):
             self.label_inicio_bloqueo = ttk.Label(
@@ -2047,6 +2068,28 @@ class GUI_MAIN:
         style.configure("SmartPriceHomeAlert.TLabel", background=alerta, foreground=texto)
         style.configure("SmartPriceHomeStatus.TFrame", background=paleta["status_fondo"])
         style.configure("SmartPriceHomeStatus.TLabel", background=paleta["status_fondo"], foreground=muted)
+        estilos_accion = (
+            ("SmartPriceHomeSecondary.TButton", fondo, "#6F8278"),
+            ("SmartPriceHomeAction.TButton", fondo, "#49B982"),
+            ("SmartPriceHomePrimary.TButton", "#49B982" if oscuro else "#158447", "#49B982" if oscuro else "#158447"),
+        )
+        for nombre_estilo, fondo_boton, borde_boton in estilos_accion:
+            style.configure(
+                nombre_estilo,
+                background=fondo_boton,
+                foreground="#FFFFFF" if oscuro or nombre_estilo.endswith("Primary.TButton") else "#176B49",
+                bordercolor=borde_boton,
+                focuscolor="",
+                relief="solid",
+                borderwidth=1,
+                font=("Segoe UI", 9, "bold"),
+            )
+            style.map(
+                nombre_estilo,
+                background=[("active", "#5CCB91" if nombre_estilo.endswith("Primary.TButton") else tarjeta)],
+                foreground=[("active", "#FFFFFF" if oscuro or nombre_estilo.endswith("Primary.TButton") else "#176B49")],
+                bordercolor=[("active", "#69D49B" if oscuro else borde_boton)],
+            )
         self.frame_seccion_inicio.configure(style="SmartPriceHome.TFrame")
         self.home_alerta_dot.configure(bg=alerta)
         self.home_statusbar_linea.configure(bg=paleta["status_borde"])

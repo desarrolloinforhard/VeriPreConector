@@ -147,6 +147,14 @@ class SidebarStateTest(unittest.TestCase):
         self.assertNotEqual(oscura["page_bg"], "#ffffff")
         self.assertNotEqual(oscura["card_bg"], oscura["page_bg"])
 
+    def test_sidebar_oscuro_usa_blanco_en_acciones_inferiores(self):
+        gui = GUI_MAIN.__new__(GUI_MAIN)
+
+        gui._configurar_paleta_sidebar("oscuro")
+
+        self.assertEqual(gui.sidebar_muted, "#ffffff")
+        self.assertEqual(gui.sidebar_brand, "#ffffff")
+
     def test_publicidad_distribuye_botonera_en_columnas_uniformes(self):
         botones = [Mock() for _ in range(8)]
         frames = [Mock(), Mock()]
@@ -191,6 +199,44 @@ class SidebarStateTest(unittest.TestCase):
 
         self.assertEqual(publicidad._texto_estado_item("marca.png"), "NUEVO")
         self.assertEqual(publicidad._detalle_estado_item("marca.png"), "1920×1080")
+
+    def test_publicidad_cuenta_tarjetas_repetidas_como_envios_independientes(self):
+        publicidad = ContenidoPublicidad.__new__(ContenidoPublicidad)
+        publicidad.items = [
+            {"filepath": "a.png"},
+            {"filepath": "b.png"},
+            {"filepath": "a.png"},
+            {"filepath": "b.png"},
+        ]
+        publicidad.biblioteca_metadata = {
+            "a.png": {"cambios_pendientes": True},
+            "b.png": {"cambios_pendientes": True},
+        }
+        publicidad.grupo_activo_id = "default"
+        publicidad.cols = 5
+        publicidad.combo_grupos = Mock()
+        publicidad.combo_grupos.get.return_value = "General"
+        publicidad.asegurar_config_publicidades = Mock(return_value={
+            "grupos": {"default": {"nombre": "General"}},
+            "globales": {},
+        })
+        publicidad.pastillas_resumen = {
+            clave: Mock() for clave in ("grupo", "globales", "envio", "pendientes")
+        }
+        publicidad.lbl_estado_pie = Mock()
+        publicidad.btn_validar_pie = Mock()
+        publicidad.btn_enviar_pie = Mock()
+        publicidad.canvas = Mock()
+        publicidad.empty_window_id = 1
+        publicidad.drop_window_id = 2
+        publicidad.contenedor = Mock()
+
+        publicidad._actualizar_contadores_desde_grilla()
+
+        publicidad.pastillas_resumen["grupo"].configure.assert_called_with(text="DEL GRUPO  4")
+        publicidad.pastillas_resumen["envio"].configure.assert_called_with(text="AL ENVIAR  4")
+        publicidad.pastillas_resumen["pendientes"].configure.assert_called_with(text="PENDIENTES  4")
+        publicidad.btn_enviar_pie.configure.assert_called_with(state="normal")
 
     def test_alternar_tema_persiste_y_actualiza_el_control(self):
         gui = GUI_MAIN.__new__(GUI_MAIN)

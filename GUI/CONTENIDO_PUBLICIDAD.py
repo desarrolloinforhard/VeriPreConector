@@ -81,6 +81,7 @@ class ContenidoPublicidad:
         self._cargando_grupo = False
         self._opciones_visibles = False
         self._layout_after_id = None
+        self._ultimo_ancho_canvas = None
         self._botones_grupo = []
         self._botones_accion = []
         self.grupo_activo_id = "default"
@@ -109,9 +110,43 @@ class ContenidoPublicidad:
         if not hasattr(self, "canvas"):
             return
 
+        oscuro = self.tema_interfaz == "oscuro"
+        style = self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja").style
+        estilos_accion = (
+            ("SmartPricePublicidadSecondary.TButton", self.PAGE_BG, "#6F8278"),
+            ("SmartPricePublicidadAction.TButton", self.PAGE_BG, "#49B982"),
+            ("SmartPricePublicidadPrimary.TButton", "#2FBF71" if oscuro else "#158447", "#2FBF71" if oscuro else "#158447"),
+        )
+        for nombre_estilo, fondo_boton, borde_boton in estilos_accion:
+            es_primario = nombre_estilo.endswith("Primary.TButton")
+            foreground = "#07110C" if oscuro and es_primario else ("#FFFFFF" if oscuro or es_primario else "#176B49")
+            style.configure(
+                nombre_estilo,
+                background=fondo_boton,
+                foreground=foreground,
+                bordercolor=borde_boton,
+                focuscolor="",
+                relief="solid",
+                borderwidth=1,
+                font=("Segoe UI", 9, "bold"),
+            )
+            style.map(
+                nombre_estilo,
+                background=[("active", "#43CC80" if es_primario else self.CARD_BG), ("disabled", fondo_boton)],
+                foreground=[("active", foreground), ("disabled", foreground if es_primario else ("#E5ECE8" if oscuro else "#7C8C84"))],
+                bordercolor=[("active", "#69D49B" if oscuro else borde_boton), ("disabled", self.CARD_BORDER)],
+            )
+
         self.panel_opciones.configure(bg=self.CARD_BG, highlightbackground=self.CARD_BORDER)
         self.grid_card.configure(bg=self.CARD_BG, highlightbackground=self.CARD_BORDER)
         self.canvas.configure(bg=self.PAGE_BG)
+        self.frame_scroll_gutter.configure(bg=self.CARD_BG)
+        status_bg = "#0B1210" if oscuro else "#ECEEED"
+        status_fg = "#7D9187" if oscuro else "#7C8B84"
+        status_border = "#1F2B26" if oscuro else "#D8E1DC"
+        self.status_publicidad_borde.configure(bg=status_border)
+        self.status_publicidad.configure(bg=status_bg)
+        self.lbl_status_publicidad.configure(bg=status_bg, fg=status_fg)
         for frame in (self.frame_toolbar_contenido,):
             frame.configure(bg=self.CARD_BG)
         for label in (self.lbl_contenido_grupo, self.lbl_ayuda_orden):
@@ -144,12 +179,51 @@ class ContenidoPublicidad:
                 item["label_detalle"].configure(bg=self.CARD_BG)
             if item.get("separador"):
                 item["separador"].configure(bg=self.CARD_BORDER)
+            if item.get("frame_preview"):
+                item["frame_preview"].configure(bg="#EDEFEE")
+            if item.get("lienzo_preview"):
+                item["lienzo_preview"].configure(bg="#EDEFEE")
+            self._estilizar_pastilla_estado(item)
 
         if hasattr(self, "frame_drop_agregar"):
-            self.frame_drop_agregar.configure(bg=self.PAGE_BG, highlightbackground=self.CARD_BORDER)
-            self.lbl_drop_agregar.configure(bg=self.PAGE_BG, fg=self.BADGE_FG)
+            self.frame_drop_agregar.configure(bg=self.PAGE_BG)
+            self.canvas_drop_agregar.configure(bg=self.PAGE_BG)
+            self._dibujar_celda_agregar()
 
         self.canvas.update_idletasks()
+
+    def _dibujar_celda_agregar(self, _event=None):
+        if not hasattr(self, "canvas_drop_agregar"):
+            return
+        canvas = self.canvas_drop_agregar
+        ancho = max(canvas.winfo_width(), 20)
+        alto = max(canvas.winfo_height(), 20)
+        borde = "#2B3A34" if self.tema_interfaz == "oscuro" else "#CDD6D1"
+        texto = "#A9BCB2" if self.tema_interfaz == "oscuro" else "#617269"
+        canvas.delete("all")
+        canvas.create_rectangle(3, 3, ancho - 3, alto - 3, outline=borde, width=1, dash=(4, 3))
+        canvas.create_text(ancho // 2, alto // 2 - 12, text="＋", fill=texto, font=("Segoe UI", 13))
+        canvas.create_text(ancho // 2, alto // 2 + 13, text="Agregar multimedia", fill=texto, font=("Segoe UI", 9))
+
+    def _estilizar_pastilla_estado(self, item):
+        label = item.get("label_estado") if isinstance(item, dict) else None
+        if not label:
+            return
+        estado = self._texto_estado_item(item.get("filepath"))
+        if estado == "REVISAR":
+            label.configure(
+                bg="#241C0E" if self.tema_interfaz == "oscuro" else "#FFF4D6",
+                fg="#F2C14E" if self.tema_interfaz == "oscuro" else "#7A5300",
+                highlightthickness=1,
+                highlightbackground="#8A6A2A",
+            )
+        else:
+            label.configure(
+                bg="#176B49",
+                fg="#FFFFFF",
+                highlightthickness=1,
+                highlightbackground="#49B982",
+            )
 
     def _estilizar_boton_eliminar(self):
         if not hasattr(self, "btn_eliminar_grupo"):
@@ -343,13 +417,25 @@ class ContenidoPublicidad:
         self.contenedor = ttk.Frame(self.grid_card)
         self.contenedor.pack(fill="both", expand=True)
 
-        frame_canvas = ttk.ScrolledFrame(self.contenedor, autohide=True)
+        frame_canvas = ttk.Frame(self.contenedor)
         frame_canvas.pack(fill="both", expand=True)
+        frame_canvas.columnconfigure(0, weight=1)
+        frame_canvas.rowconfigure(0, weight=1)
 
         self.canvas = tk.Canvas(frame_canvas, bg=self.PAGE_BG, highlightthickness=0, bd=0)
-        self.canvas.pack(fill="both", expand=True)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.frame_scroll_gutter = tk.Frame(frame_canvas, width=14, bd=0, bg=self.CARD_BG)
+        self.frame_scroll_gutter.grid(row=0, column=1, sticky="ns")
+        self.frame_scroll_gutter.grid_propagate(False)
+        self.scroll_publicidad = ttk.Scrollbar(
+            self.frame_scroll_gutter,
+            orient="vertical",
+            command=self.canvas.yview,
+        )
+        self.canvas.configure(yscrollcommand=self.scroll_publicidad.set)
         self.canvas.bind("<Configure>", self.redimensionar_celdas)
         self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
+        self.canvas.bind("<MouseWheel>", self._scroll_publicidad_mousewheel)
         frame_principal.bind("<Configure>", self._programar_layout_responsivo, add="+")
 
         self.frame_estado_vacio = tk.Frame(self.canvas, bg=self.PAGE_BG, bd=0)
@@ -370,21 +456,21 @@ class ContenidoPublicidad:
         self.frame_drop_agregar = tk.Frame(
             self.canvas,
             bg=self.PAGE_BG,
-            highlightthickness=1,
-            highlightbackground=self.CARD_BORDER,
+            highlightthickness=0,
             bd=0,
             cursor="hand2",
         )
-        self.lbl_drop_agregar = tk.Label(
+        self.canvas_drop_agregar = tk.Canvas(
             self.frame_drop_agregar,
-            text="＋\n\nAgregar multimedia",
             bg=self.PAGE_BG,
-            fg=self.BADGE_FG,
-            font=("Segoe UI", 9),
+            bd=0,
+            highlightthickness=0,
             cursor="hand2",
         )
-        self.lbl_drop_agregar.pack(fill="both", expand=True)
-        for widget in (self.frame_drop_agregar, self.lbl_drop_agregar):
+        self.canvas_drop_agregar.pack(fill="both", expand=True)
+        self.canvas_drop_agregar.bind("<Configure>", self._dibujar_celda_agregar)
+        self.lbl_drop_agregar = self.canvas_drop_agregar
+        for widget in (self.frame_drop_agregar, self.canvas_drop_agregar):
             widget.bind("<Button-1>", lambda _event: self.agregar_multimedia())
         self.drop_window_id = self.canvas.create_window(0, 0, window=self.frame_drop_agregar, anchor="center", state="hidden")
 
@@ -393,15 +479,38 @@ class ContenidoPublicidad:
         self.lbl_estado_pie = ttk.Label(self.frame_pie_publicidad, text="Sin archivos en General · 0 globales", bootstyle="secondary")
         self.lbl_estado_pie.pack(side="left")
         self.btn_enviar_pie = ttk.Button(self.frame_pie_publicidad, text="Enviar a dispositivos", command=self.enviar_multimedia, bootstyle="success", padding=(12, 7))
+        self.btn_enviar_pie.configure(style="SmartPricePublicidadPrimary.TButton")
         self.btn_enviar_pie.pack(side="right", padx=(6, 0))
         self.btn_validar_pie = ttk.Button(self.frame_pie_publicidad, text="Validar", command=self.validar_publicidades, bootstyle="success-outline", padding=(12, 7))
+        self.btn_validar_pie.configure(style="SmartPricePublicidadAction.TButton")
         self.btn_validar_pie.pack(side="right", padx=(6, 0))
         self.btn_panel_pie = ttk.Button(self.frame_pie_publicidad, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="secondary-outline", padding=(12, 7))
+        self.btn_panel_pie.configure(style="SmartPricePublicidadSecondary.TButton")
         self.btn_panel_pie.pack(side="right", padx=(6, 0))
+
+        instancia_main = self.widgets.get_widget("GUI_MAIN", "instance")
+        usuario = getattr(instancia_main, "usuario_windows", os.getenv("USERNAME", "usuario"))
+        version = getattr(instancia_main, "version", "-")
+        self.status_publicidad = tk.Frame(self.contenedor_general, height=25, bd=0, bg=self.PAGE_BG)
+        self.status_publicidad.pack(fill="x", side="bottom")
+        self.status_publicidad.pack_propagate(False)
+        self.status_publicidad_borde = tk.Frame(self.contenedor_general, height=1, bd=0, bg=self.CARD_BORDER)
+        self.status_publicidad_borde.pack(fill="x", side="bottom")
+        self.lbl_status_publicidad = tk.Label(
+            self.status_publicidad,
+            text=f"Usuario {usuario}  ·  V.{version}  ·  Último envío: sin registros",
+            bg=self.PAGE_BG,
+            fg=self.BADGE_FG,
+            font=("Segoe UI", 8),
+            anchor="w",
+            padx=8,
+        )
+        self.lbl_status_publicidad.pack(fill="both", expand=True)
 
         self._opciones_visibles = True
         self._estilizar_boton_eliminar()
         self._aplicar_layout_responsivo()
+        self.aplicar_tema_interfaz(self.tema_interfaz)
         frame_principal.after(100, self.inicializar_grupos_publicidad)
 
         logger.debug("Interfaz de ContenidoPublicidad creada correctamente.")
@@ -409,6 +518,12 @@ class ContenidoPublicidad:
     def redimensionar_celdas(self, event=None):
         try:
             nuevo_ancho = event.width if event else self.canvas.winfo_width()
+            if self._ultimo_ancho_canvas == nuevo_ancho:
+                return
+            self._ultimo_ancho_canvas = nuevo_ancho
+            nuevas_columnas = 5 if nuevo_ancho >= 1000 else 4 if nuevo_ancho >= 760 else 3
+            if self.cols != nuevas_columnas:
+                self.cols = nuevas_columnas
             self.cell_width = int(((nuevo_ancho - 2 * PADDING) // self.cols) * 0.97)
             if hasattr(self, "empty_window_id"):
                 self.canvas.coords(
@@ -420,6 +535,23 @@ class ContenidoPublicidad:
             self.recolocar_items()
         except Exception:
             logger.exception("Error al redimensionar celdas.")
+
+    def _scroll_publicidad_mousewheel(self, event):
+        if self.scroll_publicidad.winfo_ismapped():
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        return "break"
+
+    def _actualizar_scroll_publicidad(self):
+        self.canvas.update_idletasks()
+        bbox = self.canvas.bbox("all")
+        alto_contenido = bbox[3] - bbox[1] if bbox else 0
+        necesita_scroll = alto_contenido > max(self.canvas.winfo_height(), 1)
+        if necesita_scroll:
+            if not self.scroll_publicidad.winfo_ismapped():
+                self.scroll_publicidad.pack(fill="y", expand=True)
+        elif self.scroll_publicidad.winfo_ismapped():
+            self.scroll_publicidad.pack_forget()
+            self.canvas.yview_moveto(0)
 
     def _programar_layout_responsivo(self, _event=None):
         root = self.widgets.get_widget("GUI_MAIN", "ventana_creacion_caja")
@@ -532,8 +664,14 @@ class ContenidoPublicidad:
             grupo = publicidades["grupos"].get(self.grupo_activo_id, {})
             nombre = grupo.get("nombre", self.grupo_activo_id)
             total_grupo = len(self.items)
-            total_globales = len(publicidades.get("globales", {}))
-            total_envio = len(self.obtener_items_para_envio())
+            rutas_globales = {
+                ruta for ruta in publicidades.get("globales", {}) if os.path.exists(ruta)
+            }
+            rutas_grupo = {
+                item.get("filepath") for item in self.items if item.get("filepath")
+            }
+            total_globales = len(rutas_globales)
+            total_envio = len(rutas_globales | rutas_grupo)
             pendientes = sum(1 for meta in self.biblioteca_metadata.values() if meta.get("cambios_pendientes"))
 
             if grupo.get("usar_display_index"):
@@ -577,6 +715,7 @@ class ContenidoPublicidad:
                 self.canvas.itemconfigure(self.empty_window_id, state="normal")
                 self.canvas.itemconfigure(self.drop_window_id, state="hidden")
                 self.redimensionar_celdas()
+            self.recolocar_items()
         except Exception:
             logger.exception("Error actualizando resumen de grupo.")
 
@@ -592,8 +731,82 @@ class ContenidoPublicidad:
                 self.canvas.itemconfigure(self.empty_window_id, state="normal")
             self.recolocar_items()
             self.actualizar_resumen_grupo()
+            self._actualizar_contadores_desde_grilla()
         except Exception:
             logger.exception("Error sincronizando la grilla visual de Publicidad.")
+
+    def _actualizar_contadores_desde_grilla(self):
+        """Actualiza la cabecera desde las mismas tarjetas que ve el usuario."""
+        total_grupo = len(self.items)
+        try:
+            publicidades = self.asegurar_config_publicidades()
+            grupo = publicidades.get("grupos", {}).get(self.grupo_activo_id, {})
+            nombre = grupo.get("nombre", self.combo_grupos.get() or self.grupo_activo_id)
+            rutas_globales = {
+                ruta for ruta in publicidades.get("globales", {}) if os.path.exists(ruta)
+            }
+        except Exception:
+            nombre = self.combo_grupos.get() or self.grupo_activo_id
+            rutas_globales = set()
+
+        rutas_grupo = [
+            item.get("filepath") for item in self.items if item.get("filepath")
+        ]
+        total_globales = len(rutas_globales)
+        total_envio = total_grupo + total_globales
+        pendientes = 0
+        for ruta in rutas_grupo:
+            metadata = self.biblioteca_metadata.get(ruta, {})
+            if not metadata or metadata.get("cambios_pendientes", True):
+                pendientes += 1
+
+        valores = {
+            "grupo": ("DEL GRUPO", total_grupo),
+            "globales": ("GLOBALES", total_globales),
+            "envio": ("AL ENVIAR", total_envio),
+            "pendientes": ("PENDIENTES", pendientes),
+        }
+        for clave, (titulo, valor) in valores.items():
+            self.pastillas_resumen[clave].configure(text=f"{titulo}  {valor}")
+
+        partes = [
+            f"{total_grupo} archivo{'s' if total_grupo != 1 else ''} en {nombre}",
+            f"{total_globales} globales",
+        ]
+        if pendientes:
+            partes.append(f"{pendientes} pendientes de envío")
+        self.lbl_estado_pie.configure(text=" · ".join(partes))
+        estado = "normal" if total_envio else "disabled"
+        self.btn_validar_pie.configure(state=estado)
+        self.btn_enviar_pie.configure(state=estado)
+
+        if total_grupo:
+            self.canvas.itemconfigure(self.empty_window_id, state="hidden")
+            self.canvas.itemconfigure(self.drop_window_id, state="normal")
+        else:
+            self.canvas.itemconfigure(self.drop_window_id, state="hidden")
+            self.canvas.itemconfigure(self.empty_window_id, state="normal")
+
+        self._actualizar_status_publicidad()
+
+    def _actualizar_status_publicidad(self):
+        if not hasattr(self, "lbl_status_publicidad"):
+            return
+        instancia_main = self.widgets.get_widget("GUI_MAIN", "instance")
+        usuario = getattr(instancia_main, "usuario_windows", os.getenv("USERNAME", "usuario"))
+        version = getattr(instancia_main, "version", "-")
+        ultimo_texto = "sin registros"
+        try:
+            publicidades = self.asegurar_config_publicidades()
+            historial = publicidades.get("historial_envios", [])
+            if historial:
+                ultimo = historial[0]
+                ultimo_texto = ultimo.get("fecha", "registro disponible") if isinstance(ultimo, dict) else str(ultimo)
+        except Exception:
+            logger.debug("No se pudo resolver el último envío para la barra de estado.")
+        self.lbl_status_publicidad.configure(
+            text=f"Usuario {usuario}  ·  V.{version}  ·  Último envío: {ultimo_texto}"
+        )
 
     def inicializar_grupos_publicidad(self):
         try:
@@ -1525,9 +1738,12 @@ class ContenidoPublicidad:
                 x, y = self.calcular_x(col), self.calcular_y(fila)
                 self.canvas.coords(item["window_id"], x, y)
                 item["frame"].configure(width=self.cell_width, height=CELL_HEIGHT)
+                if item.get("frame_preview"):
+                    item["frame_preview"].configure(width=max(self.cell_width - 2, 80), height=PREVIEW_HEIGHT)
                 item["label_pos"].config(text=str(idx + 1))
                 if item.get("label_estado"):
                     item["label_estado"].config(text=self._texto_estado_item(item["filepath"]))
+                    self._estilizar_pastilla_estado(item)
                 if item.get("label_detalle"):
                     item["label_detalle"].config(text=self._detalle_estado_item(item["filepath"]))
             if hasattr(self, "drop_window_id") and self.items:
@@ -1535,6 +1751,7 @@ class ContenidoPublicidad:
                 self.canvas.coords(self.drop_window_id, self.calcular_x(col_drop), self.calcular_y(fila_drop))
                 self.canvas.itemconfigure(self.drop_window_id, width=self.cell_width, height=CELL_HEIGHT)
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            self.canvas.after_idle(self._actualizar_scroll_publicidad)
         except Exception:
             logger.exception("Error al recolocar items.")
 
@@ -1600,16 +1817,22 @@ class ContenidoPublicidad:
                 height=PREVIEW_HEIGHT,
                 bd=0,
             )
-            frame_preview.pack(fill="x")
+            frame_preview.place(x=1, y=1, relwidth=1.0, width=-2, height=PREVIEW_HEIGHT)
             frame_preview.pack_propagate(False)
             frame_preview.grid_propagate(False)
-            self.insertar_contenido_multimedia(frame_preview, filepath, tipo)
+            lienzo_preview = self.insertar_contenido_multimedia(frame_preview, filepath, tipo)
 
             separador = tk.Frame(frame_item, bg=self.CARD_BORDER, height=1, bd=0)
-            separador.pack(fill="x")
+            separador.place(x=1, y=PREVIEW_HEIGHT + 1, relwidth=1.0, width=-2, height=1)
 
             frame_info = tk.Frame(frame_item, bg=self.CARD_BG, bd=0, padx=8, pady=6)
-            frame_info.pack(fill="both", expand=True)
+            frame_info.place(
+                x=1,
+                y=PREVIEW_HEIGHT + 2,
+                relwidth=1.0,
+                width=-2,
+                height=CELL_HEIGHT - PREVIEW_HEIGHT - 3,
+            )
             label_nombre = tk.Label(
                 frame_info,
                 text=Path(filepath).name,
@@ -1639,15 +1862,16 @@ class ContenidoPublicidad:
                 pady=3,
             )
             label_pos.place(x=8, y=8)
-            estado_texto = self._texto_estado_item(filepath)
             label_estado = tk.Label(
                 frame_preview,
                 text=self._texto_estado_item(filepath),
                 font=("Segoe UI", 8, "bold"),
-                bg="#b77b16" if estado_texto == "REVISAR" else "#1aa053",
+                bg="#241C0E" if self.tema_interfaz == "oscuro" else "#FFF4D6",
                 fg="white",
                 padx=8,
                 pady=3,
+                highlightthickness=1,
+                highlightbackground="#8A6A2A",
             )
             label_estado.place(relx=1.0, rely=0.0, anchor="ne", x=-8, y=8)
 
@@ -1671,12 +1895,16 @@ class ContenidoPublicidad:
                 "label_detalle": label_detalle,
                 "frame_info": frame_info,
                 "separador": separador,
+                "frame_preview": frame_preview,
+                "lienzo_preview": lienzo_preview,
             })
+            self._estilizar_pastilla_estado(self.items[-1])
             self.items_dict[filepath] = {
                 "fila": fila,
                 "columna": col,
                 "posicion": fila * self.cols + col + 1
             }
+            self._actualizar_contadores_desde_grilla()
 
             self.rows = (len(self.items) + self.cols - 1) // self.cols
             self.canvas.config(height=self.rows * (CELL_HEIGHT + ITEM_MARGIN))
@@ -1717,31 +1945,38 @@ class ContenidoPublicidad:
                     logger.warning("No se pudo obtener frame de video. Se usará imagen gris | ruta=%s", ruta)
                     img = Image.new("RGBA", (max(self.cell_width - 8, 80), PREVIEW_HEIGHT - 8), color="gray")
 
-            ancho_area = max(self.cell_width - 10, 80)
-            alto_area = PREVIEW_HEIGHT - 8
-            img.thumbnail((ancho_area, alto_area), Image.Resampling.LANCZOS)
+            ancho_lienzo = max(self.cell_width - 2, 80)
+            alto_lienzo = PREVIEW_HEIGHT
+            ancho_imagen = max(ancho_lienzo - 20, 60)
+            alto_imagen = max(alto_lienzo - 16, 60)
+            img.thumbnail((ancho_imagen, alto_imagen), Image.Resampling.LANCZOS)
+            fondo_claro = Image.new("RGBA", img.size, "#EDEFEE")
+            fondo_claro.alpha_composite(img)
+            img = fondo_claro.convert("RGB")
 
             img_tk = ImageTk.PhotoImage(img)
             lienzo = tk.Canvas(
                 frame,
-                width=ancho_area,
-                height=alto_area,
+                width=ancho_lienzo,
+                height=alto_lienzo,
                 bg="#EDEFEE",
                 bd=0,
                 highlightthickness=0,
             )
             lienzo.image = img_tk
-            lienzo.create_image(ancho_area // 2, alto_area // 2, image=img_tk, anchor="center")
-            lienzo.pack(fill="both", expand=True)
+            lienzo.create_image(ancho_lienzo // 2, alto_lienzo // 2, image=img_tk, anchor="center")
+            lienzo.place(x=0, y=0, relwidth=1, relheight=1)
 
             lienzo.bind("<ButtonPress-1>", lambda e, f=frame: f.event_generate("<ButtonPress-1>", x=e.x, y=e.y))
             lienzo.bind("<B1-Motion>", lambda e, f=frame: f.event_generate("<B1-Motion>", x=e.x, y=e.y))
             lienzo.bind("<ButtonRelease-1>", lambda e, f=frame: f.event_generate("<ButtonRelease-1>", x=e.x, y=e.y))
             lienzo.bind("<Double-Button-1>", lambda e, f=frame, ruta=ruta: self.abrir_contenido(ruta))
             lienzo.bind("<Button-3>", lambda e, f=frame, ruta=ruta: self.mostrar_menu_contextual(e, ruta))
+            return lienzo
 
         except Exception:
             logger.exception("Error cargando multimedia | ruta=%s | tipo=%s", ruta, tipo)
+            return None
 
     def obtener_proxima_posicion_libre(self):
         try:
