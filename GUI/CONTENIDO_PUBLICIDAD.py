@@ -32,14 +32,10 @@ from FUNC.config_json import cargar_config, guardar_config, obtener_data_dir
 
 logger = get_logger(__name__)
 
-CELL_HEIGHT = 170  # Hacemos más rectangular
+CELL_HEIGHT = 210
+PREVIEW_HEIGHT = 128
 PADDING = 0        # margen interno del canvas
 ITEM_MARGIN = 5    # margen entre ítems
-
-CELL_HEIGHT = 170
-PADDING = 0
-ITEM_MARGIN = 5
-
 
 class ContenidoPublicidad:
     MAX_IMAGE_MB = 15
@@ -116,6 +112,20 @@ class ContenidoPublicidad:
         self.panel_opciones.configure(bg=self.CARD_BG, highlightbackground=self.CARD_BORDER)
         self.grid_card.configure(bg=self.CARD_BG, highlightbackground=self.CARD_BORDER)
         self.canvas.configure(bg=self.PAGE_BG)
+        for frame in (self.frame_toolbar_contenido,):
+            frame.configure(bg=self.CARD_BG)
+        for label in (self.lbl_contenido_grupo, self.lbl_ayuda_orden):
+            label.configure(bg=self.CARD_BG, fg=self.BADGE_FG)
+        self.frame_estado_vacio.configure(bg=self.PAGE_BG)
+        for label in (self.lbl_vacio_icono, self.lbl_vacio_titulo, self.lbl_vacio_texto, self.lbl_vacio_flujo):
+            label.configure(bg=self.PAGE_BG, fg=self.BADGE_FG)
+        for clave, label in self.pastillas_resumen.items():
+            label.configure(
+                bg=self.CARD_BG,
+                fg="#55d68b" if clave == "pendientes" else self.BADGE_FG,
+                highlightbackground=self.CARD_BORDER,
+            )
+        self._estilizar_boton_eliminar()
 
         for item in self.items:
             seleccionado = item is self.item_seleccionado
@@ -124,8 +134,33 @@ class ContenidoPublicidad:
                 highlightbackground=self.ITEM_SELECTED if seleccionado else self.CARD_BORDER,
             )
             item["label_pos"].configure(bg=self.BADGE_BG, fg=self.BADGE_FG)
+            item.get("frame_info", item["frame"]).configure(bg=self.CARD_BG)
+            if item.get("label_nombre"):
+                item["label_nombre"].configure(
+                    bg=self.CARD_BG,
+                    fg="#DBE7E0" if self.tema_interfaz == "oscuro" else "#2B3A34",
+                )
+            if item.get("label_detalle"):
+                item["label_detalle"].configure(bg=self.CARD_BG)
+            if item.get("separador"):
+                item["separador"].configure(bg=self.CARD_BORDER)
+
+        if hasattr(self, "frame_drop_agregar"):
+            self.frame_drop_agregar.configure(bg=self.PAGE_BG, highlightbackground=self.CARD_BORDER)
+            self.lbl_drop_agregar.configure(bg=self.PAGE_BG, fg=self.BADGE_FG)
 
         self.canvas.update_idletasks()
+
+    def _estilizar_boton_eliminar(self):
+        if not hasattr(self, "btn_eliminar_grupo"):
+            return
+        self.btn_eliminar_grupo.configure(
+            bg=self.CARD_BG,
+            fg=self.BADGE_FG,
+            activebackground="#b4232d",
+            activeforeground="white",
+            highlightbackground=self.CARD_BORDER,
+        )
 
     def setup_gui(self):
         logger.debug("Construyendo interfaz de ContenidoPublicidad.")
@@ -135,7 +170,7 @@ class ContenidoPublicidad:
         self.contenedor_general.pack(fill="both", expand=True, padx=PANEL_PAD_X - 6, pady=(10, 0))
 
         self.frame_resumen = ttk.Frame(self.contenedor_general)
-        self.frame_resumen.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 14))
+        self.frame_resumen.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 12))
         self.frame_resumen.columnconfigure(2, weight=1)
 
         self.photo_back_local = READ_IMG(PNG_Back(), 24, 24)
@@ -157,20 +192,33 @@ class ContenidoPublicidad:
 
         self.lbl_resumen_grupo = ttk.Label(
             self.frame_resumen,
-            text="Grupo: General | 0 publicidades",
+            text="",
             font=FONT_SUBTITLE,
             bootstyle="secondary",
         )
-        self.lbl_resumen_grupo.grid(row=0, column=2, sticky="w", padx=(24, 12))
+        self.lbl_resumen_grupo.grid_remove()
 
-        self.btn_opciones = ttk.Button(
-            self.frame_resumen,
-            text="Ocultar opciones",
-            command=self.toggle_opciones,
-            bootstyle="secondary-outline",
-            padding=(12, 8),
-        )
-        self.btn_opciones.grid(row=0, column=3, sticky="e")
+        self.frame_pastillas_resumen = ttk.Frame(self.frame_resumen)
+        self.frame_pastillas_resumen.grid(row=0, column=3, sticky="e")
+        self.pastillas_resumen = {}
+        for columna, (clave, titulo) in enumerate((
+            ("grupo", "DEL GRUPO"),
+            ("globales", "GLOBALES"),
+            ("envio", "AL ENVIAR"),
+            ("pendientes", "PENDIENTES"),
+        )):
+            pastilla = tk.Label(
+                self.frame_pastillas_resumen,
+                text=f"{titulo}  0",
+                font=("Segoe UI", 8),
+                padx=10,
+                pady=6,
+                bd=0,
+                relief="flat",
+                highlightthickness=1,
+            )
+            pastilla.grid(row=0, column=columna, padx=(0, 6) if columna < 3 else 0)
+            self.pastillas_resumen[clave] = pastilla
 
         self.panel_opciones = tk.Frame(
             self.contenedor_general,
@@ -179,52 +227,65 @@ class ContenidoPublicidad:
             highlightbackground=self.CARD_BORDER,
             bd=0,
             padx=PANEL_PAD_X,
-            pady=PANEL_PAD_Y,
+            pady=10,
         )
-        self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 16))
+        self.panel_opciones.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 12))
 
         self.frame_opciones = ttk.Frame(self.panel_opciones, padding=(0, 0))
         self.frame_opciones.pack(fill="x")
 
         self.frame_grupos = ttk.Frame(self.frame_opciones)
-        self.frame_grupos.pack(fill="x", pady=(0, 10))
+        self.frame_grupos.pack(fill="x")
 
-        ttk.Label(self.frame_grupos, text="Grupo:", font=FONT_LABEL_BOLD).pack(side="left", padx=(0, 10))
+        ttk.Label(self.frame_grupos, text="GRUPO", font=("Segoe UI", 8), bootstyle="secondary").pack(side="left", padx=(0, 10))
         self.combo_grupos = ttk.Combobox(self.frame_grupos, state="readonly", width=26)
-        self.combo_grupos.pack(side="left", padx=(0, 16), ipady=5)
+        self.combo_grupos.pack(side="left", padx=(0, 10), ipady=4)
         self.combo_grupos.bind("<<ComboboxSelected>>", self.cambiar_grupo_desde_combo)
 
         self.frame_grupos_botones = ttk.Frame(self.frame_grupos)
-        self.frame_grupos_botones.pack(side="left", fill="x", expand=True)
+        self.frame_grupos_botones.pack(side="left")
         self.frame_grupos_botones_l1 = ttk.Frame(self.frame_grupos_botones)
-        self.frame_grupos_botones_l1.pack(fill="x")
+        self.frame_grupos_botones_l1.pack(side="left")
         self.frame_grupos_botones_l2 = ttk.Frame(self.frame_grupos_botones)
 
         self._botones_grupo = [
-            ttk.Button(self.frame_grupos_botones, text="Nuevo grupo", command=self.crear_grupo, bootstyle="success-outline", padding=(10, 6)),
+            ttk.Button(self.frame_grupos_botones, text="Nuevo", command=self.crear_grupo, bootstyle="secondary-outline", padding=(10, 6)),
             ttk.Button(self.frame_grupos_botones, text="Renombrar", command=self.renombrar_grupo, bootstyle="secondary-outline", padding=(10, 6)),
-            ttk.Button(self.frame_grupos_botones, text="Eliminar grupo", command=self.eliminar_grupo, bootstyle="danger-outline", padding=(10, 6)),
-            ttk.Button(self.frame_grupos_botones, text="Publicidades globales", command=self.abrir_globales, bootstyle="secondary-outline", padding=(10, 6)),
-            ttk.Button(self.frame_grupos_botones, text="Multipantalla", command=self.abrir_config_multipantalla, bootstyle="secondary-outline", padding=(10, 6)),
         ]
+        for boton in self._botones_grupo:
+            boton.pack(side="left", padx=(0, 6))
+        self.btn_eliminar_grupo = tk.Button(
+            self.frame_grupos_botones,
+            text="Eliminar",
+            command=self.eliminar_grupo,
+            font=("Segoe UI", 9),
+            padx=10,
+            pady=5,
+            bd=0,
+            relief="flat",
+            highlightthickness=1,
+            cursor="hand2",
+        )
+        self.btn_eliminar_grupo.pack(side="left", padx=(0, 6))
+        self.btn_eliminar_grupo.bind("<Enter>", lambda _event: self.btn_eliminar_grupo.configure(bg="#b4232d", fg="white"))
+        self.btn_eliminar_grupo.bind("<Leave>", lambda _event: self._estilizar_boton_eliminar())
+
+        self.lbl_multipantalla = ttk.Label(self.frame_grupos, text="Multipantalla: por dispositivo", bootstyle="secondary")
+        self.lbl_multipantalla.pack(side="left", padx=(10, 0))
+
+        self.btn_agregar_principal = ttk.Button(
+            self.frame_grupos,
+            text="＋ Agregar multimedia",
+            command=self.agregar_multimedia,
+            bootstyle="success",
+            padding=(14, 7),
+        )
+        self.btn_agregar_principal.pack(side="right")
 
         self.frame_botones = ttk.Frame(self.frame_opciones)
-        self.frame_botones.pack(fill="x")
-
         self.frame_botones_accion_l1 = ttk.Frame(self.frame_botones)
-        self.frame_botones_accion_l1.pack(fill="x")
         self.frame_botones_accion_l2 = ttk.Frame(self.frame_botones)
-
-        self._botones_accion = [
-            ttk.Button(self.frame_botones, text="Agregar multimedia", command=self.agregar_multimedia, bootstyle="success", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Enviar", command=self.enviar_multimedia, bootstyle="success-outline", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Validar", command=self.validar_publicidades, bootstyle="success-outline", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="secondary-outline", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Historial", command=self.abrir_historial_publicidades, bootstyle="secondary-outline", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Vista completa", command=self.mostrar_preview_general, bootstyle="secondary-outline", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="secondary-outline", padding=(10, 6)),
-            ttk.Button(self.frame_botones, text="Ofertas", command=self.abrir_generador_ofertas, bootstyle="success-outline", padding=(10, 6)),
-        ]
+        self._botones_accion = []
 
         self.grid_card = tk.Frame(
             self.contenedor_general,
@@ -233,9 +294,51 @@ class ContenidoPublicidad:
             highlightbackground=self.CARD_BORDER,
             bd=0,
             padx=PANEL_PAD_Y,
-            pady=PANEL_PAD_Y,
+            pady=0,
         )
         self.grid_card.pack(fill="both", expand=True, padx=PANEL_PAD_X - 6, pady=(0, 10))
+
+        self.frame_toolbar_contenido = tk.Frame(self.grid_card, bg=self.CARD_BG, bd=0, padx=10, pady=9)
+        self.frame_toolbar_contenido.pack(fill="x")
+        self.lbl_contenido_grupo = tk.Label(
+            self.frame_toolbar_contenido,
+            text="CONTENIDO DEL GRUPO",
+            bg=self.CARD_BG,
+            fg=self.BADGE_FG,
+            font=("Segoe UI", 8),
+        )
+        self.lbl_contenido_grupo.pack(side="left")
+        self.lbl_ayuda_orden = tk.Label(
+            self.frame_toolbar_contenido,
+            text="arrastrá para cambiar el orden · doble clic para abrir",
+            bg=self.CARD_BG,
+            fg=self.BADGE_FG,
+            font=("Segoe UI", 8),
+        )
+        self.lbl_ayuda_orden.pack(side="left", padx=(12, 0))
+        self.frame_herramientas_contenido = ttk.Frame(self.frame_toolbar_contenido)
+        self.frame_herramientas_contenido.pack(side="right")
+        for texto, comando in (
+            ("Biblioteca", self.abrir_biblioteca_publicidades),
+            ("Globales", self.abrir_globales),
+            ("Historial", self.abrir_historial_publicidades),
+            ("Vista completa", self.mostrar_preview_general),
+        ):
+            ttk.Button(
+                self.frame_herramientas_contenido,
+                text=texto,
+                command=comando,
+                bootstyle="secondary-outline",
+                padding=(8, 5),
+            ).pack(side="left", padx=(0, 6))
+        self.btn_mas = ttk.Button(
+            self.frame_herramientas_contenido,
+            text="Más ▾",
+            command=self._mostrar_menu_mas_publicidad,
+            bootstyle="secondary-outline",
+            padding=(8, 5),
+        )
+        self.btn_mas.pack(side="left")
 
         self.contenedor = ttk.Frame(self.grid_card)
         self.contenedor.pack(fill="both", expand=True)
@@ -249,7 +352,55 @@ class ContenidoPublicidad:
         self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
         frame_principal.bind("<Configure>", self._programar_layout_responsivo, add="+")
 
+        self.frame_estado_vacio = tk.Frame(self.canvas, bg=self.PAGE_BG, bd=0)
+        self.lbl_vacio_icono = tk.Label(self.frame_estado_vacio, text="＋", font=("Segoe UI", 22), bg=self.PAGE_BG, fg=self.BADGE_FG)
+        self.lbl_vacio_icono.pack(pady=(0, 8))
+        self.lbl_vacio_titulo = tk.Label(self.frame_estado_vacio, text="El grupo todavía no tiene contenido", font=("Segoe UI", 12, "bold"), bg=self.PAGE_BG, fg=self.BADGE_FG)
+        self.lbl_vacio_titulo.pack()
+        self.lbl_vacio_texto = tk.Label(self.frame_estado_vacio, text="Agregá imágenes o videos, ordenalos y envialos a los dispositivos.", font=("Segoe UI", 9), bg=self.PAGE_BG, fg=self.BADGE_FG)
+        self.lbl_vacio_texto.pack(pady=(6, 12))
+        self.frame_vacio_acciones = ttk.Frame(self.frame_estado_vacio)
+        self.frame_vacio_acciones.pack()
+        ttk.Button(self.frame_vacio_acciones, text="＋ Agregar multimedia", command=self.agregar_multimedia, bootstyle="success", padding=(10, 6)).pack(side="left", padx=4)
+        ttk.Button(self.frame_vacio_acciones, text="Elegir desde Biblioteca", command=self.abrir_biblioteca_publicidades, bootstyle="secondary-outline", padding=(10, 6)).pack(side="left", padx=4)
+        ttk.Button(self.frame_vacio_acciones, text="Generar desde Ofertas", command=self.abrir_generador_ofertas, bootstyle="secondary-outline", padding=(10, 6)).pack(side="left", padx=4)
+        self.lbl_vacio_flujo = tk.Label(self.frame_estado_vacio, text="1  Agregar   ›   2  Ordenar   ›   3  Validar   ›   4  Enviar", font=("Segoe UI", 8), bg=self.PAGE_BG, fg=self.BADGE_FG)
+        self.lbl_vacio_flujo.pack(pady=(14, 0))
+        self.empty_window_id = self.canvas.create_window(0, 0, window=self.frame_estado_vacio, anchor="center")
+        self.frame_drop_agregar = tk.Frame(
+            self.canvas,
+            bg=self.PAGE_BG,
+            highlightthickness=1,
+            highlightbackground=self.CARD_BORDER,
+            bd=0,
+            cursor="hand2",
+        )
+        self.lbl_drop_agregar = tk.Label(
+            self.frame_drop_agregar,
+            text="＋\n\nAgregar multimedia",
+            bg=self.PAGE_BG,
+            fg=self.BADGE_FG,
+            font=("Segoe UI", 9),
+            cursor="hand2",
+        )
+        self.lbl_drop_agregar.pack(fill="both", expand=True)
+        for widget in (self.frame_drop_agregar, self.lbl_drop_agregar):
+            widget.bind("<Button-1>", lambda _event: self.agregar_multimedia())
+        self.drop_window_id = self.canvas.create_window(0, 0, window=self.frame_drop_agregar, anchor="center", state="hidden")
+
+        self.frame_pie_publicidad = ttk.Frame(self.contenedor_general)
+        self.frame_pie_publicidad.pack(fill="x", padx=PANEL_PAD_X - 6, pady=(0, 8))
+        self.lbl_estado_pie = ttk.Label(self.frame_pie_publicidad, text="Sin archivos en General · 0 globales", bootstyle="secondary")
+        self.lbl_estado_pie.pack(side="left")
+        self.btn_enviar_pie = ttk.Button(self.frame_pie_publicidad, text="Enviar a dispositivos", command=self.enviar_multimedia, bootstyle="success", padding=(12, 7))
+        self.btn_enviar_pie.pack(side="right", padx=(6, 0))
+        self.btn_validar_pie = ttk.Button(self.frame_pie_publicidad, text="Validar", command=self.validar_publicidades, bootstyle="success-outline", padding=(12, 7))
+        self.btn_validar_pie.pack(side="right", padx=(6, 0))
+        self.btn_panel_pie = ttk.Button(self.frame_pie_publicidad, text="Panel de control", command=self.abrir_panel_de_control, bootstyle="secondary-outline", padding=(12, 7))
+        self.btn_panel_pie.pack(side="right", padx=(6, 0))
+
         self._opciones_visibles = True
+        self._estilizar_boton_eliminar()
         self._aplicar_layout_responsivo()
         frame_principal.after(100, self.inicializar_grupos_publicidad)
 
@@ -259,6 +410,12 @@ class ContenidoPublicidad:
         try:
             nuevo_ancho = event.width if event else self.canvas.winfo_width()
             self.cell_width = int(((nuevo_ancho - 2 * PADDING) // self.cols) * 0.97)
+            if hasattr(self, "empty_window_id"):
+                self.canvas.coords(
+                    self.empty_window_id,
+                    max(nuevo_ancho // 2, 1),
+                    max(self.canvas.winfo_height() // 2, 1),
+                )
             logger.debug("Redimensionando celdas | nuevo_ancho=%s | cell_width=%s", nuevo_ancho, self.cell_width)
             self.recolocar_items()
         except Exception:
@@ -288,14 +445,24 @@ class ContenidoPublicidad:
                 self.panel_opciones.pack_configure(padx=padding_lateral)
             self.grid_card.pack_configure(padx=padding_lateral)
             self.panel_opciones.configure(padx=panel_interno, pady=PANEL_PAD_Y)
-            self.grid_card.configure(padx=panel_interno, pady=PANEL_PAD_Y)
+            self.grid_card.configure(padx=panel_interno)
             self.combo_grupos.configure(width=22 if ancho_util < 1360 else 26 if ancho_util < 1540 else 30)
-            self.lbl_resumen_grupo.configure(wraplength=max(ancho_util - 240, 360))
-            self.btn_opciones.configure(text="Opciones" if ancho_util < 1320 else ("Mostrar opciones" if not self._opciones_visibles else "Ocultar opciones"))
-            self._reorganizar_botoneras(ancho_util)
             self.redimensionar_celdas()
         except Exception:
             logger.exception("Error aplicando layout responsivo en Publicidad.")
+
+    def _mostrar_menu_mas_publicidad(self):
+        menu = tk.Menu(self.btn_mas, tearoff=0)
+        menu.add_command(label="Panel de control", command=self.abrir_panel_de_control)
+        menu.add_command(label="Generar desde ofertas", command=self.abrir_generador_ofertas)
+        menu.add_command(label="Configurar multipantalla", command=self.abrir_config_multipantalla)
+        try:
+            menu.tk_popup(
+                self.btn_mas.winfo_rootx(),
+                self.btn_mas.winfo_rooty() + self.btn_mas.winfo_height(),
+            )
+        finally:
+            menu.grab_release()
 
     def _reorganizar_botoneras(self, ancho_util):
         for widget in self._botones_grupo:
@@ -381,8 +548,52 @@ class ContenidoPublicidad:
                     f"{pendientes} pendientes"
                 )
             )
+            valores = {
+                "grupo": total_grupo,
+                "globales": total_globales,
+                "envio": total_envio,
+                "pendientes": pendientes,
+            }
+            titulos = {
+                "grupo": "DEL GRUPO",
+                "globales": "GLOBALES",
+                "envio": "AL ENVIAR",
+                "pendientes": "PENDIENTES",
+            }
+            for clave, valor in valores.items():
+                self.pastillas_resumen[clave].configure(text=f"{titulos[clave]}  {valor}")
+            estado_grupo = f"{total_grupo} archivo{'s' if total_grupo != 1 else ''} en {nombre} · {total_globales} globales"
+            if pendientes:
+                estado_grupo += f" · {pendientes} pendientes de envío"
+            self.lbl_estado_pie.configure(text=estado_grupo if total_grupo else f"Sin archivos en {nombre} · {total_globales} globales")
+            estado_botones = "normal" if total_envio else "disabled"
+            self.btn_validar_pie.configure(state=estado_botones)
+            self.btn_enviar_pie.configure(state=estado_botones)
+            if total_grupo:
+                self.canvas.itemconfigure(self.empty_window_id, state="hidden")
+                self.canvas.itemconfigure(self.drop_window_id, state="normal")
+            else:
+                self.lbl_vacio_titulo.configure(text=f"El grupo “{nombre}” todavía no tiene contenido")
+                self.canvas.itemconfigure(self.empty_window_id, state="normal")
+                self.canvas.itemconfigure(self.drop_window_id, state="hidden")
+                self.redimensionar_celdas()
         except Exception:
             logger.exception("Error actualizando resumen de grupo.")
+
+    def _sincronizar_grilla_publicidad(self):
+        """Alinea el resumen, el vacío y la celda de carga con la grilla visible."""
+        total_visible = len(self.items)
+        try:
+            if total_visible:
+                self.canvas.itemconfigure(self.empty_window_id, state="hidden")
+                self.canvas.itemconfigure(self.drop_window_id, state="normal")
+            else:
+                self.canvas.itemconfigure(self.drop_window_id, state="hidden")
+                self.canvas.itemconfigure(self.empty_window_id, state="normal")
+            self.recolocar_items()
+            self.actualizar_resumen_grupo()
+        except Exception:
+            logger.exception("Error sincronizando la grilla visual de Publicidad.")
 
     def inicializar_grupos_publicidad(self):
         try:
@@ -685,7 +896,27 @@ class ContenidoPublicidad:
 
     def _texto_estado_item(self, ruta):
         metadata = self.biblioteca_metadata.get(ruta) or self.construir_metadata_publicidad(ruta)
+        if not metadata.get("existe", True):
+            return "FALTANTE"
+        if metadata.get("width", 0) and metadata.get("height", 0):
+            if metadata["width"] < 800 or metadata["height"] < 600:
+                return "REVISAR"
         return metadata.get("estado", "OK")
+
+    def _detalle_estado_item(self, ruta):
+        metadata = self.biblioteca_metadata.get(ruta) or self.construir_metadata_publicidad(ruta)
+        if not metadata.get("existe", True):
+            return "El archivo ya no está disponible"
+        if metadata.get("width", 0) and metadata.get("height", 0):
+            if metadata["width"] < 800 or metadata["height"] < 600:
+                return f"{metadata['width']}×{metadata['height']} · menor a 800×600"
+        dimensiones = ""
+        if metadata.get("width") and metadata.get("height"):
+            dimensiones = f"{metadata['width']}×{metadata['height']}"
+        duracion = metadata.get("duracion_seg", 0)
+        if duracion:
+            return f"{dimensiones} · {duracion:.0f} s" if dimensiones else f"{duracion:.0f} s"
+        return dimensiones or metadata.get("tipo", "multimedia")
 
     def validar_items_publicidad(self, items=None):
         items = items or self.obtener_items_para_envio()
@@ -702,6 +933,10 @@ class ContenidoPublicidad:
 
             if metadata["tipo"] == "imagen" and metadata.get("tam_bytes", 0) > self.MAX_IMAGE_MB * 1024 * 1024:
                 advertencias.append(f"Imagen pesada ({metadata['tam_texto']}): {metadata['nombre']}")
+
+            if metadata.get("width", 0) and metadata.get("height", 0):
+                if metadata["width"] < 800 or metadata["height"] < 600:
+                    advertencias.append(f"Resolución menor a la pantalla: {metadata['nombre']}")
 
             if metadata["tipo"] == "video":
                 if metadata.get("tam_bytes", 0) > self.MAX_VIDEO_MB * 1024 * 1024:
@@ -1293,6 +1528,13 @@ class ContenidoPublicidad:
                 item["label_pos"].config(text=str(idx + 1))
                 if item.get("label_estado"):
                     item["label_estado"].config(text=self._texto_estado_item(item["filepath"]))
+                if item.get("label_detalle"):
+                    item["label_detalle"].config(text=self._detalle_estado_item(item["filepath"]))
+            if hasattr(self, "drop_window_id") and self.items:
+                fila_drop, col_drop = divmod(len(self.items), self.cols)
+                self.canvas.coords(self.drop_window_id, self.calcular_x(col_drop), self.calcular_y(fila_drop))
+                self.canvas.itemconfigure(self.drop_window_id, width=self.cell_width, height=CELL_HEIGHT)
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         except Exception:
             logger.exception("Error al recolocar items.")
 
@@ -1346,10 +1588,46 @@ class ContenidoPublicidad:
             )
             frame_item.pack_propagate(False)
 
+            self.refrescar_biblioteca_metadata(persistir=False)
+            metadata = self.biblioteca_metadata.get(filepath) or self.construir_metadata_publicidad(filepath)
             tipo = self._tipo_archivo_publicidad(filepath)
             logger.debug("Tipo multimedia detectado | ruta=%s | tipo=%s", filepath, tipo)
 
-            self.insertar_contenido_multimedia(frame_item, filepath, tipo)
+            frame_preview = tk.Frame(
+                frame_item,
+                bg="#EDEFEE",
+                width=max(self.cell_width - 2, 80),
+                height=PREVIEW_HEIGHT,
+                bd=0,
+            )
+            frame_preview.pack(fill="x")
+            frame_preview.pack_propagate(False)
+            frame_preview.grid_propagate(False)
+            self.insertar_contenido_multimedia(frame_preview, filepath, tipo)
+
+            separador = tk.Frame(frame_item, bg=self.CARD_BORDER, height=1, bd=0)
+            separador.pack(fill="x")
+
+            frame_info = tk.Frame(frame_item, bg=self.CARD_BG, bd=0, padx=8, pady=6)
+            frame_info.pack(fill="both", expand=True)
+            label_nombre = tk.Label(
+                frame_info,
+                text=Path(filepath).name,
+                anchor="w",
+                bg=self.CARD_BG,
+                fg="#DBE7E0" if self.tema_interfaz == "oscuro" else "#2B3A34",
+                font=("Segoe UI", 9, "bold"),
+            )
+            label_nombre.pack(fill="x")
+            label_detalle = tk.Label(
+                frame_info,
+                text=self._detalle_estado_item(filepath),
+                anchor="w",
+                bg=self.CARD_BG,
+                fg="#d5a72b" if self._texto_estado_item(filepath) == "REVISAR" else self.BADGE_FG,
+                font=("Segoe UI", 8),
+            )
+            label_detalle.pack(fill="x", pady=(3, 0))
 
             label_pos = tk.Label(
                 frame_item,
@@ -1361,11 +1639,12 @@ class ContenidoPublicidad:
                 pady=3,
             )
             label_pos.place(x=8, y=8)
+            estado_texto = self._texto_estado_item(filepath)
             label_estado = tk.Label(
-                frame_item,
+                frame_preview,
                 text=self._texto_estado_item(filepath),
                 font=("Segoe UI", 8, "bold"),
-                bg="#1aa053",
+                bg="#b77b16" if estado_texto == "REVISAR" else "#1aa053",
                 fg="white",
                 padx=8,
                 pady=3,
@@ -1388,6 +1667,10 @@ class ContenidoPublicidad:
                 "window_id": window_id,
                 "label_pos": label_pos,
                 "label_estado": label_estado,
+                "label_nombre": label_nombre,
+                "label_detalle": label_detalle,
+                "frame_info": frame_info,
+                "separador": separador,
             })
             self.items_dict[filepath] = {
                 "fila": fila,
@@ -1400,6 +1683,7 @@ class ContenidoPublicidad:
             self.refrescar_biblioteca_metadata()
             self.guardar_ubicaciones()
             self.actualizar_resumen_grupo()
+            self.canvas.after_idle(self._sincronizar_grilla_publicidad)
 
             logger.debug("Item multimedia agregado correctamente | total_items=%s", len(self.items))
 
@@ -1411,7 +1695,7 @@ class ContenidoPublicidad:
             logger.debug("Insertando contenido multimedia | ruta=%s | tipo=%s", ruta, tipo)
 
             if tipo == "imagen":
-                img = Image.open(ruta).resize((self.cell_width, CELL_HEIGHT), Image.Resampling.LANCZOS)
+                img = Image.open(ruta).convert("RGBA")
             else:
                 cap = cv2.VideoCapture(ruta)
                 success, frame_img = cap.read()
@@ -1419,28 +1703,42 @@ class ContenidoPublicidad:
 
                 if success:
                     frame_img = cv2.cvtColor(frame_img, cv2.COLOR_BGR2RGB)
-                    img = Image.fromarray(frame_img).resize((self.cell_width, CELL_HEIGHT), Image.Resampling.LANCZOS)
+                    img = Image.fromarray(frame_img).convert("RGBA")
                     draw = ImageDraw.Draw(img)
+                    centro_x = img.width // 2
+                    centro_y = img.height // 2
                     triangle = [
-                        (self.cell_width // 2 - 20, CELL_HEIGHT // 2 - 20),
-                        (self.cell_width // 2 - 20, CELL_HEIGHT // 2 + 20),
-                        (self.cell_width // 2 + 20, CELL_HEIGHT // 2)
+                        (centro_x - 20, centro_y - 20),
+                        (centro_x - 20, centro_y + 20),
+                        (centro_x + 20, centro_y)
                     ]
                     draw.polygon(triangle, fill="white")
                 else:
                     logger.warning("No se pudo obtener frame de video. Se usará imagen gris | ruta=%s", ruta)
-                    img = Image.new("RGB", (self.cell_width, CELL_HEIGHT), color="gray")
+                    img = Image.new("RGBA", (max(self.cell_width - 8, 80), PREVIEW_HEIGHT - 8), color="gray")
+
+            ancho_area = max(self.cell_width - 10, 80)
+            alto_area = PREVIEW_HEIGHT - 8
+            img.thumbnail((ancho_area, alto_area), Image.Resampling.LANCZOS)
 
             img_tk = ImageTk.PhotoImage(img)
-            label = tk.Label(frame, image=img_tk, bg=self.CARD_BG, bd=0, highlightthickness=0)
-            label.image = img_tk
-            label.pack(expand=True, fill="both")
+            lienzo = tk.Canvas(
+                frame,
+                width=ancho_area,
+                height=alto_area,
+                bg="#EDEFEE",
+                bd=0,
+                highlightthickness=0,
+            )
+            lienzo.image = img_tk
+            lienzo.create_image(ancho_area // 2, alto_area // 2, image=img_tk, anchor="center")
+            lienzo.pack(fill="both", expand=True)
 
-            label.bind("<ButtonPress-1>", lambda e, f=frame: f.event_generate("<ButtonPress-1>", x=e.x, y=e.y))
-            label.bind("<B1-Motion>", lambda e, f=frame: f.event_generate("<B1-Motion>", x=e.x, y=e.y))
-            label.bind("<ButtonRelease-1>", lambda e, f=frame: f.event_generate("<ButtonRelease-1>", x=e.x, y=e.y))
-            label.bind("<Double-Button-1>", lambda e, f=frame, ruta=ruta: self.abrir_contenido(ruta))
-            label.bind("<Button-3>", lambda e, f=frame, ruta=ruta: self.mostrar_menu_contextual(e, ruta))
+            lienzo.bind("<ButtonPress-1>", lambda e, f=frame: f.event_generate("<ButtonPress-1>", x=e.x, y=e.y))
+            lienzo.bind("<B1-Motion>", lambda e, f=frame: f.event_generate("<B1-Motion>", x=e.x, y=e.y))
+            lienzo.bind("<ButtonRelease-1>", lambda e, f=frame: f.event_generate("<ButtonRelease-1>", x=e.x, y=e.y))
+            lienzo.bind("<Double-Button-1>", lambda e, f=frame, ruta=ruta: self.abrir_contenido(ruta))
+            lienzo.bind("<Button-3>", lambda e, f=frame, ruta=ruta: self.mostrar_menu_contextual(e, ruta))
 
         except Exception:
             logger.exception("Error cargando multimedia | ruta=%s | tipo=%s", ruta, tipo)
@@ -1673,7 +1971,7 @@ class ContenidoPublicidad:
             }
             self.guardar_ubicaciones()
             self.refrescar_biblioteca_metadata(persistir=False)
-            self.actualizar_resumen_grupo()
+            self._sincronizar_grilla_publicidad()
 
         except Exception:
             self._cargando_grupo = False

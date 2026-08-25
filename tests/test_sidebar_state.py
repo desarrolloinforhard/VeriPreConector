@@ -159,6 +159,39 @@ class SidebarStateTest(unittest.TestCase):
             boton.grid.assert_called_once()
             self.assertEqual(boton.grid.call_args.kwargs["sticky"], "ew")
 
+    def test_publicidad_explica_resolucion_que_requiere_revision(self):
+        publicidad = ContenidoPublicidad.__new__(ContenidoPublicidad)
+        publicidad.biblioteca_metadata = {
+            "promo.png": {
+                "existe": True,
+                "estado": "NUEVO",
+                "tipo": "imagen",
+                "width": 640,
+                "height": 480,
+            }
+        }
+
+        self.assertEqual(publicidad._texto_estado_item("promo.png"), "REVISAR")
+        self.assertEqual(
+            publicidad._detalle_estado_item("promo.png"),
+            "640×480 · menor a 800×600",
+        )
+
+    def test_publicidad_muestra_dimensiones_en_tarjeta_valida(self):
+        publicidad = ContenidoPublicidad.__new__(ContenidoPublicidad)
+        publicidad.biblioteca_metadata = {
+            "marca.png": {
+                "existe": True,
+                "estado": "NUEVO",
+                "tipo": "imagen",
+                "width": 1920,
+                "height": 1080,
+            }
+        }
+
+        self.assertEqual(publicidad._texto_estado_item("marca.png"), "NUEVO")
+        self.assertEqual(publicidad._detalle_estado_item("marca.png"), "1920×1080")
+
     def test_alternar_tema_persiste_y_actualiza_el_control(self):
         gui = GUI_MAIN.__new__(GUI_MAIN)
         gui.tema_interfaz = "claro"
