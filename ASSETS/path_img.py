@@ -61,6 +61,12 @@ def PNG_LOGO_TEMA_OSCURO():
 def PNG_LOGO_TEMA_CLARO():
     return os.path.join(path_script, 'INFORHARD_TEMA_CLARO.png')
 
+def PNG_LOGO_COMPACTO_TEMA_OSCURO():
+    return os.path.join(path_script, 'INFORHARD_COMPACTO_TEMA_OSCURO.png')
+
+def PNG_LOGO_COMPACTO_TEMA_CLARO():
+    return os.path.join(path_script, 'INFORHARD_COMPACTO_TEMA_CLARO.png')
+
 def READ_IMG(path, widht, height):
     image_logo = Image.open(path)
     image_logo = image_logo.resize((widht, height), Image.Resampling.LANCZOS)  # Redimensionar

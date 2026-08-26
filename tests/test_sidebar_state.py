@@ -25,6 +25,16 @@ class SidebarStateTest(unittest.TestCase):
         self.assertTrue(
             GUI_MAIN._ruta_logo_sidebar("claro").endswith("INFORHARD_TEMA_CLARO.png")
         )
+        self.assertTrue(
+            GUI_MAIN._ruta_logo_sidebar("oscuro", compacto=True).endswith(
+                "INFORHARD_COMPACTO_TEMA_OSCURO.png"
+            )
+        )
+        self.assertTrue(
+            GUI_MAIN._ruta_logo_sidebar("claro", compacto=True).endswith(
+                "INFORHARD_COMPACTO_TEMA_CLARO.png"
+            )
+        )
         self.assertEqual(GUI_MAIN._dimensiones_logo_sidebar(158, 28), (158, 21))
         self.assertEqual(GUI_MAIN._dimensiones_logo_sidebar(120, 18), (120, 16))
 
@@ -302,7 +312,7 @@ class SidebarStateTest(unittest.TestCase):
         render = gui._resolver_render_sidebar(176, 158, True)
         self.assertEqual(render["sidebar_width"], 68)
         self.assertEqual(render["item_width"], 52)
-        self.assertFalse(render["show_logo"])
+        self.assertTrue(render["show_logo"])
         self.assertFalse(render["show_text"])
         self.assertEqual(render["toggle_text"], "☰")
 
@@ -401,6 +411,42 @@ class SidebarStateTest(unittest.TestCase):
         self.assertIn("selection_set", fuente_lista)
         self.assertIn("_seleccionar_dispositivo_lista", fuente_lista)
         self.assertIn("pack_forget", fuente_guia)
+
+    def test_acerca_de_usa_tarjetas_planas_y_diagnostico_copiable(self):
+        fuente = inspect.getsource(GUI_MAIN.seccion_acerca)
+        diagnostico = inspect.getsource(GUI_MAIN._obtener_diagnostico_acerca)
+        copiar = inspect.getsource(GUI_MAIN._copiar_diagnostico_acerca)
+
+        self.assertNotIn("Labelframe", fuente)
+        self.assertIn("Copiar diagnóstico", fuente)
+        self.assertIn("Configuración", fuente)
+        for titulo in ("Interfaz", "Datos locales", "Origen corporativo", "Transmisión"):
+            self.assertIn(titulo, fuente)
+        for consulta in ("COUNT(*) FROM productos", "VERIPRE_CONEXION", "VERIPRE_EQUIPOS", "api_key"):
+            self.assertIn(consulta, diagnostico)
+        self.assertIn("clipboard_append", copiar)
+
+    def test_tarjetas_acerca_no_usan_padding_negativo(self):
+        fuente = inspect.getsource(GUI_MAIN._crear_tarjeta_acerca)
+        self.assertNotIn("-5", fuente)
+        self.assertIn("ttk.Separator", fuente)
+
+    def test_logo_compacto_normaliza_ambos_temas_al_mismo_tamano(self):
+        fuente_carga = inspect.getsource(GUI_MAIN._cargar_logo_sidebar)
+        fuente_actualizacion = inspect.getsource(GUI_MAIN._actualizar_logo_sidebar)
+        self.assertIn("INFORHARD_COMPACTO_TEMA_OSCURO.png", fuente_carga)
+        self.assertIn("INFORHARD_COMPACTO_TEMA_CLARO.png", fuente_carga)
+        self.assertIn("image_logo.resize", fuente_carga)
+        self.assertIn("32 if compacto", fuente_actualizacion)
+        self.assertIn("21 if compacto", fuente_actualizacion)
+
+    def test_acerca_formatea_dispositivos_y_ancla_barra_inferior(self):
+        fuente = inspect.getsource(GUI_MAIN.seccion_acerca)
+        self.assertEqual(GUI_MAIN._texto_dispositivos_registrados(1), "1 registrado")
+        self.assertEqual(GUI_MAIN._texto_dispositivos_registrados(2), "2 registrados")
+        self.assertIn('style="SmartPriceAboutPill.TLabel"', fuente)
+        self.assertIn('style="SmartPriceAboutStatus.TFrame"', fuente)
+        self.assertIn('rowconfigure(1, weight=1)', fuente)
 
 
 if __name__ == "__main__":

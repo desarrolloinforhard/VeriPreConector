@@ -442,6 +442,7 @@ class GUI_MAIN:
             if getattr(self, "contenido_publicidad", None):
                 self.contenido_publicidad.aplicar_tema_interfaz(tema_nuevo)
             self._aplicar_tema_home(tema_nuevo)
+            self._aplicar_tema_acerca(tema_nuevo)
             self.config_data = config_actualizada
             self.DICT_WIDGETS.register("CONFIG", "config_json", self.config_data)
             self._render_boton_tema()
@@ -622,16 +623,23 @@ class GUI_MAIN:
             should_refresh_main_layout = main_layout_state != self._main_layout_state
 
             if should_refresh_sidebar:
-                if not sidebar_render["show_logo"]:
-                    self.label_image_logo.pack_forget()
-                else:
-                    logo_state = (self.tema_interfaz, logo_max_width, logo_max_height)
-                    if logo_state != self._sidebar_logo_state:
-                        self._actualizar_logo_sidebar(
-                            max_width=logo_max_width,
-                            max_height=logo_max_height,
-                        )
-                    self.label_image_logo.pack_configure(pady=top_logo_pad, anchor="center")
+                logo_width = 32 if self.sidebar_collapsed else logo_max_width
+                logo_height = 21 if self.sidebar_collapsed else logo_max_height
+                logo_state = (
+                    self.tema_interfaz,
+                    self.sidebar_collapsed,
+                    logo_width,
+                    logo_height,
+                )
+                if logo_state != self._sidebar_logo_state:
+                    self._actualizar_logo_sidebar(
+                        max_width=logo_width,
+                        max_height=logo_height,
+                    )
+                self.label_image_logo.pack_configure(
+                    pady=(2, 12) if self.sidebar_collapsed else top_logo_pad,
+                    anchor="center",
+                )
 
                 asset_state = (icon_size, footer_icon_size)
                 if asset_state != self._sidebar_asset_state:
@@ -722,7 +730,7 @@ class GUI_MAIN:
         return {
             "sidebar_width": self.sidebar_collapsed_width if collapsed else sidebar_width,
             "item_width": self.sidebar_collapsed_item_width if collapsed else item_width,
-            "show_logo": not collapsed,
+            "show_logo": True,
             "show_text": not collapsed,
             "toggle_text": "☰" if collapsed else "‹",
         }
@@ -1346,13 +1354,24 @@ class GUI_MAIN:
 
     def _cargar_logo_sidebar(self, path, max_width, max_height):
         image_logo = Image.open(path)
-        if os.path.basename(path) in {
+        nombre_logo = os.path.basename(path)
+        if nombre_logo in {
             "INFORHARD_TEMA_OSCURO.png",
             "INFORHARD_TEMA_CLARO.png",
         }:
             target_width, target_height = self._dimensiones_logo_sidebar(max_width, max_height)
             image_logo = image_logo.resize(
                 (target_width, target_height),
+                Image.Resampling.LANCZOS,
+            )
+        elif nombre_logo in {
+            "INFORHARD_COMPACTO_TEMA_OSCURO.png",
+            "INFORHARD_COMPACTO_TEMA_CLARO.png",
+        }:
+            # Las fuentes compactas tienen proporciones distintas. Un lienzo
+            # idéntico evita que el monograma salte de tamaño al cambiar tema.
+            image_logo = image_logo.resize(
+                (int(max_width), int(max_height)),
                 Image.Resampling.LANCZOS,
             )
         else:
@@ -1374,7 +1393,11 @@ class GUI_MAIN:
         return target_width, target_height
 
     @staticmethod
-    def _ruta_logo_sidebar(tema):
+    def _ruta_logo_sidebar(tema, compacto=False):
+        if compacto:
+            if str(tema).strip().lower() in {"oscuro", "dark"}:
+                return PNG_LOGO_COMPACTO_TEMA_OSCURO()
+            return PNG_LOGO_COMPACTO_TEMA_CLARO()
         if str(tema).strip().lower() in {"oscuro", "dark"}:
             return PNG_LOGO_TEMA_OSCURO()
         return PNG_LOGO_TEMA_CLARO()
@@ -1382,16 +1405,22 @@ class GUI_MAIN:
     def _actualizar_logo_sidebar(self, max_width=None, max_height=None):
         if not getattr(self, "label_image_logo", None):
             return
-        max_width = int(max_width or max(self.sidebar_expanded_width - 22, 40))
-        max_height = int(max_height or 28)
+        compacto = bool(self.sidebar_collapsed)
+        max_width = int(max_width or (32 if compacto else max(self.sidebar_expanded_width - 22, 40)))
+        max_height = int(max_height or (21 if compacto else 28))
         self.photo_logo = self._cargar_logo_sidebar(
-            self._ruta_logo_sidebar(self.tema_interfaz),
+            self._ruta_logo_sidebar(self.tema_interfaz, compacto=compacto),
             max_width=max_width,
             max_height=max_height,
         )
         self.label_image_logo.configure(image=self.photo_logo)
         self.label_image_logo.image = self.photo_logo
-        self._sidebar_logo_state = (self.tema_interfaz, max_width, max_height)
+        self._sidebar_logo_state = (
+            self.tema_interfaz,
+            compacto,
+            max_width,
+            max_height,
+        )
 
     def _crear_footer_action(self, widget_key, image, text, command, pady=(0, 0)):
         slot = tk.Frame(
@@ -2339,91 +2368,210 @@ class GUI_MAIN:
         logger.debug("Creando widgets de sección ACERCA DE.")
 
         if not self._seccion_acerca_creada:
+            diagnostico = self._obtener_diagnostico_acerca()
             self.frame_seccion_acerca = ttk.Frame(self.frame_cuerpo_secciones)
             self.DICT_WIDGETS.register("GUI_MAIN", "frame_seccion_acerca", self.frame_seccion_acerca)
             self.frame_seccion_acerca.grid(row=0, column=0, sticky="nsew")
             self.frame_seccion_acerca.columnconfigure(0, weight=1)
             self.frame_seccion_acerca.rowconfigure(1, weight=1)
+            self._aplicar_tema_acerca(self.tema_interfaz)
 
             header = ttk.Frame(self.frame_seccion_acerca)
-            header.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
+            header.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 8))
             header.columnconfigure(0, weight=1)
 
             ttk.Label(header, text="Acerca de", font=FONT_TITLE_XL).grid(row=0, column=0, sticky="w")
-            ttk.Label(
+            ttk.Button(
                 header,
-                text="Información general, versión y estado de la aplicación.",
-                bootstyle="secondary",
-                font=FONT_SUBTITLE,
-            ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+                text="Copiar diagnóstico",
+                command=self._copiar_diagnostico_acerca,
+                bootstyle="secondary-outline",
+                padding=(12, 7),
+            ).grid(row=0, column=1, rowspan=2, sticky="e")
 
             body = ttk.Frame(self.frame_seccion_acerca)
-            body.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
-            body.columnconfigure(0, weight=3)
-            body.columnconfigure(1, weight=2)
-            body.rowconfigure(0, weight=1)
+            body.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 12))
+            body.columnconfigure(0, weight=1)
 
-            card_info = ttk.Labelframe(
-                body,
-                text="Aplicación",
-                bootstyle="primary",
-                padding=(16, 14),
-            )
-            card_info.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-            card_info.columnconfigure(1, weight=1)
+            producto = ttk.Frame(body, borderwidth=1, relief="solid", padding=(14, 12))
+            producto.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+            producto.columnconfigure(1, weight=1)
+            marca = ttk.Frame(producto, width=46, height=46, borderwidth=1, relief="solid")
+            marca.grid(row=0, column=0, rowspan=2, padx=(0, 14))
+            marca.grid_propagate(False)
+            ttk.Label(marca, text="SP", bootstyle="success", anchor="center", font=("Segoe UI", 9, "bold")).place(relx=.5, rely=.5, anchor="center")
+            ttk.Label(producto, text="SmartPrice · VeriPre_Connector", font=("Segoe UI", 13, "bold")).grid(row=0, column=1, sticky="w")
+            ttk.Label(
+                producto,
+                text="Sincronización del catálogo local, envío a verificadores de precio y administración de publicidad para punto de venta.",
+                bootstyle="secondary", font=FONT_SUBTITLE,
+            ).grid(row=1, column=1, sticky="w", pady=(3, 0))
+            ttk.Label(producto, text="VERSIÓN", bootstyle="secondary", font=("Segoe UI", 7)).grid(row=0, column=2, sticky="e")
+            ttk.Label(producto, text=str(self.version), font=("Consolas", 16, "bold")).grid(row=1, column=2, sticky="e")
 
-            info_rows = [
-                ("Producto", "SmartPrice / VeriPre_Connector"),
-                ("Versión", str(self.version)),
-                ("Usuario Windows", str(self.usuario_windows or "-")),
-                ("Rol Windows", "Administrador local" if self.usuario_windows_es_admin else "Usuario estándar"),
-                ("Módulos habilitados", ", ".join([
-                    nombre.capitalize()
-                    for nombre, activo in self.permisos_usuario.items()
-                    if activo
-                ]) or "Sin módulos habilitados"),
+            resumen = ttk.Frame(body)
+            resumen.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+            resumen.columnconfigure(0, weight=1)
+            resumen.columnconfigure(1, weight=1)
+
+            sesion = self._crear_tarjeta_acerca(resumen, "SESIÓN")
+            sesion.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+            etiquetas_modulos = {
+                "productos": "Productos",
+                "publicidad": "Publicidad",
+                "configuracion": "Configuración",
+            }
+            modulos = [
+                etiquetas_modulos.get(nombre.lower(), nombre.capitalize())
+                for nombre, activo in self.permisos_usuario.items()
+                if activo
             ]
-            for idx, (label, value) in enumerate(info_rows):
-                ttk.Label(card_info, text=f"{label}:", font=FONT_LABEL_BOLD).grid(row=idx, column=0, sticky="nw", padx=(0, 12), pady=(0, 10))
-                ttk.Label(card_info, text=value, font=FONT_SUBTITLE, bootstyle="secondary", justify="left", wraplength=420).grid(row=idx, column=1, sticky="nw", pady=(0, 10))
-
-            card_estado = ttk.Labelframe(
-                body,
-                text="Estado",
-                bootstyle="primary",
-                padding=(16, 14),
+            filas_sesion = (
+                ("Usuario Windows", str(self.usuario_windows or "-")),
+                ("Rol", diagnostico["rol"]),
             )
-            card_estado.grid(row=0, column=1, sticky="nsew")
-            card_estado.columnconfigure(0, weight=1)
+            for fila, (titulo, valor) in enumerate(filas_sesion, start=2):
+                ttk.Label(sesion, text=titulo, bootstyle="secondary", font=("Segoe UI", 8)).grid(row=fila, column=0, sticky="w", pady=6)
+                ttk.Label(sesion, text=valor, style="SmartPriceAboutText.TLabel", font=FONT_SUBTITLE).grid(row=fila, column=1, sticky="e", pady=6)
+            ttk.Label(sesion, text="Módulos habilitados", bootstyle="secondary", font=("Segoe UI", 8)).grid(row=4, column=0, sticky="w", pady=6)
+            modulos_frame = ttk.Frame(sesion)
+            modulos_frame.grid(row=4, column=1, sticky="e", pady=6)
+            if modulos:
+                for columna, modulo in enumerate(modulos):
+                    ttk.Label(
+                        modulos_frame,
+                        text=modulo,
+                        style="SmartPriceAboutPill.TLabel",
+                        padding=(7, 2),
+                        relief="solid",
+                        borderwidth=1,
+                    ).grid(row=0, column=columna, padx=(4 if columna else 0, 0))
+            else:
+                ttk.Label(modulos_frame, text="Sin módulos habilitados", style="SmartPriceAboutMuted.TLabel").grid(row=0, column=0)
 
-            ttk.Label(
-                card_estado,
-                text="SmartPrice centraliza sincronización local, envío a dispositivos y administración de publicidad.",
-                font=FONT_SUBTITLE,
-                bootstyle="secondary",
-                justify="left",
-                wraplength=320,
-            ).grid(row=0, column=0, sticky="w", pady=(0, 14))
+            estado = self._crear_tarjeta_acerca(resumen, "ESTADO DEL SISTEMA")
+            estado.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+            estados = (
+                ("Base local SQLite", f'{diagnostico["productos"]} productos', "success"),
+                ("Sybase / ODBC", diagnostico["dsn"], "success" if diagnostico["dsn_configurado"] else "secondary"),
+                ("Dispositivos Android", self._texto_dispositivos_registrados(diagnostico["dispositivos"]), "success" if diagnostico["dispositivos"] else "secondary"),
+                ("Conexión GO-UPC", "configurada" if diagnostico["go_upc"] else "sin API key", "success" if diagnostico["go_upc"] else "warning"),
+            )
+            for fila, (titulo, valor, estilo) in enumerate(estados, start=2):
+                ttk.Label(estado, text="●", bootstyle=estilo).grid(row=fila, column=0, sticky="w", pady=6)
+                ttk.Label(estado, text=titulo, font=FONT_SUBTITLE).grid(row=fila, column=1, sticky="w", pady=6, padx=(6, 12))
+                ttk.Label(
+                    estado,
+                    text=valor,
+                    style="SmartPriceAboutWarning.TLabel" if estilo == "warning" else "SmartPriceAboutText.TLabel",
+                    font=("Consolas", 8),
+                ).grid(row=fila, column=2, sticky="e", pady=6)
 
-            ttk.Label(
-                card_estado,
-                text="Fuente local SQLite, integración Sybase por ODBC y transmisión HTTP a verificadores / players.",
-                font=FONT_SUBTITLE,
-                bootstyle="secondary",
-                justify="left",
-                wraplength=320,
-            ).grid(row=1, column=0, sticky="w", pady=(0, 14))
+            arquitectura = self._crear_tarjeta_acerca(body, "ARQUITECTURA")
+            arquitectura.grid(row=2, column=0, sticky="ew")
+            columnas = (
+                ("Interfaz", "ttkbootstrap sobre Tkinter"),
+                ("Datos locales", "SQLite con capa DAO"),
+                ("Origen corporativo", "Sybase vía ODBC"),
+                ("Transmisión", "HTTP a verificadores y players"),
+            )
+            for columna, (titulo, detalle) in enumerate(columnas):
+                arquitectura.columnconfigure(columna, weight=1)
+                celda = ttk.Frame(arquitectura, padding=(10, 8))
+                celda.grid(row=2, column=columna, sticky="nsew")
+                ttk.Label(celda, text=titulo, font=FONT_SUBTITLE).pack(anchor="w")
+                ttk.Label(celda, text=detalle, style="SmartPriceAboutMuted.TLabel", font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
 
+            pie = ttk.Frame(self.frame_seccion_acerca, height=28, style="SmartPriceAboutStatus.TFrame")
+            pie.grid(row=2, column=0, sticky="sew")
+            pie.grid_propagate(False)
+            ttk.Separator(pie).pack(side="top", fill="x")
             ttk.Label(
-                card_estado,
-                text="Desarrollado para operación de punto de venta, cartelería y verificación de precios.",
-                font=FONT_SUBTITLE,
-                bootstyle="secondary",
-                justify="left",
-                wraplength=320,
-            ).grid(row=2, column=0, sticky="w")
+                pie,
+                text="Inforhard Sistemas S.R.L.   ·   Uso interno · punto de venta   ·   soporte@inforhard.com.ar",
+                style="SmartPriceAboutStatus.TLabel", font=("Segoe UI", 8),
+            ).pack(side="left", padx=18)
 
             self._seccion_acerca_creada = True
+
+    def _crear_tarjeta_acerca(self, parent, titulo):
+        tarjeta = ttk.Frame(parent, borderwidth=1, relief="solid", padding=(12, 10))
+        tarjeta.columnconfigure(1, weight=1)
+        ttk.Label(tarjeta, text=titulo, bootstyle="secondary", font=("Segoe UI", 8)).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 5)
+        )
+        ttk.Separator(tarjeta).grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 5))
+        return tarjeta
+
+    @staticmethod
+    def _texto_dispositivos_registrados(cantidad):
+        return f"{cantidad} {'registrado' if cantidad == 1 else 'registrados'}"
+
+    def _aplicar_tema_acerca(self, tema):
+        if not getattr(self, "ventana_creacion_caja", None):
+            return
+        oscuro = tema == "oscuro"
+        texto = "#DBE7E0" if oscuro else "#2B3A34"
+        tenue = "#7D9187" if oscuro else "#7C8B84"
+        fondo_pie = "#0B1210" if oscuro else "#ECEEED"
+        borde = "#2B3A34" if oscuro else "#CDD6D1"
+        style = self.ventana_creacion_caja.style
+        style.configure("SmartPriceAboutText.TLabel", foreground=texto)
+        style.configure("SmartPriceAboutMuted.TLabel", foreground=tenue)
+        style.configure("SmartPriceAboutWarning.TLabel", foreground="#D99A2B" if oscuro else "#A66B00")
+        style.configure("SmartPriceAboutPill.TLabel", foreground=texto, bordercolor=borde)
+        style.configure("SmartPriceAboutStatus.TFrame", background=fondo_pie)
+        style.configure("SmartPriceAboutStatus.TLabel", background=fondo_pie, foreground=tenue)
+
+    def _obtener_diagnostico_acerca(self):
+        diagnostico = {
+            "productos": "sin información",
+            "dsn": "sin configurar",
+            "dsn_configurado": False,
+            "dispositivos": 0,
+            "go_upc": False,
+            "rol": "Administrador local" if self.usuario_windows_es_admin else "Usuario estándar",
+        }
+        try:
+            conexion = self.DICT_WIDGETS.get_widget("DATABASE", "CONEXIONDBA")
+            if conexion:
+                total = conexion.ejecutar_consulta("SELECT COUNT(*) FROM productos") or [(0,)]
+                diagnostico["productos"] = f"{int(total[0][0] or 0):,}".replace(",", ".")
+                dsn = conexion.ejecutar_consulta("SELECT dsn FROM VERIPRE_CONEXION WHERE activo = 1 LIMIT 1") or []
+                if dsn:
+                    diagnostico["dsn"] = str(dsn[0][0])
+                    diagnostico["dsn_configurado"] = True
+                equipos = conexion.ejecutar_consulta("SELECT COUNT(*) FROM VERIPRE_EQUIPOS") or [(0,)]
+                diagnostico["dispositivos"] = int(equipos[0][0] or 0)
+                api_key = conexion.ejecutar_consulta("SELECT COUNT(*) FROM api_key WHERE api_key <> ''") or [(0,)]
+                diagnostico["go_upc"] = bool(api_key[0][0])
+        except Exception:
+            logger.exception("No se pudo construir el diagnóstico de Acerca de.")
+        return diagnostico
+
+    def _copiar_diagnostico_acerca(self):
+        datos = self._obtener_diagnostico_acerca()
+        etiquetas_modulos = {
+            "productos": "Productos",
+            "publicidad": "Publicidad",
+            "configuracion": "Configuración",
+        }
+        modulos = ", ".join(
+            etiquetas_modulos.get(nombre.lower(), nombre.capitalize())
+            for nombre, activo in self.permisos_usuario.items()
+            if activo
+        ) or "ninguno"
+        texto = (
+            f"SmartPrice · VeriPre_Connector {self.version}\n"
+            f"Usuario: {self.usuario_windows}\nRol: {datos['rol']}\nMódulos: {modulos}\n"
+            f"SQLite: {datos['productos']} productos\nSybase/ODBC: {datos['dsn']}\n"
+            f"Dispositivos: {self._texto_dispositivos_registrados(datos['dispositivos'])}\n"
+            f"GO-UPC: {'configurada' if datos['go_upc'] else 'sin API key'}"
+        )
+        self.ventana_creacion_caja.clipboard_clear()
+        self.ventana_creacion_caja.clipboard_append(texto)
+        self.ventana_creacion_caja.update_idletasks()
+        messagebox.showinfo("Diagnóstico copiado", "El diagnóstico se copió al portapapeles.")
 
     def CONEXIONES_DBA(self):
         ruta_db = str(obtener_sqlite_path())
