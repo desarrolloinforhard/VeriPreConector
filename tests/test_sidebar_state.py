@@ -1,10 +1,12 @@
 import unittest
+import inspect
 from unittest.mock import Mock, patch
 
 import GUI.GUI_MAIN as gui_main_module
 from GUI.GUI_MAIN import GUI_MAIN
 from GUI.CONTENIDO_PRODUCTO import ContenidoProducto
 from GUI.CONTENIDO_PUBLICIDAD import ContenidoPublicidad
+from GUI.GUI_CONFIG import GUI_CONFIG
 from core.ui.theme_tokens import FONT_LABEL_BOLD
 from core.ui.ttk_theme import SMARTPRICE_DARK_THEME, SMARTPRICE_LIGHT_THEME
 from core.ui.ttk_theme import SMARTPRICE_DARK_BORDER, SMARTPRICE_DARK_CARD, SMARTPRICE_DARK_SURFACE
@@ -383,6 +385,22 @@ class SidebarStateTest(unittest.TestCase):
         button.configure.assert_called_with(
             text="Acerca de", compound="left", anchor="w", padx=8
         )
+
+    def test_configuracion_usa_navegacion_vertical_sin_notebook(self):
+        fuente = inspect.getsource(GUI_CONFIG.__init__)
+        fuente_cambio = inspect.getsource(GUI_CONFIG._mostrar_seccion_configuracion)
+        self.assertIn("frame_config_nav", fuente)
+        self.assertIn("_crear_navegacion_configuracion", fuente)
+        self.assertNotIn("ttk.Notebook", fuente)
+        self.assertIn("grid_remove", fuente_cambio)
+        self.assertNotIn("pack_forget", fuente_cambio)
+
+    def test_configuracion_muestra_dispositivo_inicial_y_guia_plegable(self):
+        fuente_lista = inspect.getsource(GUI_CONFIG._poblar_lista_dispositivos_config)
+        fuente_guia = inspect.getsource(GUI_CONFIG._alternar_guia_imagenes)
+        self.assertIn("selection_set", fuente_lista)
+        self.assertIn("_seleccionar_dispositivo_lista", fuente_lista)
+        self.assertIn("pack_forget", fuente_guia)
 
 
 if __name__ == "__main__":
