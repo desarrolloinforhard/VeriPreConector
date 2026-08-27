@@ -1,9 +1,11 @@
 import logging
 import sqlite3
 import tempfile
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Thread
 
 from DB.database import SQLiteDB
 
@@ -155,6 +157,78 @@ class SQLiteConcurrencyTests(unittest.TestCase):
             ),
             [(40,)],
         )
+
+    def test_writer_waits_for_external_lock_and_recovers_after_release(self):
+        external = sqlite3.connect(
+            str(self.db_path),
+            timeout=1.0,
+            check_same_thread=False,
+        )
+        external.execute("BEGIN IMMEDIATE")
+        external.execute(
+            "INSERT INTO eventos(worker, secuencia, valor) VALUES (9, 1, 'externo')"
+        )
+
+        def release_lock():
+            time.sleep(0.15)
+            external.commit()
+            external.close()
+
+        releaser = Thread(target=release_lock)
+        releaser.start()
+        started = time.monotonic()
+        result = self.db.ejecutar_consulta(
+            "INSERT INTO eventos(worker, secuencia, valor) VALUES (9, 2, 'local')"
+        )
+        elapsed = time.monotonic() - started
+        releaser.join()
+
+        self.assertEqual(result, [])
+        self.assertGreaterEqual(elapsed, 0.1)
+        self.assertEqual(
+            self.db.ejecutar_consulta(
+                "SELECT secuencia, valor FROM eventos WHERE worker = 9 ORDER BY secuencia"
+            ),
+            [(1, "externo"), (2, "local")],
+        )
+
+    def test_timed_out_transaction_rolls_back_and_next_write_recovers(self):
+        self.db.cerrar_conexion()
+        short_wait_db = SQLiteDB(str(self.db_path), timeout_seconds=0.1)
+        external = sqlite3.connect(str(self.db_path), timeout=1.0)
+        external.execute("BEGIN IMMEDIATE")
+        external.execute(
+            "INSERT INTO eventos(worker, secuencia, valor) VALUES (10, 1, 'bloqueo')"
+        )
+
+        def blocked_operation(cursor):
+            cursor.execute(
+                "INSERT INTO eventos(worker, secuencia, valor) VALUES (10, 2, 'parcial')"
+            )
+            return True
+
+        started = time.monotonic()
+        result = short_wait_db.ejecutar_en_transaccion(blocked_operation)
+        elapsed = time.monotonic() - started
+
+        self.assertFalse(result)
+        self.assertGreaterEqual(elapsed, 0.08)
+        external.rollback()
+        external.close()
+
+        self.assertEqual(
+            short_wait_db.ejecutar_consulta(
+                "INSERT INTO eventos(worker, secuencia, valor) VALUES (10, 3, 'recuperado')"
+            ),
+            [],
+        )
+        self.assertEqual(
+            short_wait_db.ejecutar_consulta(
+                "SELECT secuencia, valor FROM eventos WHERE worker = 10 ORDER BY secuencia"
+            ),
+            [(3, "recuperado")],
+        )
+        short_wait_db.cerrar_conexion()
 
 
 if __name__ == "__main__":
