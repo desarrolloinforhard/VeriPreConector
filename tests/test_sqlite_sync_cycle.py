@@ -105,6 +105,17 @@ class SQLiteSyncCycleIntegrationTests(unittest.TestCase):
         self.db.cerrar_conexion()
         self.temp_dir.cleanup()
 
+    def _visible_state(self):
+        return {
+            "products": self.products.listar_todos(),
+            "prices_a": self.products.listar_precios_adicionales_por_codigo("A"),
+            "prices_b": self.products.listar_precios_adicionales_por_codigo("B"),
+            "simple_offers": self.products.listar_ofertas_por_codigos(["A", "B"]),
+            "plu_offers": self.plu.listar_ofertas(),
+            "plu_parameters": self.plu.listar_parametros_por_oferta(7),
+            "plu_products": self.plu.listar_productos_por_oferta(7),
+        }
+
     def test_two_complete_cycles_leave_only_the_latest_consistent_state(self):
         self.assertTrue(
             self.products.reemplazar_snapshot(
@@ -198,6 +209,77 @@ class SQLiteSyncCycleIntegrationTests(unittest.TestCase):
         self.assertEqual(self.products.obtener_oferta_por_codigo("A")[1:3], (1, 75))
         self.assertEqual([row[0] for row in self.plu.listar_ofertas()], [7])
         self.assertEqual([row[0] for row in self.plu.listar_ofertas_por_codigo("A")], [7])
+
+    def test_repeating_the_same_complete_cycle_is_idempotent(self):
+        products = [product("A", 100), product("B", 200)]
+        prices = [extra_price("A", 90), extra_price("B", 180)]
+        incremental_prices = [extra_price("A", 85)]
+        simple_offers = [simple_offer("A", 75)]
+        plu_offers = [plu_offer(7, "Promocion estable")]
+        plu_parameters = [plu_parameter(7)]
+        plu_products = [plu_product(7, "A")]
+
+        def synchronize():
+            self.assertTrue(self.products.reemplazar_snapshot(products, prices))
+            self.assertTrue(
+                self.products.upsert_precios_adicionales(
+                    incremental_prices,
+                    codigos_objetivo=["A"],
+                )
+            )
+            self.assertTrue(
+                self.products.reemplazar_snapshot_ofertas(simple_offers)
+            )
+            self.assertTrue(
+                self.plu.reemplazar_snapshot(
+                    plu_offers,
+                    plu_parameters,
+                    plu_products,
+                )
+            )
+
+        synchronize()
+        first_state = self._visible_state()
+        synchronize()
+        second_state = self._visible_state()
+
+        self.assertEqual(second_state, first_state)
+        self.assertEqual(len(second_state["products"]), 2)
+        self.assertEqual(len(second_state["prices_a"]), 1)
+        self.assertEqual(len(second_state["prices_b"]), 1)
+        self.assertEqual(len(second_state["plu_offers"]), 1)
+        self.assertEqual(len(second_state["plu_parameters"]), 1)
+        self.assertEqual(len(second_state["plu_products"]), 1)
+
+    def test_repeating_empty_snapshots_keeps_every_collection_empty(self):
+        self.assertTrue(
+            self.products.reemplazar_snapshot(
+                [product("A", 100)],
+                [extra_price("A", 90)],
+            )
+        )
+        self.assertTrue(
+            self.products.reemplazar_snapshot_ofertas([simple_offer("A", 75)])
+        )
+        self.assertTrue(
+            self.plu.reemplazar_snapshot(
+                [plu_offer(7, "Promocion")],
+                [plu_parameter(7)],
+                [plu_product(7, "A")],
+            )
+        )
+
+        for _ in range(2):
+            self.assertTrue(self.products.reemplazar_snapshot([], []))
+            self.assertTrue(self.products.reemplazar_snapshot_ofertas([]))
+            self.assertTrue(self.plu.reemplazar_snapshot([], [], []))
+
+        self.assertEqual(self.products.listar_todos(), [])
+        self.assertEqual(self.products.listar_precios_adicionales_por_codigo("A"), [])
+        self.assertEqual(self.products.listar_ofertas_por_codigos(["A"]), [])
+        self.assertEqual(self.plu.listar_ofertas(), [])
+        self.assertEqual(self.plu.listar_parametros_por_oferta(7), [])
+        self.assertEqual(self.plu.listar_productos_por_oferta(7), [])
 
 
 if __name__ == "__main__":
