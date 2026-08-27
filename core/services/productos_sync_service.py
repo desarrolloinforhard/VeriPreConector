@@ -400,8 +400,13 @@ class ProductosSyncService:
 
     def _sync_snapshot_ofertas(self, ofertas_por_cref, progress_callback=None):
         self._notify(progress_callback, "Actualizando snapshot local de ofertas...", 0, 100)
-        self.sqlite_dao.limpiar_snapshot_ofertas()
-        self.sqlite_dao.aplicar_snapshot_ofertas_por_cref(list(ofertas_por_cref.values()))
+        guardado = self.sqlite_dao.reemplazar_snapshot_ofertas(
+            list(ofertas_por_cref.values())
+        )
+        if not guardado:
+            raise RuntimeError(
+                "no se pudo reemplazar atomicamente el snapshot local de ofertas"
+            )
         self._notify(progress_callback, f"Snapshot local de ofertas actualizado: {len(ofertas_por_cref)} activas.", 100, 100)
 
     def _sync_ofertas_plu_snapshot(self, progress_callback=None):
