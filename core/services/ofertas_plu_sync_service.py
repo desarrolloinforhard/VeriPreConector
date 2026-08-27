@@ -8,6 +8,7 @@ from core.services.sync_errors import (
     SynchronizationReadError,
     SynchronizationValidationError,
 )
+from core.services.sync_summary import SyncRunSummary
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,24 @@ class OfertasPLUSyncService:
         self.sybase_dao = OfertasDAO(sybase_db)
 
     def sincronizar(self, progress_callback=None):
+        summary = SyncRunSummary("ofertas_ofplu")
+        self.last_sync_summary = summary
+        try:
+            result = self._sincronizar(progress_callback)
+            summary.set_counts(
+                ofertas=result.get("total_ofertas", 0),
+                parametros=len(result.get("parametros", [])),
+                productos=len(result.get("productos", [])),
+            )
+            summary.finish_success()
+            return result
+        except Exception as exc:
+            summary.finish_error(exc)
+            raise
+        finally:
+            summary.log(logger)
+
+    def _sincronizar(self, progress_callback=None):
         self._notify(progress_callback, "Sincronizando ofertas OFPLU...", 0, 100)
 
         cabeceras = self._leer_origen(

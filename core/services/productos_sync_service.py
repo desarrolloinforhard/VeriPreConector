@@ -8,6 +8,7 @@ from core.services.sync_errors import (
     SynchronizationReadError,
     SynchronizationValidationError,
 )
+from core.services.sync_summary import SyncRunSummary
 
 
 logger = get_logger(__name__)
@@ -40,22 +41,46 @@ class ProductosSyncService:
         return self.sqlite_dao.listar_todos()
 
     def sincronizar_completo(self, progress_callback=None):
-        articulos = self._buscar_articulos_completos()
-        return self._sincronizar_articulos(
-            articulos,
-            replace_all=True,
-            progress_callback=progress_callback,
+        return self._ejecutar_con_resumen(
+            "productos_completo",
+            lambda: self._sincronizar_articulos(
+                self._buscar_articulos_completos(),
+                replace_all=True,
+                progress_callback=progress_callback,
+            ),
         )
 
     def sincronizar_actualizados_hoy(self, progress_callback=None, incluir_ultima_fecha=True):
-        articulos = self._buscar_articulos_actualizados_desde_ultima_fecha(
-            incluir_ultima_fecha=incluir_ultima_fecha,
+        return self._ejecutar_con_resumen(
+            "productos_incremental",
+            lambda: self._sincronizar_articulos(
+                self._buscar_articulos_actualizados_desde_ultima_fecha(
+                    incluir_ultima_fecha=incluir_ultima_fecha,
+                ),
+                replace_all=False,
+                progress_callback=progress_callback,
+            ),
         )
-        return self._sincronizar_articulos(
-            articulos,
-            replace_all=False,
-            progress_callback=progress_callback,
-        )
+
+    def _ejecutar_con_resumen(self, flow, callback):
+        summary = SyncRunSummary(flow)
+        self.last_sync_summary = summary
+        try:
+            result = callback()
+            summary.set_counts(
+                articulos_leidos=len(result.get("articulos", [])),
+                productos_guardados=result.get("total", 0),
+                precios_adicionales=len(result.get("precios_adicionales", [])),
+                ofertas_pso=len(result.get("ofertas_activas", [])),
+                ofertas_ofplu=result.get("ofertas_plu", {}).get("total_ofertas", 0),
+            )
+            summary.finish_success()
+            return result
+        except Exception as exc:
+            summary.finish_error(exc)
+            raise
+        finally:
+            summary.log(logger)
 
     def _sincronizar_articulos(self, articulos, replace_all, progress_callback=None):
         self._notify(progress_callback, "Iniciando la carga de articulos...", 0, 100)

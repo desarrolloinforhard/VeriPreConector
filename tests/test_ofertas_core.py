@@ -247,6 +247,11 @@ class OfertasPLUSyncServiceTests(unittest.TestCase):
         self.assertEqual(sqlite_dao.snapshots[0][0], result["ofertas"])
         self.assertEqual(sqlite_dao.snapshots[0][1], result["parametros"])
         self.assertEqual(sqlite_dao.snapshots[0][2], result["productos"])
+        summary = service.last_sync_summary.as_dict()
+        self.assertEqual(summary["estado"], "success")
+        self.assertEqual(summary["cantidades"]["ofertas"], 1)
+        self.assertEqual(summary["cantidades"]["parametros"], 1)
+        self.assertEqual(summary["cantidades"]["productos"], 1)
 
     def test_empty_sync_propagates_snapshot_persistence_failure(self):
         service = OfertasPLUSyncService.__new__(OfertasPLUSyncService)
@@ -271,6 +276,11 @@ class OfertasPLUSyncServiceTests(unittest.TestCase):
             service.sincronizar()
 
         self.assertEqual(raised.exception.resource, "ofertas_ofplu")
+        self.assertEqual(service.last_sync_summary.status, "error")
+        self.assertEqual(
+            service.last_sync_summary.error_code,
+            "sync_persistence_error",
+        )
 
     def test_source_read_error_keeps_original_cause(self):
         cause = OSError("origen no disponible")
