@@ -246,6 +246,10 @@ class SQLiteDB:
         logger.debug("Creando/verificando tabla SQLite: productos")
         self.ejecutar_consulta(consulta)
         self._asegurar_columnas_productos()
+        self.ejecutar_consulta(
+            "CREATE INDEX IF NOT EXISTS idx_productos_dfechau_codigo "
+            "ON productos(dFechaU, codigo)"
+        )
 
     def crear_tabla_VERIPRE_producto_precios(self):
         """Crea la tabla de precios y packs adicionales por producto."""
@@ -268,6 +272,10 @@ class SQLiteDB:
         """
         logger.debug("Creando/verificando tabla SQLite: producto_precios")
         self.ejecutar_consulta(consulta)
+        self.ejecutar_consulta(
+            "CREATE INDEX IF NOT EXISTS idx_producto_precios_codigo_orden "
+            "ON producto_precios(codigo, orden, cantidad, titulo)"
+        )
 
     def crear_tabla_VERIPRE_ofertas_plu(self):
         """Crea la cabecera local de ofertas OFPLU."""
@@ -354,6 +362,10 @@ class SQLiteDB:
         """
         logger.debug("Creando/verificando tabla SQLite: ofertas_plu_productos")
         self.ejecutar_consulta(consulta)
+        self.ejecutar_consulta(
+            "CREATE INDEX IF NOT EXISTS idx_ofertas_plu_productos_codigo_noferta "
+            "ON ofertas_plu_productos(codigo, noferta)"
+        )
 
     def crear_tabla_VERIPRE_EQUIPOS(self):
         """Crea la tabla VERIPRE_EQUIPOS."""
