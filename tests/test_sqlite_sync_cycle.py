@@ -6,6 +6,7 @@ from pathlib import Path
 from DB.database import SQLiteDB
 from core.dao.ofertas_plu_sqlite_dao import OfertasPLUSQLiteDAO
 from core.dao.productos_dao import ProductosSQLiteDAO
+from core.dao.snapshot_validation import SnapshotValidationError
 
 
 def product(code, price):
@@ -182,13 +183,12 @@ class SQLiteSyncCycleIntegrationTests(unittest.TestCase):
         )
 
         duplicate_parameters = [plu_parameter(8), plu_parameter(8)]
-        self.assertFalse(
+        with self.assertRaisesRegex(SnapshotValidationError, r"parametros\[1\] duplica"):
             self.plu.reemplazar_snapshot(
                 [plu_offer(8, "Snapshot invalido")],
                 duplicate_parameters,
                 [plu_product(8, "A")],
             )
-        )
 
         self.assertEqual([row[1] for row in self.products.listar_todos()], ["A"])
         self.assertEqual(

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from DB.database import SQLiteDB
 from core.dao.productos_dao import ProductosSQLiteDAO
+from core.dao.snapshot_validation import SnapshotValidationError
 from core.services.productos_sync_service import ProductosSyncService
 
 
@@ -100,12 +101,11 @@ class AtomicProductSnapshotTests(unittest.TestCase):
         invalid_price = extra_price("NEW")
         invalid_price["codigo"] = None
 
-        self.assertFalse(
+        with self.assertRaisesRegex(SnapshotValidationError, r"precios\[0\].codigo"):
             self.dao.reemplazar_snapshot(
                 [product("NEW")],
                 [invalid_price],
             )
-        )
 
         products = self.dao.listar_todos()
         self.assertEqual([row[1] for row in products], ["OLD"])
@@ -162,12 +162,11 @@ class AtomicProductSnapshotTests(unittest.TestCase):
         invalid_price = extra_price("A", 70)
         invalid_price["codigo"] = None
 
-        self.assertFalse(
+        with self.assertRaisesRegex(SnapshotValidationError, r"precios\[0\].codigo"):
             self.dao.upsert_precios_adicionales(
                 [invalid_price],
                 codigos_objetivo=["A"],
             )
-        )
 
         self.assertEqual(
             [row[8] for row in self.dao.listar_precios_adicionales_por_codigo("A")],
@@ -253,6 +252,37 @@ class AtomicProductSnapshotTests(unittest.TestCase):
         offer = self.dao.obtener_oferta_por_codigo("A")
         self.assertEqual(offer[1], 0)
         self.assertIsNone(offer[2])
+
+    def test_duplicate_product_code_is_rejected_before_replacing_snapshot(self):
+        self.assertTrue(self.dao.reemplazar_snapshot([product("OLD")], []))
+
+        with self.assertRaisesRegex(SnapshotValidationError, "duplica codigo"):
+            self.dao.reemplazar_snapshot(
+                [product("NEW"), product("NEW", 120)],
+                [],
+            )
+
+        self.assertEqual([row[1] for row in self.dao.listar_todos()], ["OLD"])
+
+    def test_orphan_extra_price_is_rejected_before_replacing_snapshot(self):
+        self.assertTrue(self.dao.reemplazar_snapshot([product("OLD")], []))
+
+        with self.assertRaisesRegex(SnapshotValidationError, "no existe en productos"):
+            self.dao.reemplazar_snapshot(
+                [product("NEW")],
+                [extra_price("UNKNOWN")],
+            )
+
+        self.assertEqual([row[1] for row in self.dao.listar_todos()], ["OLD"])
+
+    def test_unknown_simple_offer_reference_preserves_previous_offer(self):
+        self.assertTrue(self.dao.reemplazar_snapshot([product("A")], []))
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([simple_offer("A")]))
+
+        with self.assertRaisesRegex(SnapshotValidationError, "no existe en productos"):
+            self.dao.reemplazar_snapshot_ofertas([simple_offer("UNKNOWN")])
+
+        self.assertEqual(self.dao.obtener_oferta_por_codigo("A")[1:3], (1, 75))
 
 
 class FakeProductsDAO:
