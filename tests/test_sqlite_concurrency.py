@@ -46,6 +46,14 @@ class SQLiteConcurrencyTests(unittest.TestCase):
         self.assertEqual(foreign_keys, [(1,)])
         self.assertEqual(journal_mode[0][0].lower(), "wal")
 
+    def test_connect_reuses_the_active_connection(self):
+        original_connection = self.db.connection
+
+        returned_connection = self.db.conectar()
+
+        self.assertIs(returned_connection, original_connection)
+        self.assertIs(self.db.connection, original_connection)
+
     def test_concurrent_writers_keep_every_committed_row(self):
         workers = 8
         rows_per_worker = 25
