@@ -20,7 +20,7 @@ class OfertasPLUSyncService:
         nofertas = [fila[0] for fila in cabeceras if fila and fila[0] is not None]
 
         if not nofertas:
-            self.sqlite_dao.reemplazar_snapshot([], [], [])
+            self._reemplazar_snapshot([], [], [])
             self._notify(progress_callback, "No se encontraron ofertas OFPLU.", 100, 100)
             return {"ofertas": [], "parametros": [], "productos": [], "total_ofertas": 0}
 
@@ -35,7 +35,11 @@ class OfertasPLUSyncService:
 
         ofertas_payload = list(ofertas_normalizadas.values())
         self._notify(progress_callback, "Persistiendo snapshot local de OFPLU...", 80, 100)
-        self.sqlite_dao.reemplazar_snapshot(ofertas_payload, parametros_normalizados, productos_normalizados)
+        self._reemplazar_snapshot(
+            ofertas_payload,
+            parametros_normalizados,
+            productos_normalizados,
+        )
         self._notify(
             progress_callback,
             f"Snapshot OFPLU actualizado: {len(ofertas_payload)} ofertas, {len(parametros_normalizados)} parametros, {len(productos_normalizados)} productos.",
@@ -49,6 +53,10 @@ class OfertasPLUSyncService:
             "productos": productos_normalizados,
             "total_ofertas": len(ofertas_payload),
         }
+
+    def _reemplazar_snapshot(self, ofertas, parametros, productos):
+        if not self.sqlite_dao.reemplazar_snapshot(ofertas, parametros, productos):
+            raise RuntimeError("no se pudo reemplazar el snapshot local de OFPLU")
 
     def _normalizar_cabeceras(self, cabeceras, parametros_normalizados):
         deshabilitadas = {
