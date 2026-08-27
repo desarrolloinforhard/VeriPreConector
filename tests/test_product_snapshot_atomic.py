@@ -116,6 +116,77 @@ class AtomicProductSnapshotTests(unittest.TestCase):
         self.assertEqual(self.dao.listar_todos(), [])
         self.assertEqual(self.dao.listar_precios_adicionales_por_codigo("OLD"), [])
 
+    def test_incremental_prices_only_replace_target_codes(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [product("A"), product("B")],
+                [extra_price("A", 90), extra_price("B", 80)],
+            )
+        )
+
+        self.assertTrue(
+            self.dao.upsert_precios_adicionales(
+                [extra_price("A", 70)],
+                codigos_objetivo=["A"],
+            )
+        )
+
+        self.assertEqual(
+            [row[8] for row in self.dao.listar_precios_adicionales_por_codigo("A")],
+            [70],
+        )
+        self.assertEqual(
+            [row[8] for row in self.dao.listar_precios_adicionales_por_codigo("B")],
+            [80],
+        )
+
+    def test_invalid_incremental_price_rolls_back_target_deletion(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [product("A"), product("B")],
+                [extra_price("A", 90), extra_price("B", 80)],
+            )
+        )
+        invalid_price = extra_price("A", 70)
+        invalid_price["codigo"] = None
+
+        self.assertFalse(
+            self.dao.upsert_precios_adicionales(
+                [invalid_price],
+                codigos_objetivo=["A"],
+            )
+        )
+
+        self.assertEqual(
+            [row[8] for row in self.dao.listar_precios_adicionales_por_codigo("A")],
+            [90],
+        )
+        self.assertEqual(
+            [row[8] for row in self.dao.listar_precios_adicionales_por_codigo("B")],
+            [80],
+        )
+
+    def test_empty_incremental_prices_remove_only_target_code(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [product("A"), product("B")],
+                [extra_price("A", 90), extra_price("B", 80)],
+            )
+        )
+
+        self.assertTrue(
+            self.dao.upsert_precios_adicionales(
+                [],
+                codigos_objetivo=["A"],
+            )
+        )
+
+        self.assertEqual(self.dao.listar_precios_adicionales_por_codigo("A"), [])
+        self.assertEqual(
+            [row[8] for row in self.dao.listar_precios_adicionales_por_codigo("B")],
+            [80],
+        )
+
 
 class FakeProductsDAO:
     def __init__(self, result=True):
