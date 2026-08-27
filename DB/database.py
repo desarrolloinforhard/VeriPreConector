@@ -8,13 +8,14 @@ logger = get_logger(__name__)
 
 
 class SQLiteDB:
-    def __init__(self, db_name):
+    def __init__(self, db_name, timeout_seconds=30.0):
         """Inicializa la conexión con la base de datos."""
         self.db_name = db_name
         self.ruta_db = db_name
         self.connection = None
         self.cursor = None
         self._lock = threading.RLock()
+        self.timeout_seconds = max(0.0, float(timeout_seconds))
 
         logger.info("SQLiteDB inicializado | db_name=%s", self.db_name)
 
@@ -28,9 +29,11 @@ class SQLiteDB:
                 self.connection = sqlite3.connect(
                     self.db_name,
                     check_same_thread=False,
-                    timeout=30.0,
+                    timeout=self.timeout_seconds,
                 )
-                self.connection.execute("PRAGMA busy_timeout = 30000")
+                self.connection.execute(
+                    f"PRAGMA busy_timeout = {round(self.timeout_seconds * 1000)}"
+                )
                 self.connection.execute("PRAGMA foreign_keys = ON")
                 self.connection.execute("PRAGMA synchronous = NORMAL")
                 try:
