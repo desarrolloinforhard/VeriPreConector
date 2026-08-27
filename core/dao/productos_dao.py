@@ -1,4 +1,27 @@
 class ProductosSQLiteDAO:
+    CLEAR_OFFERS_SQL = """
+        UPDATE productos
+        SET
+            TIENE_OFERTA = 0,
+            PRECIO_OFERTA = NULL,
+            OFERTA_DESDE = NULL,
+            OFERTA_HASTA = NULL,
+            OFERTA_ORIGEN = NULL,
+            OFERTA_CCODDIV = NULL,
+            OFERTA_DTO = NULL
+    """
+    APPLY_OFFERS_SQL = """
+        UPDATE productos
+        SET
+            TIENE_OFERTA = 1,
+            PRECIO_OFERTA = ?,
+            OFERTA_DESDE = ?,
+            OFERTA_HASTA = ?,
+            OFERTA_ORIGEN = ?,
+            OFERTA_CCODDIV = ?,
+            OFERTA_DTO = ?
+        WHERE CREF = ?
+    """
     UPSERT_PRODUCTOS_SQL = """
         INSERT INTO productos (
             CREF, codigo, descripcion, precio, dfechau,
@@ -212,36 +235,30 @@ class ProductosSQLiteDAO:
         return self.db.ejecutar_consulta(sql, tuple(codigos)) or []
 
     def limpiar_snapshot_ofertas(self):
-        sql = """
-        UPDATE productos
-        SET
-            TIENE_OFERTA = 0,
-            PRECIO_OFERTA = NULL,
-            OFERTA_DESDE = NULL,
-            OFERTA_HASTA = NULL,
-            OFERTA_ORIGEN = NULL,
-            OFERTA_CCODDIV = NULL,
-            OFERTA_DTO = NULL
-        """
-        return self.db.ejecutar_consulta(sql)
+        return self.db.ejecutar_consulta(self.CLEAR_OFFERS_SQL)
 
     def aplicar_snapshot_ofertas_por_cref(self, ofertas):
         if not ofertas:
             return True
 
-        sql = """
-        UPDATE productos
-        SET
-            TIENE_OFERTA = 1,
-            PRECIO_OFERTA = ?,
-            OFERTA_DESDE = ?,
-            OFERTA_HASTA = ?,
-            OFERTA_ORIGEN = ?,
-            OFERTA_CCODDIV = ?,
-            OFERTA_DTO = ?
-        WHERE CREF = ?
-        """
-        parametros = [
+        parametros = self._parametros_ofertas(ofertas)
+        if not parametros:
+            return True
+        return self.db.ejecutar_consultamany(self.APPLY_OFFERS_SQL, parametros)
+
+    def reemplazar_snapshot_ofertas(self, ofertas):
+        parametros = self._parametros_ofertas(ofertas)
+
+        def reemplazar(cursor):
+            cursor.execute(self.CLEAR_OFFERS_SQL)
+            if parametros:
+                cursor.executemany(self.APPLY_OFFERS_SQL, parametros)
+            return True
+
+        return bool(self.db.ejecutar_en_transaccion(reemplazar))
+
+    def _parametros_ofertas(self, ofertas):
+        return [
             (
                 oferta.get("precio_oferta"),
                 oferta.get("oferta_desde"),
@@ -254,9 +271,6 @@ class ProductosSQLiteDAO:
             for oferta in ofertas
             if oferta.get("cref")
         ]
-        if not parametros:
-            return True
-        return self.db.ejecutar_consultamany(sql, parametros)
 
     def _insertar_precios_adicionales(self, precios):
         if not precios:

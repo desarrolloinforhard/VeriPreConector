@@ -36,6 +36,18 @@ def extra_price(code, price=90):
     }
 
 
+def simple_offer(code, price=75):
+    return {
+        "cref": f"REF-{code}",
+        "precio_oferta": price,
+        "oferta_desde": "2026-08-01",
+        "oferta_hasta": "2026-08-31",
+        "oferta_origen": "ATIPICAS",
+        "oferta_ccoddiv": "PSO",
+        "oferta_dto": 25,
+    }
+
+
 class AtomicProductSnapshotTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -187,6 +199,61 @@ class AtomicProductSnapshotTests(unittest.TestCase):
             [80],
         )
 
+    def test_simple_offer_snapshot_moves_offer_atomically(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [product("A"), product("B")],
+                [],
+            )
+        )
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([simple_offer("A")]))
+
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([simple_offer("B", 60)]))
+
+        offer_a = self.dao.obtener_oferta_por_codigo("A")
+        offer_b = self.dao.obtener_oferta_por_codigo("B")
+        self.assertEqual(offer_a[1], 0)
+        self.assertIsNone(offer_a[2])
+        self.assertEqual(offer_b[1], 1)
+        self.assertEqual(offer_b[2], 60)
+
+    def test_failed_simple_offer_update_rolls_back_clear(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [product("A"), product("B")],
+                [],
+            )
+        )
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([simple_offer("A")]))
+        self.db.ejecutar_consulta(
+            """
+            CREATE TRIGGER reject_b_offer
+            BEFORE UPDATE OF TIENE_OFERTA ON productos
+            WHEN NEW.CREF = 'REF-B' AND NEW.TIENE_OFERTA = 1
+            BEGIN
+                SELECT RAISE(ABORT, 'oferta rechazada');
+            END
+            """
+        )
+
+        self.assertFalse(self.dao.reemplazar_snapshot_ofertas([simple_offer("B")]))
+
+        offer_a = self.dao.obtener_oferta_por_codigo("A")
+        offer_b = self.dao.obtener_oferta_por_codigo("B")
+        self.assertEqual(offer_a[1], 1)
+        self.assertEqual(offer_a[2], 75)
+        self.assertEqual(offer_b[1], 0)
+
+    def test_empty_simple_offer_snapshot_clears_previous_offers(self):
+        self.assertTrue(self.dao.reemplazar_snapshot([product("A")], []))
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([simple_offer("A")]))
+
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([]))
+
+        offer = self.dao.obtener_oferta_por_codigo("A")
+        self.assertEqual(offer[1], 0)
+        self.assertIsNone(offer[2])
+
 
 class FakeProductsDAO:
     def __init__(self, result=True):
@@ -195,6 +262,9 @@ class FakeProductsDAO:
 
     def reemplazar_snapshot(self, products, prices):
         self.snapshots.append((products, prices))
+        return self.result
+
+    def reemplazar_snapshot_ofertas(self, offers):
         return self.result
 
 
@@ -233,6 +303,15 @@ class FullSyncIntegrationTests(unittest.TestCase):
             )
 
         self.assertEqual(offer_sync_calls, [])
+
+    def test_offer_sync_stops_when_atomic_snapshot_fails(self):
+        service = ProductosSyncService.__new__(ProductosSyncService)
+        service.sqlite_dao = FakeProductsDAO(result=False)
+
+        with self.assertRaisesRegex(RuntimeError, "snapshot local de ofertas"):
+            service._sync_snapshot_ofertas(
+                {"REF-A": simple_offer("A")}
+            )
 
 
 if __name__ == "__main__":
