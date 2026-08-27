@@ -2,6 +2,10 @@ import unittest
 
 from core.services.ofertas_plu_sync_service import OfertasPLUSyncService
 from core.services.ofertas_service import OfertasService
+from core.services.sync_errors import (
+    SynchronizationPersistenceError,
+    SynchronizationReadError,
+)
 
 
 class FakeOfertasDAO:
@@ -38,6 +42,15 @@ class FakeSybaseDAO:
 
     def listar_ofplu_proyecciones_atipicas(self, nofertas):
         return self.productos
+
+
+class FailingSybaseDAO(FakeSybaseDAO):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def listar_ofplu_cabeceras(self):
+        raise self.error
 
 
 class FakeSQLiteDAO:
@@ -254,8 +267,23 @@ class OfertasPLUSyncServiceTests(unittest.TestCase):
         )
         service.sqlite_dao = FakeSQLiteDAO(succeeds=False)
 
-        with self.assertRaisesRegex(RuntimeError, "snapshot local de OFPLU"):
+        with self.assertRaises(SynchronizationPersistenceError) as raised:
             service.sincronizar()
+
+        self.assertEqual(raised.exception.resource, "ofertas_ofplu")
+
+    def test_source_read_error_keeps_original_cause(self):
+        cause = OSError("origen no disponible")
+        service = OfertasPLUSyncService.__new__(OfertasPLUSyncService)
+        service.sybase_dao = FailingSybaseDAO(cause)
+        service.sqlite_dao = FakeSQLiteDAO()
+
+        with self.assertRaises(SynchronizationReadError) as raised:
+            service.sincronizar()
+
+        self.assertIs(raised.exception.__cause__, cause)
+        self.assertEqual(raised.exception.code, "sync_read_error")
+        self.assertEqual(raised.exception.operation, "leer_origen")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,13 @@
 from core.dao.ofertas_dao import OfertasDAO
 from core.dao.ofertas_plu_sqlite_dao import OfertasPLUSQLiteDAO
+from core.dao.snapshot_validation import SnapshotValidationError
 from core.logging.logger import get_logger
 from core.services.barcode_normalizer import limpiar_codigo
+from core.services.sync_errors import (
+    SynchronizationPersistenceError,
+    SynchronizationReadError,
+    SynchronizationValidationError,
+)
 
 logger = get_logger(__name__)
 
@@ -16,7 +22,10 @@ class OfertasPLUSyncService:
     def sincronizar(self, progress_callback=None):
         self._notify(progress_callback, "Sincronizando ofertas OFPLU...", 0, 100)
 
-        cabeceras = self.sybase_dao.listar_ofplu_cabeceras()
+        cabeceras = self._leer_origen(
+            self.sybase_dao.listar_ofplu_cabeceras,
+            "cabeceras_ofplu",
+        )
         nofertas = [fila[0] for fila in cabeceras if fila and fila[0] is not None]
 
         if not nofertas:
@@ -26,8 +35,14 @@ class OfertasPLUSyncService:
 
         self._notify(progress_callback, f"{len(nofertas)} cabeceras OFPLU encontradas.", 20, 100)
 
-        parametros_rows = self.sybase_dao.listar_ofplu_parametros(nofertas)
-        productos_rows = self.sybase_dao.listar_ofplu_proyecciones_atipicas(nofertas)
+        parametros_rows = self._leer_origen(
+            lambda: self.sybase_dao.listar_ofplu_parametros(nofertas),
+            "parametros_ofplu",
+        )
+        productos_rows = self._leer_origen(
+            lambda: self.sybase_dao.listar_ofplu_proyecciones_atipicas(nofertas),
+            "productos_ofplu",
+        )
 
         parametros_normalizados = self._normalizar_parametros(parametros_rows)
         ofertas_normalizadas = self._normalizar_cabeceras(cabeceras, parametros_normalizados)
@@ -55,8 +70,40 @@ class OfertasPLUSyncService:
         }
 
     def _reemplazar_snapshot(self, ofertas, parametros, productos):
-        if not self.sqlite_dao.reemplazar_snapshot(ofertas, parametros, productos):
-            raise RuntimeError("no se pudo reemplazar el snapshot local de OFPLU")
+        try:
+            guardado = self.sqlite_dao.reemplazar_snapshot(
+                ofertas,
+                parametros,
+                productos,
+            )
+        except SnapshotValidationError as exc:
+            raise SynchronizationValidationError(
+                str(exc),
+                resource="ofertas_ofplu",
+                operation="persistir_snapshot",
+            ) from exc
+        except Exception as exc:
+            raise SynchronizationPersistenceError(
+                "fallo inesperado persistiendo el snapshot local de OFPLU",
+                resource="ofertas_ofplu",
+                operation="persistir_snapshot",
+            ) from exc
+        if not guardado:
+            raise SynchronizationPersistenceError(
+                "no se pudo persistir el snapshot local de OFPLU",
+                resource="ofertas_ofplu",
+                operation="persistir_snapshot",
+            )
+
+    def _leer_origen(self, callback, resource):
+        try:
+            return callback()
+        except Exception as exc:
+            raise SynchronizationReadError(
+                f"no se pudo leer {resource} desde el origen",
+                resource=resource,
+                operation="leer_origen",
+            ) from exc
 
     def _normalizar_cabeceras(self, cabeceras, parametros_normalizados):
         deshabilitadas = {
