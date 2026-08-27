@@ -1,3 +1,10 @@
+from core.dao.snapshot_validation import (
+    validate_incremental_prices,
+    validate_product_snapshot,
+    validate_simple_offers,
+)
+
+
 class ProductosSQLiteDAO:
     CLEAR_OFFERS_SQL = """
         UPDATE productos
@@ -97,6 +104,8 @@ class ProductosSQLiteDAO:
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
     def reemplazar_snapshot(self, productos, precios):
+        validate_product_snapshot(productos, precios)
+
         def reemplazar(cursor):
             cursor.execute("DELETE FROM producto_precios")
             cursor.execute("DELETE FROM productos")
@@ -134,6 +143,9 @@ class ProductosSQLiteDAO:
         )
         if not codigos:
             codigos = sorted({str(precio["codigo"]).strip() for precio in precios if precio.get("codigo")})
+
+        filas = self.db.ejecutar_consulta("SELECT codigo FROM productos") or []
+        validate_incremental_prices(precios, codigos, (fila[0] for fila in filas))
 
         if not codigos:
             return self._insertar_precios_adicionales(precios)
@@ -247,6 +259,8 @@ class ProductosSQLiteDAO:
         return self.db.ejecutar_consultamany(self.APPLY_OFFERS_SQL, parametros)
 
     def reemplazar_snapshot_ofertas(self, ofertas):
+        filas = self.db.ejecutar_consulta("SELECT CREF FROM productos") or []
+        validate_simple_offers(ofertas, (fila[0] for fila in filas))
         parametros = self._parametros_ofertas(ofertas)
 
         def reemplazar(cursor):

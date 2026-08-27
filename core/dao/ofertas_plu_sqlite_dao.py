@@ -1,3 +1,6 @@
+from core.dao.snapshot_validation import validate_ofplu_snapshot
+
+
 class OfertasPLUSQLiteDAO:
     UPSERT_OFERTAS_SQL = """
         INSERT INTO ofertas_plu (
@@ -56,6 +59,8 @@ class OfertasPLUSQLiteDAO:
         return self.db.ejecutar_consulta("DELETE FROM ofertas_plu")
 
     def reemplazar_snapshot(self, ofertas, parametros, productos):
+        validate_ofplu_snapshot(ofertas, parametros, productos)
+
         def reemplazar(cursor):
             cursor.execute("DELETE FROM ofertas_plu_productos")
             cursor.execute("DELETE FROM ofertas_plu_parametros")

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from DB.database import SQLiteDB
 from core.dao.ofertas_plu_sqlite_dao import OfertasPLUSQLiteDAO
+from core.dao.snapshot_validation import SnapshotValidationError
 
 
 def oferta(noferta, detalle):
@@ -105,13 +106,12 @@ class AtomicOfferSnapshotTests(unittest.TestCase):
         )
         duplicate_parameters = [parametro(2), parametro(2)]
 
-        self.assertFalse(
+        with self.assertRaisesRegex(SnapshotValidationError, r"parametros\[1\] duplica"):
             self.dao.reemplazar_snapshot(
                 [oferta(2, "invalido")],
                 duplicate_parameters,
                 [producto(2, "B1")],
             )
-        )
 
         offers = self.dao.listar_ofertas()
         self.assertEqual([(row[0], row[2]) for row in offers], [(1, "anterior")])
@@ -140,6 +140,42 @@ class AtomicOfferSnapshotTests(unittest.TestCase):
         self.assertEqual(self.dao.listar_ofertas(), [])
         self.assertEqual(self.dao.listar_parametros_por_oferta(1), [])
         self.assertEqual(self.dao.listar_productos_por_oferta(1), [])
+
+    def test_orphan_parameter_is_rejected_before_replacing_snapshot(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [oferta(1, "anterior")],
+                [parametro(1)],
+                [producto(1, "A1")],
+            )
+        )
+
+        with self.assertRaisesRegex(SnapshotValidationError, "no existe en ofertas_plu"):
+            self.dao.reemplazar_snapshot(
+                [oferta(2, "nuevo")],
+                [parametro(99)],
+                [producto(2, "B1")],
+            )
+
+        self.assertEqual([row[0] for row in self.dao.listar_ofertas()], [1])
+
+    def test_orphan_product_is_rejected_before_replacing_snapshot(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [oferta(1, "anterior")],
+                [parametro(1)],
+                [producto(1, "A1")],
+            )
+        )
+
+        with self.assertRaisesRegex(SnapshotValidationError, "no existe en ofertas_plu"):
+            self.dao.reemplazar_snapshot(
+                [oferta(2, "nuevo")],
+                [parametro(2)],
+                [producto(99, "B1")],
+            )
+
+        self.assertEqual([row[0] for row in self.dao.listar_ofertas()], [1])
 
 
 if __name__ == "__main__":
