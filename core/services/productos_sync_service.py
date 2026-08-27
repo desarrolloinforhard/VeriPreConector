@@ -1,7 +1,13 @@
 from core.dao.productos_dao import ProductosSQLiteDAO, ProductosSybaseDAO
+from core.dao.snapshot_validation import SnapshotValidationError
 from core.logging.logger import get_logger
 from core.services.barcode_normalizer import limpiar_codigo
 from core.services.ofertas_plu_sync_service import OfertasPLUSyncService
+from core.services.sync_errors import (
+    SynchronizationPersistenceError,
+    SynchronizationReadError,
+    SynchronizationValidationError,
+)
 
 
 logger = get_logger(__name__)
@@ -92,18 +98,27 @@ class ProductosSyncService:
         }
 
     def _buscar_articulos_completos(self):
-        return self.sybase_dao.listar_articulos_completos()
+        return self._leer_origen(
+            self.sybase_dao.listar_articulos_completos,
+            "articulos",
+        )
 
     def _buscar_articulos_actualizados_hoy(self):
-        return self.sybase_dao.listar_articulos_actualizados_hoy()
+        return self._leer_origen(
+            self.sybase_dao.listar_articulos_actualizados_hoy,
+            "articulos_actualizados",
+        )
 
     def _buscar_articulos_actualizados_desde_ultima_fecha(self, incluir_ultima_fecha=True):
         fecha_desde = self.sqlite_dao.obtener_ultima_fecha_actualizacion()
         if not fecha_desde:
             return self._buscar_articulos_actualizados_hoy()
-        return self.sybase_dao.listar_articulos_desde_fecha(
-            fecha_desde,
-            inclusive=incluir_ultima_fecha,
+        return self._leer_origen(
+            lambda: self.sybase_dao.listar_articulos_desde_fecha(
+                fecha_desde,
+                inclusive=incluir_ultima_fecha,
+            ),
+            "articulos_actualizados",
         )
 
     def _normalizar_articulos(self, articulos):
@@ -187,11 +202,14 @@ class ProductosSyncService:
         return productos_completos
 
     def _buscar_codbarp(self, crefs):
-        return self.sybase_dao.listar_codbarp_por_crefs(crefs)
+        return self._leer_origen(
+            lambda: self.sybase_dao.listar_codbarp_por_crefs(crefs),
+            "codigos_de_barra",
+        )
 
     def _buscar_ivas(self, progress_callback=None):
         self._notify(progress_callback, "Obteniendo datos de IVAS...", 0, 100)
-        ivas = self.sybase_dao.listar_ivas()
+        ivas = self._leer_origen(self.sybase_dao.listar_ivas, "ivas")
         self._notify(progress_callback, f"{len(ivas)} tipos de IVA encontrados.", 100, 100)
         return ivas
 
@@ -201,7 +219,10 @@ class ProductosSyncService:
             return {}
 
         self._notify(progress_callback, "Obteniendo packs y precios adicionales...", 0, 100)
-        packs = self.sybase_dao.listar_packs_mini_por_crefs(crefs)
+        packs = self._leer_origen(
+            lambda: self.sybase_dao.listar_packs_mini_por_crefs(crefs),
+            "packs",
+        )
         packs_por_cref = {}
 
         for cref, cantidad, nroprecio, nprecio, cdetalle, dfechau in packs:
@@ -224,7 +245,10 @@ class ProductosSyncService:
 
     def _buscar_ofertas_activas(self, progress_callback=None):
         self._notify(progress_callback, "Obteniendo ofertas activas desde ATIPICAS...", 0, 100)
-        filas = self.sybase_dao.listar_ofertas_atipicas_activas()
+        filas = self._leer_origen(
+            self.sybase_dao.listar_ofertas_atipicas_activas,
+            "ofertas_pso",
+        )
         ofertas_por_cref = {}
 
         for cref, precio_oferta, oferta_dto, oferta_desde, oferta_hasta, oferta_ccoddiv, cclavec in filas:
@@ -376,20 +400,38 @@ class ProductosSyncService:
         total_productos = len(productos_resueltos)
         if total_productos:
             self._notify(progress_callback, "Insertando o actualizando productos...", 0, total_productos)
-            if replace_all:
-                guardado = self.sqlite_dao.reemplazar_snapshot(
-                    productos_resueltos,
-                    precios_adicionales,
-                )
-                if not guardado:
-                    raise RuntimeError(
-                        "no se pudo reemplazar atomicamente el snapshot local de productos"
+            try:
+                if replace_all:
+                    guardado = self.sqlite_dao.reemplazar_snapshot(
+                        productos_resueltos,
+                        precios_adicionales,
                     )
-            else:
-                self.sqlite_dao.upsert_many(productos_resueltos)
-                self.sqlite_dao.upsert_precios_adicionales(
-                    precios_adicionales,
-                    codigos_objetivo=codigos_actualizados,
+                else:
+                    productos_guardados = self.sqlite_dao.upsert_many(
+                        productos_resueltos
+                    )
+                    precios_guardados = self.sqlite_dao.upsert_precios_adicionales(
+                        precios_adicionales,
+                        codigos_objetivo=codigos_actualizados,
+                    )
+                    guardado = bool(productos_guardados and precios_guardados)
+            except SnapshotValidationError as exc:
+                raise SynchronizationValidationError(
+                    str(exc),
+                    resource="productos",
+                    operation="persistir_snapshot",
+                ) from exc
+            except Exception as exc:
+                raise SynchronizationPersistenceError(
+                    "fallo inesperado persistiendo el snapshot local de productos",
+                    resource="productos",
+                    operation="persistir_snapshot",
+                ) from exc
+            if not guardado:
+                raise SynchronizationPersistenceError(
+                    "no se pudo persistir el snapshot local de productos",
+                    resource="productos",
+                    operation="persistir_snapshot",
                 )
             self._notify(progress_callback, f"{total_productos} productos procesados.", total_productos, total_productos)
         else:
@@ -400,12 +442,27 @@ class ProductosSyncService:
 
     def _sync_snapshot_ofertas(self, ofertas_por_cref, progress_callback=None):
         self._notify(progress_callback, "Actualizando snapshot local de ofertas...", 0, 100)
-        guardado = self.sqlite_dao.reemplazar_snapshot_ofertas(
-            list(ofertas_por_cref.values())
-        )
+        try:
+            guardado = self.sqlite_dao.reemplazar_snapshot_ofertas(
+                list(ofertas_por_cref.values())
+            )
+        except SnapshotValidationError as exc:
+            raise SynchronizationValidationError(
+                str(exc),
+                resource="ofertas_pso",
+                operation="persistir_snapshot",
+            ) from exc
+        except Exception as exc:
+            raise SynchronizationPersistenceError(
+                "fallo inesperado persistiendo el snapshot local de ofertas PSO",
+                resource="ofertas_pso",
+                operation="persistir_snapshot",
+            ) from exc
         if not guardado:
-            raise RuntimeError(
-                "no se pudo reemplazar atomicamente el snapshot local de ofertas"
+            raise SynchronizationPersistenceError(
+                "no se pudo persistir el snapshot local de ofertas PSO",
+                resource="ofertas_pso",
+                operation="persistir_snapshot",
             )
         self._notify(progress_callback, f"Snapshot local de ofertas actualizado: {len(ofertas_por_cref)} activas.", 100, 100)
 
@@ -416,6 +473,16 @@ class ProductosSyncService:
             logger.exception("Error sincronizando snapshot OFPLU")
             self._notify(progress_callback, "Advertencia: no se pudo sincronizar snapshot OFPLU.", 100, 100)
             return {"ofertas": [], "parametros": [], "productos": [], "total_ofertas": 0}
+
+    def _leer_origen(self, callback, resource):
+        try:
+            return callback()
+        except Exception as exc:
+            raise SynchronizationReadError(
+                f"no se pudo leer {resource} desde el origen",
+                resource=resource,
+                operation="leer_origen",
+            ) from exc
 
     def _normalizar_nroprecio(self, nroprecio):
         if nroprecio is None:

@@ -8,6 +8,11 @@ from DB.database import SQLiteDB
 from core.dao.productos_dao import ProductosSQLiteDAO
 from core.dao.snapshot_validation import SnapshotValidationError
 from core.services.productos_sync_service import ProductosSyncService
+from core.services.sync_errors import (
+    SynchronizationPersistenceError,
+    SynchronizationReadError,
+    SynchronizationValidationError,
+)
 
 
 def product(code, price=100, extra_prices=None):
@@ -311,19 +316,49 @@ class AtomicProductSnapshotTests(unittest.TestCase):
 
 
 class FakeProductsDAO:
-    def __init__(self, result=True):
+    def __init__(self, result=True, error=None):
         self.snapshots = []
         self.result = result
+        self.error = error
 
     def reemplazar_snapshot(self, products, prices):
         self.snapshots.append((products, prices))
+        if self.error:
+            raise self.error
         return self.result
 
     def reemplazar_snapshot_ofertas(self, offers):
+        if self.error:
+            raise self.error
+        return self.result
+
+    def upsert_many(self, products):
+        if self.error:
+            raise self.error
+        return self.result
+
+    def upsert_precios_adicionales(self, prices, codigos_objetivo=None):
+        if self.error:
+            raise self.error
         return self.result
 
 
 class FullSyncIntegrationTests(unittest.TestCase):
+    def test_product_source_read_error_keeps_original_cause(self):
+        cause = OSError("origen no disponible")
+        service = ProductosSyncService.__new__(ProductosSyncService)
+        service.sybase_dao = type(
+            "FailingProductsDAO",
+            (),
+            {"listar_articulos_completos": lambda self: (_ for _ in ()).throw(cause)},
+        )()
+
+        with self.assertRaises(SynchronizationReadError) as raised:
+            service._buscar_articulos_completos()
+
+        self.assertIs(raised.exception.__cause__, cause)
+        self.assertEqual(raised.exception.resource, "articulos")
+
     def test_full_sync_uses_one_atomic_snapshot_call(self):
         service = ProductosSyncService.__new__(ProductosSyncService)
         service.sqlite_dao = FakeProductsDAO()
@@ -349,7 +384,7 @@ class FullSyncIntegrationTests(unittest.TestCase):
         offer_sync_calls = []
         service._sync_snapshot_ofertas = lambda offers, callback=None: offer_sync_calls.append(offers)
 
-        with self.assertRaisesRegex(RuntimeError, "reemplazar atomicamente"):
+        with self.assertRaises(SynchronizationPersistenceError) as raised:
             service._guardar_productos(
                 [product("NEW")],
                 [],
@@ -358,6 +393,8 @@ class FullSyncIntegrationTests(unittest.TestCase):
             )
 
         self.assertEqual(offer_sync_calls, [])
+        self.assertEqual(raised.exception.resource, "productos")
+        self.assertEqual(raised.exception.operation, "persistir_snapshot")
 
     def test_offer_sync_stops_when_atomic_snapshot_fails(self):
         service = ProductosSyncService.__new__(ProductosSyncService)
@@ -367,6 +404,56 @@ class FullSyncIntegrationTests(unittest.TestCase):
             service._sync_snapshot_ofertas(
                 {"REF-A": simple_offer("A")}
             )
+
+    def test_validation_error_keeps_original_cause(self):
+        cause = SnapshotValidationError("productos[0].codigo es obligatorio")
+        service = ProductosSyncService.__new__(ProductosSyncService)
+        service.sqlite_dao = FakeProductsDAO(error=cause)
+        service._sync_snapshot_ofertas = lambda offers, callback=None: None
+
+        with self.assertRaises(SynchronizationValidationError) as raised:
+            service._guardar_productos(
+                [product("NEW")],
+                [],
+                {},
+                replace_all=True,
+            )
+
+        self.assertIs(raised.exception.__cause__, cause)
+        self.assertEqual(raised.exception.code, "sync_validation_error")
+
+    def test_unexpected_persistence_error_keeps_original_cause(self):
+        cause = OSError("disco no disponible")
+        service = ProductosSyncService.__new__(ProductosSyncService)
+        service.sqlite_dao = FakeProductsDAO(error=cause)
+        service._sync_snapshot_ofertas = lambda offers, callback=None: None
+
+        with self.assertRaises(SynchronizationPersistenceError) as raised:
+            service._guardar_productos(
+                [product("NEW")],
+                [],
+                {},
+                replace_all=True,
+            )
+
+        self.assertIs(raised.exception.__cause__, cause)
+        self.assertEqual(raised.exception.code, "sync_persistence_error")
+
+    def test_incremental_sync_stops_when_any_write_is_rejected(self):
+        service = ProductosSyncService.__new__(ProductosSyncService)
+        service.sqlite_dao = FakeProductsDAO(result=False)
+        offer_sync_calls = []
+        service._sync_snapshot_ofertas = lambda offers, callback=None: offer_sync_calls.append(offers)
+
+        with self.assertRaises(SynchronizationPersistenceError):
+            service._guardar_productos(
+                [product("NEW")],
+                [],
+                {},
+                replace_all=False,
+            )
+
+        self.assertEqual(offer_sync_calls, [])
 
 
 if __name__ == "__main__":
