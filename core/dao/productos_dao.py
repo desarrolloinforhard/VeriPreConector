@@ -112,12 +112,23 @@ class ProductosSQLiteDAO:
         if not codigos:
             codigos = sorted({str(precio["codigo"]).strip() for precio in precios if precio.get("codigo")})
 
-        if codigos:
-            placeholders = ",".join("?" for _ in codigos)
-            sql_delete = f"DELETE FROM producto_precios WHERE codigo IN ({placeholders})"
-            self.db.ejecutar_consulta(sql_delete, tuple(codigos))
+        if not codigos:
+            return self._insertar_precios_adicionales(precios)
 
-        return self._insertar_precios_adicionales(precios)
+        def actualizar(cursor):
+            placeholders = ",".join("?" for _ in codigos)
+            cursor.execute(
+                f"DELETE FROM producto_precios WHERE codigo IN ({placeholders})",
+                tuple(codigos),
+            )
+            if precios:
+                cursor.executemany(
+                    self.INSERT_PRECIOS_SQL,
+                    self._parametros_precios_adicionales(precios),
+                )
+            return True
+
+        return bool(self.db.ejecutar_en_transaccion(actualizar))
 
     def listar_precios_adicionales_por_codigo(self, codigo):
         sql = """
