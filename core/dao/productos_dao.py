@@ -1,4 +1,5 @@
 from core.dao.snapshot_validation import (
+    normalize_sqlite_date,
     validate_incremental_prices,
     validate_product_snapshot,
     validate_simple_offers,
@@ -275,8 +276,8 @@ class ProductosSQLiteDAO:
         return [
             (
                 oferta.get("precio_oferta"),
-                oferta.get("oferta_desde"),
-                oferta.get("oferta_hasta"),
+                normalize_sqlite_date(oferta.get("oferta_desde")),
+                normalize_sqlite_date(oferta.get("oferta_hasta")),
                 oferta.get("oferta_origen"),
                 oferta.get("oferta_ccoddiv"),
                 oferta.get("oferta_dto"),
@@ -306,11 +307,11 @@ class ProductosSQLiteDAO:
                         producto.get("codigo"),
                         producto.get("descripcion"),
                         producto.get("precio"),
-                        producto.get("dfechau"),
+                        normalize_sqlite_date(producto.get("dfechau")),
                         1 if producto.get("tiene_oferta") else 0,
                         producto.get("precio_oferta"),
-                        producto.get("oferta_desde"),
-                        producto.get("oferta_hasta"),
+                        normalize_sqlite_date(producto.get("oferta_desde")),
+                        normalize_sqlite_date(producto.get("oferta_hasta")),
                         producto.get("oferta_origen"),
                         producto.get("oferta_ccoddiv"),
                         producto.get("oferta_dto"),
@@ -323,7 +324,7 @@ class ProductosSQLiteDAO:
                         producto[2],
                         producto[1],
                         producto[3],
-                        producto[4],
+                        normalize_sqlite_date(producto[4]),
                         0,
                         None,
                         None,
@@ -350,7 +351,7 @@ class ProductosSQLiteDAO:
                 precio.get("detalle"),
                 precio.get("precio"),
                 precio.get("nroprecio"),
-                precio.get("dfechau"),
+                normalize_sqlite_date(precio.get("dfechau")),
             )
             for precio in precios
         ]

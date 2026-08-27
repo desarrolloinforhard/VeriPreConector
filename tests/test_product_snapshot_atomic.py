@@ -1,6 +1,7 @@
 import logging
 import tempfile
 import unittest
+from datetime import date, datetime
 from pathlib import Path
 
 from DB.database import SQLiteDB
@@ -283,6 +284,30 @@ class AtomicProductSnapshotTests(unittest.TestCase):
             self.dao.reemplazar_snapshot_ofertas([simple_offer("UNKNOWN")])
 
         self.assertEqual(self.dao.obtener_oferta_por_codigo("A")[1:3], (1, 75))
+
+    def test_invalid_simple_offer_date_range_preserves_previous_offer(self):
+        self.assertTrue(self.dao.reemplazar_snapshot([product("A")], []))
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([simple_offer("A")]))
+        invalid_offer = simple_offer("A", 60)
+        invalid_offer["oferta_desde"] = "2026-09-01"
+        invalid_offer["oferta_hasta"] = "2026-08-31"
+
+        with self.assertRaisesRegex(SnapshotValidationError, "rango invalido"):
+            self.dao.reemplazar_snapshot_ofertas([invalid_offer])
+
+        self.assertEqual(self.dao.obtener_oferta_por_codigo("A")[1:3], (1, 75))
+
+    def test_simple_offer_accepts_python_and_iso_datetime_values(self):
+        self.assertTrue(self.dao.reemplazar_snapshot([product("A")], []))
+        offer = simple_offer("A")
+        offer["oferta_desde"] = date(2026, 8, 1)
+        offer["oferta_hasta"] = datetime(2026, 8, 31, 23, 59)
+
+        self.assertTrue(self.dao.reemplazar_snapshot_ofertas([offer]))
+
+        saved = self.dao.obtener_oferta_por_codigo("A")
+        self.assertEqual(saved[3], "2026-08-01")
+        self.assertEqual(saved[4], "2026-08-31 23:59:00")
 
 
 class FakeProductsDAO:
