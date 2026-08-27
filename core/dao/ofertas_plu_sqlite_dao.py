@@ -1,24 +1,5 @@
 class OfertasPLUSQLiteDAO:
-    def __init__(self, db):
-        self.db = db
-
-    def limpiar_todo(self):
-        self.db.ejecutar_consulta("DELETE FROM ofertas_plu_productos")
-        self.db.ejecutar_consulta("DELETE FROM ofertas_plu_parametros")
-        return self.db.ejecutar_consulta("DELETE FROM ofertas_plu")
-
-    def reemplazar_snapshot(self, ofertas, parametros, productos):
-        self.limpiar_todo()
-        ok_ofertas = self.upsert_ofertas(ofertas)
-        ok_parametros = self.upsert_parametros(parametros)
-        ok_productos = self.upsert_productos(productos)
-        return bool(ok_ofertas and ok_parametros and ok_productos)
-
-    def upsert_ofertas(self, ofertas):
-        if not ofertas:
-            return True
-
-        sql = """
+    UPSERT_OFERTAS_SQL = """
         INSERT INTO ofertas_plu (
             noferta, tipo_oferta, detalle, fecha_inicio, fecha_fin,
             habilitada, ccoddiv, origen, uid, dfechau
@@ -34,22 +15,8 @@ class OfertasPLUSQLiteDAO:
             origen = excluded.origen,
             uid = excluded.uid,
             dfechau = excluded.dfechau
-        """
-        return self.db.ejecutar_consultamany(sql, self._parametros_ofertas(ofertas))
-
-    def upsert_parametros(self, parametros, nofertas_objetivo=None):
-        nofertas = self._normalizar_nofertas(nofertas_objetivo)
-        if not nofertas:
-            nofertas = sorted({str(param.get("noferta")).strip() for param in parametros if param.get("noferta") is not None})
-
-        if nofertas:
-            placeholders = ",".join("?" for _ in nofertas)
-            self.db.ejecutar_consulta(f"DELETE FROM ofertas_plu_parametros WHERE noferta IN ({placeholders})", tuple(nofertas))
-
-        if not parametros:
-            return True
-
-        sql = """
+    """
+    INSERT_PARAMETROS_SQL = """
         INSERT INTO ofertas_plu_parametros (
             noferta, orden, variable,
             cparametro0, cparametro1, cparametro2, cparametro3, cparametro4,
@@ -59,22 +26,8 @@ class OfertasPLUSQLiteDAO:
             valor_visible, modo, detalle, uid, dfechau
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        return self.db.ejecutar_consultamany(sql, self._parametros_parametros(parametros))
-
-    def upsert_productos(self, productos, nofertas_objetivo=None):
-        nofertas = self._normalizar_nofertas(nofertas_objetivo)
-        if not nofertas:
-            nofertas = sorted({str(item.get("noferta")).strip() for item in productos if item.get("noferta") is not None})
-
-        if nofertas:
-            placeholders = ",".join("?" for _ in nofertas)
-            self.db.ejecutar_consulta(f"DELETE FROM ofertas_plu_productos WHERE noferta IN ({placeholders})", tuple(nofertas))
-
-        if not productos:
-            return True
-
-        sql = """
+    """
+    UPSERT_PRODUCTOS_SQL = """
         INSERT INTO ofertas_plu_productos (
             noferta, cref, codigo, descripcion, precio_oferta, ndto, fecha_inicio,
             fecha_fin, ccoddiv, cclavec, cclavea, nmodop, nmodod, detalle, uid, dfechau
@@ -92,8 +45,83 @@ class OfertasPLUSQLiteDAO:
             detalle = excluded.detalle,
             uid = excluded.uid,
             dfechau = excluded.dfechau
-        """
-        return self.db.ejecutar_consultamany(sql, self._parametros_productos(productos))
+    """
+
+    def __init__(self, db):
+        self.db = db
+
+    def limpiar_todo(self):
+        self.db.ejecutar_consulta("DELETE FROM ofertas_plu_productos")
+        self.db.ejecutar_consulta("DELETE FROM ofertas_plu_parametros")
+        return self.db.ejecutar_consulta("DELETE FROM ofertas_plu")
+
+    def reemplazar_snapshot(self, ofertas, parametros, productos):
+        def reemplazar(cursor):
+            cursor.execute("DELETE FROM ofertas_plu_productos")
+            cursor.execute("DELETE FROM ofertas_plu_parametros")
+            cursor.execute("DELETE FROM ofertas_plu")
+
+            if ofertas:
+                cursor.executemany(
+                    self.UPSERT_OFERTAS_SQL,
+                    self._parametros_ofertas(ofertas),
+                )
+            if parametros:
+                cursor.executemany(
+                    self.INSERT_PARAMETROS_SQL,
+                    self._parametros_parametros(parametros),
+                )
+            if productos:
+                cursor.executemany(
+                    self.UPSERT_PRODUCTOS_SQL,
+                    self._parametros_productos(productos),
+                )
+            return True
+
+        return bool(self.db.ejecutar_en_transaccion(reemplazar))
+
+    def upsert_ofertas(self, ofertas):
+        if not ofertas:
+            return True
+
+        return self.db.ejecutar_consultamany(
+            self.UPSERT_OFERTAS_SQL,
+            self._parametros_ofertas(ofertas),
+        )
+
+    def upsert_parametros(self, parametros, nofertas_objetivo=None):
+        nofertas = self._normalizar_nofertas(nofertas_objetivo)
+        if not nofertas:
+            nofertas = sorted({str(param.get("noferta")).strip() for param in parametros if param.get("noferta") is not None})
+
+        if nofertas:
+            placeholders = ",".join("?" for _ in nofertas)
+            self.db.ejecutar_consulta(f"DELETE FROM ofertas_plu_parametros WHERE noferta IN ({placeholders})", tuple(nofertas))
+
+        if not parametros:
+            return True
+
+        return self.db.ejecutar_consultamany(
+            self.INSERT_PARAMETROS_SQL,
+            self._parametros_parametros(parametros),
+        )
+
+    def upsert_productos(self, productos, nofertas_objetivo=None):
+        nofertas = self._normalizar_nofertas(nofertas_objetivo)
+        if not nofertas:
+            nofertas = sorted({str(item.get("noferta")).strip() for item in productos if item.get("noferta") is not None})
+
+        if nofertas:
+            placeholders = ",".join("?" for _ in nofertas)
+            self.db.ejecutar_consulta(f"DELETE FROM ofertas_plu_productos WHERE noferta IN ({placeholders})", tuple(nofertas))
+
+        if not productos:
+            return True
+
+        return self.db.ejecutar_consultamany(
+            self.UPSERT_PRODUCTOS_SQL,
+            self._parametros_productos(productos),
+        )
 
     def listar_ofertas(self):
         sql = """

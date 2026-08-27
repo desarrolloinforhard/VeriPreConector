@@ -121,6 +121,30 @@ class SQLiteDB:
                 logger.exception("Error al ejecutar executemany en SQLite.")
                 return False
 
+    def ejecutar_en_transaccion(self, operacion):
+        """Ejecuta una operacion con cursor y confirma todos sus cambios juntos."""
+        with self._lock:
+            cursor = None
+            try:
+                if not self.conexion_activa():
+                    logger.debug("SQLite sin conexion activa. Reconectando para transaccion.")
+                    self.conectar()
+
+                cursor = self.connection.cursor()
+                cursor.execute("BEGIN")
+                resultado = operacion(cursor)
+                self.connection.commit()
+                logger.info("Transaccion SQLite confirmada correctamente.")
+                return resultado if resultado is not None else True
+            except sqlite3.Error:
+                if self.connection:
+                    self.connection.rollback()
+                logger.exception("Error en transaccion SQLite. Se realizo rollback.")
+                return False
+            finally:
+                if cursor:
+                    cursor.close()
+
     def conexion_activa(self):
         """Verifica si la conexión a SQLite sigue activa y funcional."""
         with self._lock:
