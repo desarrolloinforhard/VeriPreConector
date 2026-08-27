@@ -370,24 +370,27 @@ class ProductosSyncService:
         return precios
 
     def _guardar_productos(self, productos_resueltos, productos_legado, ofertas_por_cref, replace_all, progress_callback=None):
-        if replace_all:
-            guardar_productos = self.sqlite_dao.reemplazar_todos
-            guardar_precios = self.sqlite_dao.reemplazar_precios_adicionales
-        else:
-            guardar_productos = self.sqlite_dao.upsert_many
-            guardar_precios = self.sqlite_dao.upsert_precios_adicionales
-
         precios_adicionales = self._flatten_precios_adicionales(productos_resueltos)
         codigos_actualizados = [producto["codigo"] for producto in productos_resueltos]
 
         total_productos = len(productos_resueltos)
         if total_productos:
             self._notify(progress_callback, "Insertando o actualizando productos...", 0, total_productos)
-            guardar_productos(productos_resueltos)
             if replace_all:
-                guardar_precios(precios_adicionales)
+                guardado = self.sqlite_dao.reemplazar_snapshot(
+                    productos_resueltos,
+                    precios_adicionales,
+                )
+                if not guardado:
+                    raise RuntimeError(
+                        "no se pudo reemplazar atomicamente el snapshot local de productos"
+                    )
             else:
-                guardar_precios(precios_adicionales, codigos_objetivo=codigos_actualizados)
+                self.sqlite_dao.upsert_many(productos_resueltos)
+                self.sqlite_dao.upsert_precios_adicionales(
+                    precios_adicionales,
+                    codigos_objetivo=codigos_actualizados,
+                )
             self._notify(progress_callback, f"{total_productos} productos procesados.", total_productos, total_productos)
         else:
             self._notify(progress_callback, "No hubo productos nuevos; se actualizara snapshot de ofertas.", 100, 100)

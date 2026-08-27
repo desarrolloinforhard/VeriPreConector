@@ -1,4 +1,32 @@
 class ProductosSQLiteDAO:
+    UPSERT_PRODUCTOS_SQL = """
+        INSERT INTO productos (
+            CREF, codigo, descripcion, precio, dfechau,
+            TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
+            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(codigo) DO UPDATE SET
+            CREF = excluded.CREF,
+            descripcion = excluded.descripcion,
+            precio = excluded.precio,
+            dfechau = excluded.dfechau,
+            TIENE_OFERTA = excluded.TIENE_OFERTA,
+            PRECIO_OFERTA = excluded.PRECIO_OFERTA,
+            OFERTA_DESDE = excluded.OFERTA_DESDE,
+            OFERTA_HASTA = excluded.OFERTA_HASTA,
+            OFERTA_ORIGEN = excluded.OFERTA_ORIGEN,
+            OFERTA_CCODDIV = excluded.OFERTA_CCODDIV,
+            OFERTA_DTO = excluded.OFERTA_DTO
+    """
+    INSERT_PRECIOS_SQL = """
+        INSERT INTO producto_precios (
+            CREF, codigo, tipo_precio, categoria, origen, orden, cantidad,
+            titulo, detalle, precio, nroprecio, dfechau
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+
     def __init__(self, db):
         self.db = db
 
@@ -45,28 +73,29 @@ class ProductosSQLiteDAO:
         """
         return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
+    def reemplazar_snapshot(self, productos, precios):
+        def reemplazar(cursor):
+            cursor.execute("DELETE FROM producto_precios")
+            cursor.execute("DELETE FROM productos")
+            if productos:
+                cursor.executemany(
+                    self.UPSERT_PRODUCTOS_SQL,
+                    self._parametros(productos),
+                )
+            if precios:
+                cursor.executemany(
+                    self.INSERT_PRECIOS_SQL,
+                    self._parametros_precios_adicionales(precios),
+                )
+            return True
+
+        return bool(self.db.ejecutar_en_transaccion(reemplazar))
+
     def upsert_many(self, productos):
-        sql = """
-        INSERT INTO productos (
-            CREF, codigo, descripcion, precio, dfechau,
-            TIENE_OFERTA, PRECIO_OFERTA, OFERTA_DESDE, OFERTA_HASTA,
-            OFERTA_ORIGEN, OFERTA_CCODDIV, OFERTA_DTO
+        return self.db.ejecutar_consultamany(
+            self.UPSERT_PRODUCTOS_SQL,
+            self._parametros(productos),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(codigo) DO UPDATE SET
-            CREF = excluded.CREF,
-            descripcion = excluded.descripcion,
-            precio = excluded.precio,
-            dfechau = excluded.dfechau,
-            TIENE_OFERTA = excluded.TIENE_OFERTA,
-            PRECIO_OFERTA = excluded.PRECIO_OFERTA,
-            OFERTA_DESDE = excluded.OFERTA_DESDE,
-            OFERTA_HASTA = excluded.OFERTA_HASTA,
-            OFERTA_ORIGEN = excluded.OFERTA_ORIGEN,
-            OFERTA_CCODDIV = excluded.OFERTA_CCODDIV,
-            OFERTA_DTO = excluded.OFERTA_DTO
-        """
-        return self.db.ejecutar_consultamany(sql, self._parametros(productos))
 
     def reemplazar_precios_adicionales(self, precios):
         self.db.ejecutar_consulta("DELETE FROM producto_precios")
@@ -222,14 +251,10 @@ class ProductosSQLiteDAO:
         if not precios:
             return True
 
-        sql = """
-        INSERT INTO producto_precios (
-            CREF, codigo, tipo_precio, categoria, origen, orden, cantidad,
-            titulo, detalle, precio, nroprecio, dfechau
+        return self.db.ejecutar_consultamany(
+            self.INSERT_PRECIOS_SQL,
+            self._parametros_precios_adicionales(precios),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        return self.db.ejecutar_consultamany(sql, self._parametros_precios_adicionales(precios))
 
     def _parametros(self, productos):
         parametros = []

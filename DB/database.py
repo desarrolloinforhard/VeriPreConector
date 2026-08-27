@@ -21,6 +21,8 @@ class SQLiteDB:
     def conectar(self):
         """Establece la conexión con la base de datos."""
         with self._lock:
+            if self.conexion_activa():
+                return self.connection
             try:
                 Path(self.db_name).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
                 self.connection = sqlite3.connect(
@@ -37,6 +39,7 @@ class SQLiteDB:
                     logger.warning("No se pudo activar WAL en SQLite | db_name=%s", self.db_name)
                 self.cursor = self.connection.cursor()
                 logger.debug("Conexión SQLite abierta | db_name=%s", self.db_name)
+                return self.connection
             except sqlite3.Error:
                 self.connection = None
                 self.cursor = None
