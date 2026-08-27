@@ -1,10 +1,19 @@
 from decimal import Decimal
+from datetime import date, datetime
 from math import isfinite
 from numbers import Real
 
 
 class SnapshotValidationError(ValueError):
     """Datos de snapshot incompatibles con el modelo local."""
+
+
+def normalize_sqlite_date(value):
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ")
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
 
 
 def validate_product_snapshot(products, prices):
@@ -15,6 +24,15 @@ def validate_product_snapshot(products, prices):
         normalized_code = _required_text(code, "productos", index, "codigo")
         _number(price, "productos", index, "precio")
         _unique(product_codes, normalized_code, "productos", index, "codigo")
+        if isinstance(product, dict):
+            _date_range(
+                product.get("oferta_desde"),
+                product.get("oferta_hasta"),
+                "productos",
+                index,
+                "oferta_desde",
+                "oferta_hasta",
+            )
 
     _validate_prices(prices, allowed_codes=product_codes)
 
@@ -47,6 +65,14 @@ def validate_simple_offers(offers, existing_crefs):
             raise SnapshotValidationError(f"ofertas[{index}] debe ser un objeto")
         cref = _required_text(offer.get("cref"), "ofertas", index, "cref")
         _number(offer.get("precio_oferta"), "ofertas", index, "precio_oferta")
+        _date_range(
+            offer.get("oferta_desde"),
+            offer.get("oferta_hasta"),
+            "ofertas",
+            index,
+            "oferta_desde",
+            "oferta_hasta",
+        )
         _unique(seen, cref, "ofertas", index, "cref")
         if cref not in allowed_crefs:
             raise SnapshotValidationError(
@@ -63,6 +89,14 @@ def validate_ofplu_snapshot(offers, parameters, products):
             offer.get("noferta"), "ofertas_plu", index, "noferta"
         )
         _required_text(offer.get("tipo_oferta"), "ofertas_plu", index, "tipo_oferta")
+        _date_range(
+            offer.get("fecha_inicio"),
+            offer.get("fecha_fin"),
+            "ofertas_plu",
+            index,
+            "fecha_inicio",
+            "fecha_fin",
+        )
         _unique(offer_numbers, number, "ofertas_plu", index, "noferta")
 
     parameter_keys = set()
@@ -96,6 +130,14 @@ def validate_ofplu_snapshot(offers, parameters, products):
         )
         cref = _required_text(
             product.get("cref"), "productos_ofplu", index, "cref"
+        )
+        _date_range(
+            product.get("fecha_inicio"),
+            product.get("fecha_fin"),
+            "productos_ofplu",
+            index,
+            "fecha_inicio",
+            "fecha_fin",
         )
         _known_offer(number, offer_numbers, "productos_ofplu", index)
         key = (
@@ -201,6 +243,37 @@ def _integer(value, collection, index, field):
     if str(normalized) != str(value).strip() and not isinstance(value, int):
         raise SnapshotValidationError(f"{collection}[{index}].{field} debe ser entero")
     return normalized
+
+
+def _date_range(start, end, collection, index, start_field, end_field):
+    normalized_start = _optional_date(start, collection, index, start_field)
+    normalized_end = _optional_date(end, collection, index, end_field)
+    if normalized_start and normalized_end and normalized_start > normalized_end:
+        raise SnapshotValidationError(
+            f"{collection}[{index}] tiene un rango invalido: "
+            f"{start_field} es posterior a {end_field}"
+        )
+
+
+def _optional_date(value, collection, index, field):
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        raise SnapshotValidationError(
+            f"{collection}[{index}].{field} no es una fecha valida"
+        )
+
+    text = value.strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        raise SnapshotValidationError(
+            f"{collection}[{index}].{field} no es una fecha ISO valida: {text!r}"
+        ) from None
 
 
 def _known_offer(number, offer_numbers, collection, index):

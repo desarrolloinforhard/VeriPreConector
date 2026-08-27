@@ -1,4 +1,4 @@
-from core.dao.snapshot_validation import validate_ofplu_snapshot
+from core.dao.snapshot_validation import normalize_sqlite_date, validate_ofplu_snapshot
 
 
 class OfertasPLUSQLiteDAO:
@@ -203,13 +203,13 @@ class OfertasPLUSQLiteDAO:
                 oferta.get("noferta"),
                 oferta.get("tipo_oferta"),
                 oferta.get("detalle"),
-                oferta.get("fecha_inicio"),
-                oferta.get("fecha_fin"),
+                normalize_sqlite_date(oferta.get("fecha_inicio")),
+                normalize_sqlite_date(oferta.get("fecha_fin")),
                 1 if oferta.get("habilitada", True) else 0,
                 oferta.get("ccoddiv"),
                 oferta.get("origen", "OFPLU"),
                 oferta.get("uid"),
-                oferta.get("dfechau"),
+                normalize_sqlite_date(oferta.get("dfechau")),
             )
             for oferta in ofertas
         ]
@@ -245,7 +245,7 @@ class OfertasPLUSQLiteDAO:
                 param.get("modo"),
                 param.get("detalle"),
                 param.get("uid"),
-                param.get("dfechau"),
+                normalize_sqlite_date(param.get("dfechau")),
             )
             for param in parametros
         ]
@@ -259,8 +259,8 @@ class OfertasPLUSQLiteDAO:
                 item.get("descripcion"),
                 item.get("precio_oferta"),
                 item.get("ndto"),
-                item.get("fecha_inicio"),
-                item.get("fecha_fin"),
+                normalize_sqlite_date(item.get("fecha_inicio")),
+                normalize_sqlite_date(item.get("fecha_fin")),
                 item.get("ccoddiv"),
                 item.get("cclavec"),
                 item.get("cclavea"),
@@ -268,7 +268,7 @@ class OfertasPLUSQLiteDAO:
                 item.get("nmodod"),
                 item.get("detalle"),
                 item.get("uid"),
-                item.get("dfechau"),
+                normalize_sqlite_date(item.get("dfechau")),
             )
             for item in productos
         ]

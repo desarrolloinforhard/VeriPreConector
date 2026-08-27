@@ -177,6 +177,47 @@ class AtomicOfferSnapshotTests(unittest.TestCase):
 
         self.assertEqual([row[0] for row in self.dao.listar_ofertas()], [1])
 
+    def test_invalid_offer_date_is_rejected_before_replacing_snapshot(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [oferta(1, "anterior")],
+                [parametro(1)],
+                [producto(1, "A1")],
+            )
+        )
+        invalid_offer = oferta(2, "invalida")
+        invalid_offer["fecha_inicio"] = "2026-02-30"
+
+        with self.assertRaisesRegex(SnapshotValidationError, "fecha ISO valida"):
+            self.dao.reemplazar_snapshot(
+                [invalid_offer],
+                [parametro(2)],
+                [producto(2, "B1")],
+            )
+
+        self.assertEqual([row[0] for row in self.dao.listar_ofertas()], [1])
+
+    def test_invalid_product_date_range_preserves_previous_snapshot(self):
+        self.assertTrue(
+            self.dao.reemplazar_snapshot(
+                [oferta(1, "anterior")],
+                [parametro(1)],
+                [producto(1, "A1")],
+            )
+        )
+        invalid_product = producto(2, "B1")
+        invalid_product["fecha_inicio"] = "2026-09-01T10:00:00"
+        invalid_product["fecha_fin"] = "2026-08-31T23:59:59"
+
+        with self.assertRaisesRegex(SnapshotValidationError, "rango invalido"):
+            self.dao.reemplazar_snapshot(
+                [oferta(2, "nueva")],
+                [parametro(2)],
+                [invalid_product],
+            )
+
+        self.assertEqual([row[0] for row in self.dao.listar_ofertas()], [1])
+
 
 if __name__ == "__main__":
     unittest.main()
