@@ -41,12 +41,13 @@ class FakeSybaseDAO:
 
 
 class FakeSQLiteDAO:
-    def __init__(self):
+    def __init__(self, succeeds=True):
         self.snapshots = []
+        self.succeeds = succeeds
 
     def reemplazar_snapshot(self, ofertas, parametros, productos):
         self.snapshots.append((ofertas, parametros, productos))
-        return True
+        return self.succeeds
 
 
 def product_row(cref="A1", description="Producto", price=80):
@@ -233,6 +234,28 @@ class OfertasPLUSyncServiceTests(unittest.TestCase):
         self.assertEqual(sqlite_dao.snapshots[0][0], result["ofertas"])
         self.assertEqual(sqlite_dao.snapshots[0][1], result["parametros"])
         self.assertEqual(sqlite_dao.snapshots[0][2], result["productos"])
+
+    def test_empty_sync_propagates_snapshot_persistence_failure(self):
+        service = OfertasPLUSyncService.__new__(OfertasPLUSyncService)
+        service.sybase_dao = FakeSybaseDAO()
+        service.sqlite_dao = FakeSQLiteDAO(succeeds=False)
+
+        with self.assertRaisesRegex(RuntimeError, "snapshot local de OFPLU"):
+            service.sincronizar()
+
+    def test_populated_sync_propagates_snapshot_persistence_failure(self):
+        service = OfertasPLUSyncService.__new__(OfertasPLUSyncService)
+        service.sybase_dao = FakeSybaseDAO(
+            cabeceras=[
+                (7, "OFPLU", "Promo", "2026-08-01", "2026-08-31", "uid", None)
+            ],
+            parametros=[parameter_row()],
+            productos=[offer_product_row()],
+        )
+        service.sqlite_dao = FakeSQLiteDAO(succeeds=False)
+
+        with self.assertRaisesRegex(RuntimeError, "snapshot local de OFPLU"):
+            service.sincronizar()
 
 
 if __name__ == "__main__":
